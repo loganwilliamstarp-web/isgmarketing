@@ -147,22 +147,6 @@ const WorkflowBuilderPage = ({ t }) => {
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button
-            onClick={handleBack}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: t?.textMuted || '#71717a',
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            ← Back
-          </button>
-          <div style={{ width: '1px', height: '20px', backgroundColor: t?.border || '#27272a' }} />
           <h1 style={{ 
             fontSize: '16px', 
             fontWeight: '600', 
@@ -192,20 +176,6 @@ const WorkflowBuilderPage = ({ t }) => {
         
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            onClick={handleBack}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: t?.bgHover || '#27272a',
-              border: `1px solid ${t?.border || '#3f3f46'}`,
-              borderRadius: '6px',
-              color: t?.textSecondary || '#a1a1aa',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
-            Cancel
-          </button>
-          <button
             onClick={() => handleSave(automationData)}
             disabled={createAutomation.isPending || updateAutomation.isPending}
             style={{
@@ -230,6 +200,7 @@ const WorkflowBuilderPage = ({ t }) => {
       {/* Workflow Builder */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <WorkflowBuilder 
+          t={t}
           automation={automationData}
           onUpdate={setAutomationData}
           onSave={handleSave}

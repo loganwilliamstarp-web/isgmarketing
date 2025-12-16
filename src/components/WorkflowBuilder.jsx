@@ -1,9 +1,29 @@
 import React, { useState } from 'react';
 
+// Default dark theme (fallback)
+const defaultTheme = {
+  bg: '#09090b',
+  bgCard: '#18181b',
+  bgSidebar: '#18181b',
+  bgHover: '#27272a',
+  bgInput: '#27272a',
+  border: '#27272a',
+  borderLight: '#3f3f46',
+  text: '#fafafa',
+  textSecondary: '#a1a1aa',
+  textMuted: '#71717a',
+  primary: '#3b82f6',
+  primaryHover: '#2563eb',
+  success: '#22c55e',
+  danger: '#ef4444',
+  warning: '#f59e0b',
+  purple: '#a78bfa',
+};
+
 // ============================================
 // FILTER BUILDER COMPONENT (embedded)
 // ============================================
-const FilterBuilder = ({ onClose }) => {
+const FilterBuilder = ({ onClose, t = defaultTheme }) => {
   const [activeTab, setActiveTab] = useState('simple');
   const [groupLogic, setGroupLogic] = useState('OR');
   const [testSearch, setTestSearch] = useState('');
@@ -66,7 +86,7 @@ const FilterBuilder = ({ onClose }) => {
       id: 1,
       name: 'Group 1',
       logic: 'AND',
-      color: '#3b82f6',
+      color: t.primary,
       filters: {
         include: [
           { id: 1, conditionId: 'has_policy_type', label: 'Has policy type', icon: '📋', value: 'Auto' },
@@ -81,7 +101,7 @@ const FilterBuilder = ({ onClose }) => {
       id: 2,
       name: 'Group 2',
       logic: 'AND',
-      color: '#a78bfa',
+      color: t.purple,
       filters: {
         include: [
           { id: 3, conditionId: 'has_policy_type', label: 'Has policy type', icon: '📋', value: 'Home' },
@@ -104,7 +124,7 @@ const FilterBuilder = ({ onClose }) => {
   const guidedConditions = {
     'Customer Type': {
       icon: '👤',
-      color: '#a78bfa',
+      color: t.purple,
       conditions: [
         { id: 'customer_status', label: 'Customer status', configType: 'select', options: ['New', 'Existing', 'Prior', 'Prospect'] },
         { id: 'is_new', label: 'Is a new customer', configType: 'none' },
@@ -114,7 +134,7 @@ const FilterBuilder = ({ onClose }) => {
     },
     'Policy Bundle': {
       icon: '📦',
-      color: '#3b82f6',
+      color: t.primary,
       conditions: [
         { id: 'bundle_status', label: 'Bundle status', configType: 'select', options: ['Monoline', 'Bundled'] },
         { id: 'policy_count', label: 'Number of policies', configType: 'number_compare', unit: 'policies' },
@@ -122,7 +142,7 @@ const FilterBuilder = ({ onClose }) => {
     },
     'Coverage': {
       icon: '📋',
-      color: '#22c55e',
+      color: t.success,
       conditions: [
         { id: 'has_policy_type', label: 'Has policy type', configType: 'select', options: ['Auto', 'Home', 'Renters', 'Umbrella', 'Life', 'Any Active'] },
         { id: 'policy_status', label: 'Policy status', configType: 'select', options: ['Active', 'Pending', 'Cancelled', 'Expired'] },
@@ -131,7 +151,7 @@ const FilterBuilder = ({ onClose }) => {
     },
     'Policy Timing': {
       icon: '📅',
-      color: '#f59e0b',
+      color: t.warning,
       conditions: [
         { id: 'expiration_days', label: 'Expiration date', configType: 'days_from_now' },
         { id: 'effective_days', label: 'Effective date', configType: 'days_ago' },
@@ -232,11 +252,11 @@ const FilterBuilder = ({ onClose }) => {
               value={filter.value || conditionDef.options[0]}
               onChange={(e) => updateFilterInGroup(groupId, section, filter.id, { value: e.target.value })}
               style={{
-                backgroundColor: '#27272a',
-                border: '1px solid #3f3f46',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.borderLight}`,
                 borderRadius: '4px',
                 padding: '4px 8px',
-                color: '#e4e4e7',
+                color: t.text,
                 fontSize: '12px',
                 marginLeft: '6px'
               }}
@@ -255,17 +275,17 @@ const FilterBuilder = ({ onClose }) => {
                 value={filter.value || conditionDef.defaultValue || 30}
                 onChange={(e) => updateFilterInGroup(groupId, section, filter.id, { value: e.target.value })}
                 style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '4px 6px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '12px',
                   width: '50px',
                   textAlign: 'center'
                 }}
               />
-              <span style={{ color: '#71717a', fontSize: '11px' }}>days</span>
+              <span style={{ color: t.textMuted, fontSize: '11px' }}>days</span>
             </div>
           );
 
@@ -276,11 +296,11 @@ const FilterBuilder = ({ onClose }) => {
                 value={filter.operator || 'at_least'}
                 onChange={(e) => updateFilterInGroup(groupId, section, filter.id, { operator: e.target.value })}
                 style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '4px 6px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '11px'
                 }}
               >
@@ -294,17 +314,17 @@ const FilterBuilder = ({ onClose }) => {
                 max={conditionDef.max}
                 onChange={(e) => updateFilterInGroup(groupId, section, filter.id, { value: e.target.value })}
                 style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '4px 6px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '12px',
                   width: '45px',
                   textAlign: 'center'
                 }}
               />
-              {conditionDef.unit && <span style={{ color: '#71717a', fontSize: '11px' }}>{conditionDef.unit}</span>}
+              {conditionDef.unit && <span style={{ color: t.textMuted, fontSize: '11px' }}>{conditionDef.unit}</span>}
             </div>
           );
 
@@ -324,7 +344,7 @@ const FilterBuilder = ({ onClose }) => {
         borderRadius: '8px',
         border: `1px solid ${color}25`,
         fontSize: '13px',
-        color: '#e4e4e7'
+        color: t.text
       }}>
         <span style={{ opacity: 0.7 }}>{filter.icon}</span>
         <span>{filter.label}</span>
@@ -334,7 +354,7 @@ const FilterBuilder = ({ onClose }) => {
           style={{
             background: 'none',
             border: 'none',
-            color: '#52525b',
+            color: t.textMuted,
             cursor: 'pointer',
             padding: '0 2px',
             fontSize: '16px',
@@ -360,9 +380,9 @@ const FilterBuilder = ({ onClose }) => {
             width: '100%',
             padding: '8px 12px',
             backgroundColor: 'transparent',
-            border: '1px dashed #3f3f46',
+            border: `1px dashed ${t.borderLight}`,
             borderRadius: '8px',
-            color: '#52525b',
+            color: t.textMuted,
             cursor: 'pointer',
             fontSize: '12px',
             textAlign: 'left',
@@ -383,8 +403,8 @@ const FilterBuilder = ({ onClose }) => {
               left: 0,
               right: 0,
               marginTop: '4px',
-              backgroundColor: '#1f1f23',
-              border: '1px solid #3f3f46',
+              backgroundColor: t.bgCard,
+              border: `1px solid ${t.borderLight}`,
               borderRadius: '12px',
               zIndex: 100,
               overflow: 'hidden',
@@ -436,7 +456,7 @@ const FilterBuilder = ({ onClose }) => {
                           backgroundColor: 'transparent',
                           border: 'none',
                           borderRadius: '6px',
-                          color: '#e4e4e7',
+                          color: t.text,
                           cursor: 'pointer',
                           fontSize: '12px',
                           textAlign: 'left'
@@ -446,7 +466,7 @@ const FilterBuilder = ({ onClose }) => {
                       </button>
                     ))
                   ) : (
-                    <div style={{ padding: '20px 12px', textAlign: 'center', color: '#52525b', fontSize: '11px' }}>
+                    <div style={{ padding: '20px 12px', textAlign: 'center', color: t.textMuted, fontSize: '11px' }}>
                       ← Select category
                     </div>
                   )}
@@ -461,7 +481,7 @@ const FilterBuilder = ({ onClose }) => {
 
   const LogicConnector = () => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 0' }}>
-      <div style={{ height: '14px', width: '2px', backgroundColor: '#3f3f46' }} />
+      <div style={{ height: '14px', width: '2px', backgroundColor: t.borderLight }} />
       <button
         onClick={() => setGroupLogic(groupLogic === 'OR' ? 'AND' : 'OR')}
         style={{
@@ -478,14 +498,14 @@ const FilterBuilder = ({ onClose }) => {
       >
         {groupLogic}
       </button>
-      <div style={{ height: '14px', width: '2px', backgroundColor: '#3f3f46' }} />
+      <div style={{ height: '14px', width: '2px', backgroundColor: t.borderLight }} />
     </div>
   );
 
   // Filter Group Component
   const FilterGroup = ({ group, index }) => (
     <div style={{
-      backgroundColor: '#141418',
+      backgroundColor: t.bg,
       borderRadius: '10px',
       border: `2px solid ${group.color}30`,
       overflow: 'hidden'
@@ -520,7 +540,7 @@ const FilterBuilder = ({ onClose }) => {
             style={{
               background: 'none',
               border: 'none',
-              color: '#fafafa',
+              color: t.text,
               fontSize: '12px',
               fontWeight: '600',
               width: '80px'
@@ -531,7 +551,7 @@ const FilterBuilder = ({ onClose }) => {
           <button onClick={() => removeGroup(group.id)} style={{
             background: 'none',
             border: 'none',
-            color: '#52525b',
+            color: t.textMuted,
             cursor: 'pointer',
             fontSize: '16px'
           }}>×</button>
@@ -541,7 +561,7 @@ const FilterBuilder = ({ onClose }) => {
       <div style={{ padding: '12px' }}>
         {/* Include */}
         <div style={{ marginBottom: '10px' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#22c55e', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.success, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>✓</span> INCLUDE
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -559,7 +579,7 @@ const FilterBuilder = ({ onClose }) => {
 
         {/* Exclude */}
         <div style={{ marginBottom: '10px' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#ef4444', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.danger, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>✕</span> EXCLUDE
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -605,7 +625,7 @@ const FilterBuilder = ({ onClose }) => {
           display: 'flex',
           gap: '4px',
           marginBottom: '16px',
-          backgroundColor: '#27272a',
+          backgroundColor: t.bgHover,
           padding: '3px',
           borderRadius: '8px',
           width: 'fit-content'
@@ -646,11 +666,11 @@ const FilterBuilder = ({ onClose }) => {
               justifyContent: 'space-between',
               marginBottom: '12px',
               padding: '8px 12px',
-              backgroundColor: '#27272a',
+              backgroundColor: t.bgHover,
               borderRadius: '8px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Filter Groups</span>
+                <span style={{ fontSize: '12px', color: t.textSecondary }}>Filter Groups</span>
                 {filterGroups.length > 1 && (
                   <span style={{
                     padding: '2px 6px',
@@ -668,7 +688,7 @@ const FilterBuilder = ({ onClose }) => {
                 onClick={addGroup}
                 style={{
                   padding: '4px 8px',
-                  backgroundColor: '#3b82f6',
+                  backgroundColor: t.primary,
                   border: 'none',
                   borderRadius: '4px',
                   color: '#fff',
@@ -692,8 +712,8 @@ const FilterBuilder = ({ onClose }) => {
             {/* Timing */}
             <div style={{ marginTop: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#3b82f6' }}>⏱</span>
-                <span style={{ fontSize: '12px', fontWeight: '600', color: '#fafafa' }}>Timing</span>
+                <span style={{ fontSize: '11px', color: t.primary }}>⏱</span>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: t.text }}>Timing</span>
               </div>
               <div style={{
                 padding: '12px',
@@ -702,42 +722,42 @@ const FilterBuilder = ({ onClose }) => {
                 border: '1px solid rgba(59, 130, 246, 0.2)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>When</span>
+                  <span style={{ fontSize: '12px', color: t.textSecondary }}>When</span>
                   <select style={{
-                    backgroundColor: '#27272a',
-                    border: '1px solid #3f3f46',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.borderLight}`,
                     borderRadius: '4px',
                     padding: '6px 8px',
-                    color: '#e4e4e7',
+                    color: t.text,
                     fontSize: '11px'
                   }}>
                     <option>Days until expiration</option>
                     <option>Days since effective</option>
                     <option>Days since status change</option>
                   </select>
-                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>is between</span>
+                  <span style={{ fontSize: '12px', color: t.textSecondary }}>is between</span>
                   <input type="number" defaultValue={sharedTiming.min} style={{
-                    backgroundColor: '#27272a',
-                    border: '1px solid #3f3f46',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.borderLight}`,
                     borderRadius: '4px',
                     padding: '6px',
-                    color: '#e4e4e7',
+                    color: t.text,
                     fontSize: '11px',
                     width: '45px',
                     textAlign: 'center'
                   }} />
-                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>and</span>
+                  <span style={{ fontSize: '12px', color: t.textSecondary }}>and</span>
                   <input type="number" defaultValue={sharedTiming.max} style={{
-                    backgroundColor: '#27272a',
-                    border: '1px solid #3f3f46',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.borderLight}`,
                     borderRadius: '4px',
                     padding: '6px',
-                    color: '#e4e4e7',
+                    color: t.text,
                     fontSize: '11px',
                     width: '45px',
                     textAlign: 'center'
                   }} />
-                  <span style={{ fontSize: '12px', color: '#a1a1aa' }}>days</span>
+                  <span style={{ fontSize: '12px', color: t.textSecondary }}>days</span>
                 </div>
               </div>
             </div>
@@ -754,11 +774,11 @@ const FilterBuilder = ({ onClose }) => {
               justifyContent: 'space-between',
               marginBottom: '12px',
               padding: '8px 12px',
-              backgroundColor: '#27272a',
+              backgroundColor: t.bgHover,
               borderRadius: '8px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Rule Groups</span>
+                <span style={{ fontSize: '12px', color: t.textSecondary }}>Rule Groups</span>
                 <button
                   onClick={() => setGroupLogic(groupLogic === 'OR' ? 'AND' : 'OR')}
                   style={{
@@ -774,13 +794,13 @@ const FilterBuilder = ({ onClose }) => {
                 >
                   {groupLogic}
                 </button>
-                <span style={{ fontSize: '10px', color: '#52525b' }}>between groups</span>
+                <span style={{ fontSize: '10px', color: t.textMuted }}>between groups</span>
               </div>
               <button
                 onClick={addGroup}
                 style={{
                   padding: '4px 8px',
-                  backgroundColor: '#3b82f6',
+                  backgroundColor: t.primary,
                   border: 'none',
                   borderRadius: '4px',
                   color: '#fff',
@@ -797,7 +817,7 @@ const FilterBuilder = ({ onClose }) => {
             {filterGroups.map((group, groupIndex) => (
               <React.Fragment key={group.id}>
                 <div style={{
-                  backgroundColor: '#141418',
+                  backgroundColor: t.bg,
                   borderRadius: '10px',
                   border: `2px solid ${group.color}30`,
                   marginBottom: groupIndex < filterGroups.length - 1 ? '0' : '16px',
@@ -834,7 +854,7 @@ const FilterBuilder = ({ onClose }) => {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#fafafa',
+                          color: t.text,
                           fontSize: '12px',
                           fontWeight: '600',
                           width: '80px'
@@ -842,16 +862,16 @@ const FilterBuilder = ({ onClose }) => {
                       />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', color: '#52525b' }}>Logic:</span>
+                      <span style={{ fontSize: '10px', color: t.textMuted }}>Logic:</span>
                       <select
                         value={group.logic}
                         onChange={(e) => setFilterGroups(filterGroups.map(g => g.id === group.id ? { ...g, logic: e.target.value } : g))}
                         style={{
-                          backgroundColor: '#27272a',
-                          border: '1px solid #3f3f46',
+                          backgroundColor: t.bgHover,
+                          border: `1px solid ${t.borderLight}`,
                           borderRadius: '4px',
                           padding: '3px 6px',
-                          color: '#e4e4e7',
+                          color: t.text,
                           fontSize: '10px'
                         }}
                       >
@@ -862,7 +882,7 @@ const FilterBuilder = ({ onClose }) => {
                         <button onClick={() => removeGroup(group.id)} style={{
                           background: 'none',
                           border: 'none',
-                          color: '#52525b',
+                          color: t.textMuted,
                           cursor: 'pointer',
                           fontSize: '14px'
                         }}>×</button>
@@ -878,17 +898,17 @@ const FilterBuilder = ({ onClose }) => {
                         alignItems: 'center',
                         gap: '6px',
                         padding: '8px 10px',
-                        backgroundColor: '#27272a',
+                        backgroundColor: t.bgHover,
                         borderRadius: '6px',
                         marginBottom: '6px'
                       }}>
-                        <span style={{ fontSize: '10px', color: '#52525b', width: '16px', fontFamily: 'monospace' }}>{ruleIndex + 1}.</span>
+                        <span style={{ fontSize: '10px', color: t.textMuted, width: '16px', fontFamily: 'monospace' }}>{ruleIndex + 1}.</span>
                         <select style={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid #3f3f46',
+                          backgroundColor: t.bgCard,
+                          border: `1px solid ${t.borderLight}`,
                           borderRadius: '4px',
                           padding: '5px 8px',
-                          color: '#a1a1aa',
+                          color: t.textSecondary,
                           fontSize: '10px',
                           width: '80px'
                         }}>
@@ -896,11 +916,11 @@ const FilterBuilder = ({ onClose }) => {
                           <option>Relationship</option>
                         </select>
                         <select style={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid #3f3f46',
+                          backgroundColor: t.bgCard,
+                          border: `1px solid ${t.borderLight}`,
                           borderRadius: '4px',
                           padding: '5px 8px',
-                          color: '#e4e4e7',
+                          color: t.text,
                           fontSize: '10px',
                           width: '70px'
                         }}>
@@ -908,13 +928,13 @@ const FilterBuilder = ({ onClose }) => {
                           <option>Account</option>
                           <option>Contact</option>
                         </select>
-                        <span style={{ color: '#3f3f46', fontSize: '10px' }}>.</span>
+                        <span style={{ color: t.borderLight, fontSize: '10px' }}>.</span>
                         <select style={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid #3f3f46',
+                          backgroundColor: t.bgCard,
+                          border: `1px solid ${t.borderLight}`,
                           borderRadius: '4px',
                           padding: '5px 8px',
-                          color: '#e4e4e7',
+                          color: t.text,
                           fontSize: '10px',
                           flex: 1
                         }}>
@@ -925,8 +945,8 @@ const FilterBuilder = ({ onClose }) => {
                           <option>Expiration Date</option>
                         </select>
                         <select style={{
-                          backgroundColor: '#18181b',
-                          border: '1px solid #3f3f46',
+                          backgroundColor: t.bgCard,
+                          border: `1px solid ${t.borderLight}`,
                           borderRadius: '4px',
                           padding: '5px 8px',
                           color: group.filters.exclude.find(f => f.id === rule.id) ? '#f87171' : '#4ade80',
@@ -944,11 +964,11 @@ const FilterBuilder = ({ onClose }) => {
                           defaultValue={rule.value || ''}
                           placeholder="value"
                           style={{
-                            backgroundColor: '#18181b',
-                            border: '1px solid #3f3f46',
+                            backgroundColor: t.bgCard,
+                            border: `1px solid ${t.borderLight}`,
                             borderRadius: '4px',
                             padding: '5px 8px',
-                            color: '#e4e4e7',
+                            color: t.text,
                             fontSize: '10px',
                             width: '70px'
                           }}
@@ -961,7 +981,7 @@ const FilterBuilder = ({ onClose }) => {
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#52525b',
+                            color: t.textMuted,
                             cursor: 'pointer',
                             fontSize: '12px'
                           }}
@@ -974,9 +994,9 @@ const FilterBuilder = ({ onClose }) => {
                         width: '100%',
                         padding: '8px',
                         backgroundColor: 'transparent',
-                        border: '1px dashed #3f3f46',
+                        border: `1px dashed ${t.borderLight}`,
                         borderRadius: '6px',
-                        color: '#52525b',
+                        color: t.textMuted,
                         cursor: 'pointer',
                         fontSize: '10px'
                       }}
@@ -996,14 +1016,14 @@ const FilterBuilder = ({ onClose }) => {
               borderRadius: '8px',
               border: '1px solid rgba(59, 130, 246, 0.2)'
             }}>
-              <div style={{ fontSize: '10px', fontWeight: '600', color: '#3b82f6', marginBottom: '8px' }}>⏱ Timing Window</div>
+              <div style={{ fontSize: '10px', fontWeight: '600', color: t.primary, marginBottom: '8px' }}>⏱ Timing Window</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <select style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '6px 8px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '10px'
                 }}>
                   <option>Policy.ExpirationDate</option>
@@ -1012,33 +1032,33 @@ const FilterBuilder = ({ onClose }) => {
                   <option>EmailActivity.LastSentDate</option>
                 </select>
                 <select style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '6px 8px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '10px'
                 }}>
                   <option>days from now between</option>
                   <option>days ago between</option>
                 </select>
                 <input type="number" defaultValue="45" style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '6px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '10px',
                   width: '40px',
                   textAlign: 'center'
                 }} />
-                <span style={{ color: '#52525b', fontSize: '10px' }}>AND</span>
+                <span style={{ color: t.textMuted, fontSize: '10px' }}>AND</span>
                 <input type="number" defaultValue="60" style={{
-                  backgroundColor: '#27272a',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
                   borderRadius: '4px',
                   padding: '6px',
-                  color: '#e4e4e7',
+                  color: t.text,
                   fontSize: '10px',
                   width: '40px',
                   textAlign: 'center'
@@ -1051,7 +1071,7 @@ const FilterBuilder = ({ onClose }) => {
 
       {/* Sidebar */}
       <div style={{ 
-        backgroundColor: '#141418', 
+        backgroundColor: t.bg, 
         borderRadius: '10px', 
         padding: '14px',
         display: 'flex',
@@ -1061,37 +1081,37 @@ const FilterBuilder = ({ onClose }) => {
       }}>
         {/* Preview */}
         <div>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', marginBottom: '10px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', marginBottom: '10px' }}>
             Audience Preview
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6', fontFamily: 'monospace', lineHeight: 1 }}>
+            <span style={{ fontSize: '32px', fontWeight: '700', color: t.primary, fontFamily: 'monospace', lineHeight: 1 }}>
               1,247
             </span>
-            <span style={{ color: '#71717a', fontSize: '12px' }}>match</span>
+            <span style={{ color: t.textMuted, fontSize: '12px' }}>match</span>
           </div>
           
           <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-            <div style={{ flex: 1, padding: '8px', backgroundColor: '#27272a', borderRadius: '6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#22c55e' }}>2,847</div>
-              <div style={{ fontSize: '9px', color: '#71717a' }}>Included</div>
+            <div style={{ flex: 1, padding: '8px', backgroundColor: t.bgHover, borderRadius: '6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: t.success }}>2,847</div>
+              <div style={{ fontSize: '9px', color: t.textMuted }}>Included</div>
             </div>
-            <div style={{ flex: 1, padding: '8px', backgroundColor: '#27272a', borderRadius: '6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#ef4444' }}>1,600</div>
-              <div style={{ fontSize: '9px', color: '#71717a' }}>Excluded</div>
+            <div style={{ flex: 1, padding: '8px', backgroundColor: t.bgHover, borderRadius: '6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: t.danger }}>1,600</div>
+              <div style={{ fontSize: '9px', color: t.textMuted }}>Excluded</div>
             </div>
           </div>
 
           {filterGroups.length > 1 && (
             <div style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '4px' }}>By group:</div>
+              <div style={{ fontSize: '9px', color: t.textMuted, marginBottom: '4px' }}>By group:</div>
               {filterGroups.map((group, i) => (
                 <div key={group.id} style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '4px 6px',
-                  backgroundColor: '#27272a',
+                  backgroundColor: t.bgHover,
                   borderRadius: '4px',
                   marginBottom: '3px'
                 }}>
@@ -1108,7 +1128,7 @@ const FilterBuilder = ({ onClose }) => {
                       alignItems: 'center',
                       justifyContent: 'center'
                     }}>{i + 1}</div>
-                    <span style={{ fontSize: '10px', color: '#a1a1aa' }}>{group.name}</span>
+                    <span style={{ fontSize: '10px', color: t.textSecondary }}>{group.name}</span>
                   </div>
                   <span style={{ fontSize: '11px', fontWeight: '600', color: group.color }}>
                     {i === 0 ? '847' : '523'}
@@ -1121,7 +1141,7 @@ const FilterBuilder = ({ onClose }) => {
 
         {/* Live Test Panel */}
         <div>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', marginBottom: '8px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', marginBottom: '8px' }}>
             🔍 Test with Account
           </div>
           <div style={{ position: 'relative', marginBottom: '10px' }}>
@@ -1134,14 +1154,14 @@ const FilterBuilder = ({ onClose }) => {
                 width: '100%',
                 padding: '8px 10px',
                 paddingRight: '30px',
-                backgroundColor: '#27272a',
-                border: '1px solid #3f3f46',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.borderLight}`,
                 borderRadius: '6px',
-                color: '#e4e4e7',
+                color: t.text,
                 fontSize: '11px'
               }}
             />
-            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#52525b', fontSize: '12px' }}>🔎</span>
+            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: t.textMuted, fontSize: '12px' }}>🔎</span>
           </div>
 
           {/* Test Results */}
@@ -1160,8 +1180,8 @@ const FilterBuilder = ({ onClose }) => {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#fafafa' }}>{account.name}</div>
-                    <div style={{ fontSize: '9px', color: '#71717a' }}>{account.policies}</div>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: t.text }}>{account.name}</div>
+                    <div style={{ fontSize: '9px', color: t.textMuted }}>{account.policies}</div>
                   </div>
                   <div style={{
                     padding: '3px 8px',
@@ -1178,7 +1198,7 @@ const FilterBuilder = ({ onClose }) => {
                 {/* Expanded details */}
                 {selectedTestAccount === account.id && (
                   <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontSize: '9px', fontWeight: '600', color: '#71717a', marginBottom: '6px' }}>CONDITION RESULTS</div>
+                    <div style={{ fontSize: '9px', fontWeight: '600', color: t.textMuted, marginBottom: '6px' }}>CONDITION RESULTS</div>
                     {account.conditions.map((cond, i) => (
                       <div key={i} style={{
                         display: 'flex',
@@ -1197,14 +1217,14 @@ const FilterBuilder = ({ onClose }) => {
                           {cond.passes ? '✓' : '✗'}
                         </span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '10px', color: '#d4d4d8' }}>{cond.label}</div>
+                          <div style={{ fontSize: '10px', color: t.text }}>{cond.label}</div>
                           {!cond.passes && cond.reason && (
-                            <div style={{ fontSize: '9px', color: '#f87171', marginTop: '2px' }}>
+                            <div style={{ fontSize: '9px', color: t.danger, marginTop: '2px' }}>
                               {cond.reason}
                             </div>
                           )}
                           {cond.value && (
-                            <div style={{ fontSize: '9px', color: '#71717a', marginTop: '2px' }}>
+                            <div style={{ fontSize: '9px', color: t.textMuted, marginTop: '2px' }}>
                               Actual: {cond.value}
                             </div>
                           )}
@@ -1215,7 +1235,7 @@ const FilterBuilder = ({ onClose }) => {
                     {/* Group results */}
                     {filterGroups.length > 1 && (
                       <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ fontSize: '9px', color: '#71717a', marginBottom: '4px' }}>GROUP RESULTS</div>
+                        <div style={{ fontSize: '9px', color: t.textMuted, marginBottom: '4px' }}>GROUP RESULTS</div>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           {account.groupResults.map((gr, i) => (
                             <div key={i} style={{
@@ -1238,7 +1258,7 @@ const FilterBuilder = ({ onClose }) => {
                             </div>
                           ))}
                         </div>
-                        <div style={{ fontSize: '9px', color: '#71717a', textAlign: 'center', marginTop: '4px' }}>
+                        <div style={{ fontSize: '9px', color: t.textMuted, textAlign: 'center', marginTop: '4px' }}>
                           {groupLogic === 'OR' ? 'Needs 1 group to pass' : 'Needs all groups to pass'}
                         </div>
                       </div>
@@ -1254,9 +1274,9 @@ const FilterBuilder = ({ onClose }) => {
             marginTop: '8px',
             padding: '6px',
             backgroundColor: 'transparent',
-            border: '1px dashed #3f3f46',
+            border: `1px dashed ${t.borderLight}`,
             borderRadius: '6px',
-            color: '#52525b',
+            color: t.textMuted,
             cursor: 'pointer',
             fontSize: '10px'
           }}>
@@ -1266,10 +1286,10 @@ const FilterBuilder = ({ onClose }) => {
 
         {/* Summary */}
         <div>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', marginBottom: '8px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', marginBottom: '8px' }}>
             Summary
           </div>
-          <div style={{ fontSize: '10px', color: '#a1a1aa', lineHeight: '1.6' }}>
+          <div style={{ fontSize: '10px', color: t.textSecondary, lineHeight: '1.6' }}>
             {filterGroups.map((group, i) => (
               <React.Fragment key={group.id}>
                 <div style={{
@@ -1282,10 +1302,10 @@ const FilterBuilder = ({ onClose }) => {
                   <div style={{ fontWeight: '600', color: group.color, marginBottom: '2px', fontSize: '9px' }}>
                     {group.name}
                   </div>
-                  <div style={{ color: '#d4d4d8', fontSize: '10px' }}>
+                  <div style={{ color: t.text, fontSize: '10px' }}>
                     {group.filters.include.map(f => `${f.label}: ${f.value || ''}`).join(' + ')}
                     {group.filters.exclude.length > 0 && (
-                      <span style={{ color: '#f87171' }}>
+                      <span style={{ color: t.danger }}>
                         {' '}− {group.filters.exclude.map(f => `${f.value || f.label}`).join(', ')}
                       </span>
                     )}
@@ -1309,8 +1329,11 @@ const FilterBuilder = ({ onClose }) => {
 // ============================================
 // WORKFLOW BUILDER COMPONENT
 // ============================================
-const WorkflowBuilder = () => {
-  const [nodes, setNodes] = useState([
+const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
+  // Use provided theme or default
+  const t = themeProp || defaultTheme;
+  
+  const [nodes, setNodes] = useState(automation?.nodes || [
     {
       id: 'trigger',
       type: 'trigger',
@@ -1350,13 +1373,13 @@ const WorkflowBuilder = () => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   const nodeTypes = {
-    trigger: { icon: '⚡', color: '#3b82f6', label: 'Trigger' },
-    send_email: { icon: '📧', color: '#22c55e', label: 'Send Email' },
-    delay: { icon: '⏱', color: '#f59e0b', label: 'Delay' },
-    condition: { icon: '🔀', color: '#a78bfa', label: 'Condition' },
+    trigger: { icon: '⚡', color: t.primary, label: 'Trigger' },
+    send_email: { icon: '📧', color: t.success, label: 'Send Email' },
+    delay: { icon: '⏱', color: t.warning, label: 'Delay' },
+    condition: { icon: '🔀', color: t.purple, label: 'Condition' },
     field_condition: { icon: '📋', color: '#ec4899', label: 'Field Check' },
     update_field: { icon: '✏️', color: '#06b6d4', label: 'Update Field' },
-    end: { icon: '🏁', color: '#71717a', label: 'End' }
+    end: { icon: '🏁', color: t.textMuted, label: 'End' }
   };
 
   const availableNodes = [
@@ -1420,7 +1443,7 @@ const WorkflowBuilder = () => {
           onClick={() => setSelectedNode(node.id)}
           style={{
             width: '260px',
-            backgroundColor: isSelected ? '#1f1f23' : '#18181b',
+            backgroundColor: isSelected ? t.bgCard : '#18181b',
             border: isSelected ? `2px solid ${typeConfig.color}` : '1px solid #27272a',
             borderRadius: '12px',
             padding: '12px 14px',
@@ -1437,7 +1460,7 @@ const WorkflowBuilder = () => {
                 right: '6px',
                 background: 'none',
                 border: 'none',
-                color: '#52525b',
+                color: t.textMuted,
                 cursor: 'pointer',
                 fontSize: '14px'
               }}
@@ -1458,8 +1481,8 @@ const WorkflowBuilder = () => {
               {typeConfig.icon}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '12px', fontWeight: '600', color: '#fafafa' }}>{node.title}</div>
-              <div style={{ fontSize: '11px', color: '#71717a' }}>{node.subtitle}</div>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: t.text }}>{node.title}</div>
+              <div style={{ fontSize: '11px', color: t.textMuted }}>{node.subtitle}</div>
             </div>
           </div>
 
@@ -1470,10 +1493,10 @@ const WorkflowBuilder = () => {
                 marginTop: '10px',
                 width: '100%',
                 padding: '8px',
-                backgroundColor: '#27272a',
-                border: '1px solid #3f3f46',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.borderLight}`,
                 borderRadius: '6px',
-                color: '#a1a1aa',
+                color: t.textSecondary,
                 cursor: 'pointer',
                 fontSize: '11px',
                 display: 'flex',
@@ -1490,16 +1513,16 @@ const WorkflowBuilder = () => {
         {/* Connector */}
         {!node.branches && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-            <div style={{ width: '2px', height: '16px', backgroundColor: '#3f3f46' }} />
+            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
             <button
               onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: null })}
               style={{
                 width: '22px',
                 height: '22px',
                 borderRadius: '50%',
-                backgroundColor: '#27272a',
-                border: '1px solid #3f3f46',
-                color: '#71717a',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.borderLight}`,
+                color: t.textMuted,
                 cursor: 'pointer',
                 fontSize: '12px',
                 display: 'flex',
@@ -1507,7 +1530,7 @@ const WorkflowBuilder = () => {
                 justifyContent: 'center'
               }}
             >+</button>
-            <div style={{ width: '2px', height: '16px', backgroundColor: '#3f3f46' }} />
+            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
             
             {showAddMenu?.afterNodeId === node.id && !showAddMenu?.branch && (
               <AddNodeMenu onSelect={(type) => addNode(node.id, type)} onClose={() => setShowAddMenu(null)} />
@@ -1518,15 +1541,15 @@ const WorkflowBuilder = () => {
         {/* Branches */}
         {node.branches && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '2px', height: '16px', backgroundColor: '#3f3f46' }} />
+            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
             <div style={{ display: 'flex' }}>
               {/* Yes */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '280px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{ width: '50px', height: '2px', backgroundColor: '#22c55e' }} />
-                  <span style={{ padding: '3px 8px', backgroundColor: '#22c55e20', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: '#22c55e' }}>YES</span>
+                  <div style={{ width: '50px', height: '2px', backgroundColor: t.success }} />
+                  <span style={{ padding: '3px 8px', backgroundColor: '#22c55e20', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: t.success }}>YES</span>
                 </div>
-                <div style={{ width: '2px', height: '16px', backgroundColor: '#22c55e' }} />
+                <div style={{ width: '2px', height: '16px', backgroundColor: t.success }} />
                 {node.branches.yes.map(n => <WorkflowNode key={n.id} node={n} />)}
                 <button
                   onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: 'yes' })}
@@ -1534,9 +1557,9 @@ const WorkflowBuilder = () => {
                     width: '22px',
                     height: '22px',
                     borderRadius: '50%',
-                    backgroundColor: '#27272a',
+                    backgroundColor: t.bgHover,
                     border: '1px dashed #22c55e',
-                    color: '#22c55e',
+                    color: t.success,
                     cursor: 'pointer',
                     fontSize: '12px',
                     marginTop: '8px'
@@ -1549,10 +1572,10 @@ const WorkflowBuilder = () => {
               {/* No */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '280px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span style={{ padding: '3px 8px', backgroundColor: '#ef444420', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: '#ef4444' }}>NO</span>
-                  <div style={{ width: '50px', height: '2px', backgroundColor: '#ef4444' }} />
+                  <span style={{ padding: '3px 8px', backgroundColor: '#ef444420', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: t.danger }}>NO</span>
+                  <div style={{ width: '50px', height: '2px', backgroundColor: t.danger }} />
                 </div>
-                <div style={{ width: '2px', height: '16px', backgroundColor: '#ef4444' }} />
+                <div style={{ width: '2px', height: '16px', backgroundColor: t.danger }} />
                 {node.branches.no.map(n => <WorkflowNode key={n.id} node={n} />)}
                 <button
                   onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: 'no' })}
@@ -1560,9 +1583,9 @@ const WorkflowBuilder = () => {
                     width: '22px',
                     height: '22px',
                     borderRadius: '50%',
-                    backgroundColor: '#27272a',
+                    backgroundColor: t.bgHover,
                     border: '1px dashed #ef4444',
-                    color: '#ef4444',
+                    color: t.danger,
                     cursor: 'pointer',
                     fontSize: '12px',
                     marginTop: '8px'
@@ -1588,8 +1611,8 @@ const WorkflowBuilder = () => {
         left: '50%',
         transform: 'translateX(-50%)',
         marginTop: '8px',
-        backgroundColor: '#1f1f23',
-        border: '1px solid #3f3f46',
+        backgroundColor: t.bgCard,
+        border: `1px solid ${t.borderLight}`,
         borderRadius: '10px',
         padding: '6px',
         zIndex: 100,
@@ -1610,14 +1633,14 @@ const WorkflowBuilder = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              color: '#e4e4e7',
+              color: t.text,
               textAlign: 'left'
             }}
           >
             <span style={{ fontSize: '14px' }}>{node.icon}</span>
             <div>
               <div style={{ fontSize: '12px', fontWeight: '500' }}>{node.label}</div>
-              <div style={{ fontSize: '9px', color: '#71717a' }}>{node.desc}</div>
+              <div style={{ fontSize: '9px', color: t.textMuted }}>{node.desc}</div>
             </div>
           </button>
         ))}
@@ -1631,44 +1654,44 @@ const WorkflowBuilder = () => {
   return (
     <div style={{
       fontFamily: "'IBM Plex Sans', -apple-system, sans-serif",
-      backgroundColor: '#09090b',
+      backgroundColor: t.bg,
       minHeight: '100vh',
-      color: '#e4e4e7',
+      color: t.text,
       display: 'flex',
       flexDirection: 'column'
     }}>
       {/* Header */}
       <div style={{
         padding: '10px 20px',
-        borderBottom: '1px solid #27272a',
+        borderBottom: `1px solid ${t.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#18181b'
+        backgroundColor: t.bgCard
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: '16px' }}>←</button>
+          <button style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '16px' }}>←</button>
           <input
             type="text"
             defaultValue="Cross-Sell Automation"
-            style={{ background: 'none', border: 'none', color: '#fafafa', fontSize: '15px', fontWeight: '600', width: '220px' }}
+            style={{ background: 'none', border: 'none', color: t.text, fontSize: '15px', fontWeight: '600', width: '220px' }}
           />
-          <span style={{ padding: '3px 8px', backgroundColor: '#27272a', borderRadius: '4px', fontSize: '10px', color: '#71717a' }}>Draft</span>
+          <span style={{ padding: '3px 8px', backgroundColor: t.bgHover, borderRadius: '4px', fontSize: '10px', color: t.textMuted }}>Draft</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={{ padding: '7px 14px', backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '6px', color: '#a1a1aa', cursor: 'pointer', fontSize: '12px' }}>Save</button>
-          <button style={{ padding: '7px 14px', backgroundColor: '#3b82f6', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Publish</button>
+          <button style={{ padding: '7px 14px', backgroundColor: t.bgHover, border: `1px solid ${t.borderLight}`, borderRadius: '6px', color: t.textSecondary, cursor: 'pointer', fontSize: '12px' }}>Save</button>
+          <button style={{ padding: '7px 14px', backgroundColor: t.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Publish</button>
         </div>
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left - Nodes */}
-        <div style={{ width: '200px', borderRight: '1px solid #27272a', padding: '14px', backgroundColor: '#18181b', overflowY: 'auto' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: '#71717a', marginBottom: '10px', textTransform: 'uppercase' }}>Add Nodes</div>
+        <div style={{ width: '200px', borderRight: `1px solid ${t.border}`, padding: '14px', backgroundColor: t.bgCard, overflowY: 'auto' }}>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, marginBottom: '10px', textTransform: 'uppercase' }}>Add Nodes</div>
           {availableNodes.map(node => (
             <div key={node.type} style={{
               padding: '10px',
-              backgroundColor: '#27272a',
+              backgroundColor: t.bgHover,
               borderRadius: '6px',
               marginBottom: '6px',
               cursor: 'grab',
@@ -1678,8 +1701,8 @@ const WorkflowBuilder = () => {
             }}>
               <span style={{ fontSize: '14px' }}>{node.icon}</span>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '500', color: '#e4e4e7' }}>{node.label}</div>
-                <div style={{ fontSize: '9px', color: '#71717a' }}>{node.desc}</div>
+                <div style={{ fontSize: '11px', fontWeight: '500', color: t.text }}>{node.label}</div>
+                <div style={{ fontSize: '9px', color: t.textMuted }}>{node.desc}</div>
               </div>
             </div>
           ))}
@@ -1689,25 +1712,25 @@ const WorkflowBuilder = () => {
         <div style={{ flex: 1, padding: '30px', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {nodes.map(node => <WorkflowNode key={node.id} node={node} />)}
-            <div style={{ marginTop: '10px', padding: '6px 14px', backgroundColor: '#27272a', borderRadius: '16px', fontSize: '10px', color: '#71717a' }}>
+            <div style={{ marginTop: '10px', padding: '6px 14px', backgroundColor: t.bgHover, borderRadius: '16px', fontSize: '10px', color: t.textMuted }}>
               End of automation
             </div>
           </div>
         </div>
 
         {/* Right - Config */}
-        <div style={{ width: '260px', borderLeft: '1px solid #27272a', backgroundColor: '#18181b', overflowY: 'auto' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid #27272a', fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase' }}>
+        <div style={{ width: '260px', borderLeft: '1px solid #27272a', backgroundColor: t.bgCard, overflowY: 'auto' }}>
+          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${t.border}`, fontSize: '10px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase' }}>
             Configuration
           </div>
           <div style={{ padding: '14px' }}>
             {selectedNodeData ? (
-              <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                <div style={{ fontWeight: '600', color: '#fafafa', marginBottom: '8px' }}>{selectedNodeData.title}</div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>
+                <div style={{ fontWeight: '600', color: t.text, marginBottom: '8px' }}>{selectedNodeData.title}</div>
                 <p>Configure this {nodeTypes[selectedNodeData.type]?.label || 'node'} step.</p>
               </div>
             ) : (
-              <div style={{ textAlign: 'center', color: '#52525b', padding: '20px 0' }}>
+              <div style={{ textAlign: 'center', color: t.textMuted, padding: '20px 0' }}>
                 <div style={{ fontSize: '24px', marginBottom: '8px' }}>👆</div>
                 <div style={{ fontSize: '11px' }}>Select a node to configure</div>
               </div>
@@ -1727,9 +1750,9 @@ const WorkflowBuilder = () => {
             transform: 'translate(-50%, -50%)',
             width: '1000px',
             height: '80vh',
-            backgroundColor: '#18181b',
+            backgroundColor: t.bgCard,
             borderRadius: '16px',
-            border: '1px solid #27272a',
+            border: `1px solid ${t.border}`,
             zIndex: 201,
             display: 'flex',
             flexDirection: 'column',
@@ -1737,21 +1760,21 @@ const WorkflowBuilder = () => {
           }}>
             <div style={{
               padding: '14px 20px',
-              borderBottom: '1px solid #27272a',
+              borderBottom: `1px solid ${t.border}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexShrink: 0
             }}>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: '#fafafa', margin: 0 }}>Audience Criteria</h2>
-              <button onClick={() => setShowFilterPanel(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: '18px' }}>×</button>
+              <h2 style={{ fontSize: '15px', fontWeight: '600', color: t.text, margin: 0 }}>Audience Criteria</h2>
+              <button onClick={() => setShowFilterPanel(false)} style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '18px' }}>×</button>
             </div>
             <div style={{ flex: 1, padding: '20px', overflow: 'hidden' }}>
-              <FilterBuilder onClose={() => setShowFilterPanel(false)} />
+              <FilterBuilder onClose={() => setShowFilterPanel(false)} t={t} />
             </div>
             <div style={{
               padding: '12px 20px',
-              borderTop: '1px solid #27272a',
+              borderTop: `1px solid ${t.border}`,
               display: 'flex',
               justifyContent: 'flex-end',
               gap: '8px',
@@ -1759,16 +1782,16 @@ const WorkflowBuilder = () => {
             }}>
               <button onClick={() => setShowFilterPanel(false)} style={{
                 padding: '8px 16px',
-                backgroundColor: '#27272a',
-                border: '1px solid #3f3f46',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.borderLight}`,
                 borderRadius: '6px',
-                color: '#a1a1aa',
+                color: t.textSecondary,
                 cursor: 'pointer',
                 fontSize: '12px'
               }}>Cancel</button>
               <button onClick={() => setShowFilterPanel(false)} style={{
                 padding: '8px 16px',
-                backgroundColor: '#3b82f6',
+                backgroundColor: t.primary,
                 border: 'none',
                 borderRadius: '6px',
                 color: '#fff',

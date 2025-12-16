@@ -90,7 +90,7 @@ const AppLayout = () => {
   const getCurrentPage = () => {
     const path = location.pathname.split('/').slice(2).join('/');
     if (path.startsWith('automations/')) return 'automations';
-    if (path.startsWith('clients/')) return 'clients';
+    if (path.startsWith('accounts/')) return 'accounts';
     return path || 'dashboard';
   };
 
@@ -102,7 +102,7 @@ const AppLayout = () => {
     { id: 'automations', label: 'Automations', icon: '⚡', path: `/${userId}/automations` },
     { id: 'templates', label: 'Templates', icon: '📝', path: `/${userId}/templates` },
     { id: 'mass-email', label: 'Mass Email', icon: '📧', path: `/${userId}/mass-email` },
-    { id: 'clients', label: 'Clients', icon: '👥', path: `/${userId}/clients` },
+    { id: 'accounts', label: 'Accounts', icon: '👥', path: `/${userId}/accounts` },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: `/${userId}/settings` },
   ];
 
@@ -286,8 +286,8 @@ const AppLayout = () => {
                 <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                 <Route path="templates" element={<TemplatesPage t={t} />} />
                 <Route path="mass-email" element={<MassEmailPage t={t} />} />
-                <Route path="clients" element={<ClientsPage t={t} />} />
-                <Route path="clients/:accountId" element={<ClientProfilePage t={t} />} />
+                <Route path="accounts" element={<ClientsPage t={t} />} />
+                <Route path="accounts/:accountId" element={<ClientProfilePage t={t} />} />
                 <Route path="settings" element={<SettingsPage t={t} />} />
                 <Route path="timeline" element={<TimelinePage t={t} />} />
                 <Route path="*" element={<DashboardPage t={t} />} />

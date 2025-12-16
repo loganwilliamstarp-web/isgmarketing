@@ -226,7 +226,7 @@ const ClientsPage = ({ t }) => {
 
   // Navigation
   const handleViewClient = (accountId) => {
-    navigate(`/${userId}/clients/${accountId}`);
+    navigate(`/${userId}/accounts/${accountId}`);
   };
 
   return (
@@ -289,7 +289,7 @@ const ClientsPage = ({ t }) => {
           color: t.danger,
           fontSize: '14px'
         }}>
-          Failed to load clients. Please try refreshing the page.
+          Failed to load accounts. Please try refreshing the page.
         </div>
       )}
 
@@ -504,12 +504,12 @@ const ClientsPage = ({ t }) => {
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
-            {searchQuery ? 'No clients found' : 'No clients yet'}
+            {searchQuery ? 'No accounts found' : 'No accounts yet'}
           </h3>
           <p style={{ fontSize: '14px', color: t.textSecondary, marginBottom: '24px' }}>
             {searchQuery 
               ? 'Try adjusting your search criteria.'
-              : 'Your clients will appear here once synced from Salesforce.'
+              : 'Your accounts will appear here once synced from Salesforce.'
             }
           </p>
         </div>
@@ -534,7 +534,7 @@ const ClientsPage = ({ t }) => {
                 {stats.expiring} policies expiring in the next 30 days
               </div>
               <div style={{ fontSize: '12px', color: t.textSecondary }}>
-                Consider setting up renewal reminders for these clients.
+                Consider setting up renewal reminders for these accounts.
               </div>
             </div>
           </div>
