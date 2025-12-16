@@ -100,19 +100,23 @@ Railway will automatically:
 
 ## URL Structure
 
+Base URL: `https://isgmarketing-production.up.railway.app`
+
 All routes are nested under the user ID (Salesforce format):
 
 - `/` - Redirects to demo user
-- `/:userId/dashboard` - Main dashboard
-- `/:userId/automations` - Automation list
-- `/:userId/automations/new` - Create automation
-- `/:userId/automations/:id` - Edit automation
-- `/:userId/templates` - Template management
-- `/:userId/mass-email` - One-off email sends
-- `/:userId/clients` - Client list
-- `/:userId/clients/:accountId` - Client profile
-- `/:userId/settings` - User settings
-- `/:userId/timeline` - Admin activity view
+- `/{userId}/dashboard` - Main dashboard
+- `/{userId}/automations` - Automation list
+- `/{userId}/automations/new` - Create automation
+- `/{userId}/automations/:id` - Edit automation
+- `/{userId}/templates` - Template management
+- `/{userId}/mass-email` - One-off email sends
+- `/{userId}/clients` - Client list
+- `/{userId}/clients/:accountId` - Client profile
+- `/{userId}/settings` - User settings
+- `/{userId}/timeline` - Admin activity view
+
+Example: `https://isgmarketing-production.up.railway.app/0056g000004jvyVAAQ/dashboard`
 
 ## Next Steps (Phase 3+)
 
