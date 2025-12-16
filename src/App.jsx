@@ -11,7 +11,8 @@ import {
   TemplatesPage,
   ClientsPage,
   ClientProfilePage,
-  SettingsPage
+  SettingsPage,
+  WorkflowBuilderPage
 } from './pages';
 
 // ============================================
@@ -281,8 +282,8 @@ const AppLayout = () => {
               <Routes>
                 <Route path="dashboard" element={<DashboardPage t={t} />} />
                 <Route path="automations" element={<AutomationsPage t={t} />} />
-                <Route path="automations/new" element={<AutomationsPage t={t} />} />
-                <Route path="automations/:automationId" element={<AutomationsPage t={t} />} />
+                <Route path="automations/new" element={<WorkflowBuilderPage t={t} />} />
+                <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                 <Route path="templates" element={<TemplatesPage t={t} />} />
                 <Route path="mass-email" element={<MassEmailPage t={t} />} />
                 <Route path="clients" element={<ClientsPage t={t} />} />

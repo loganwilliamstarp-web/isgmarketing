@@ -7,6 +7,7 @@ export { default as TemplatesPage } from './TemplatesPage';
 export { default as ClientsPage } from './ClientsPage';
 export { default as ClientProfilePage } from './ClientProfilePage';
 export { default as SettingsPage } from './SettingsPage';
+export { default as WorkflowBuilderPage } from './WorkflowBuilderPage';
 
 // Re-export for convenience
 export * from './DashboardPage';
@@ -15,3 +16,4 @@ export * from './TemplatesPage';
 export * from './ClientsPage';
 export * from './ClientProfilePage';
 export * from './SettingsPage';
+export * from './WorkflowBuilderPage';
