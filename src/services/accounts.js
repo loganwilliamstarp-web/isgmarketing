@@ -60,7 +60,7 @@ export const accountsService = {
         *,
         carrier:carriers(id, name)
       `)
-      .eq('account_unique_id', accountId)
+      .eq('account_id', accountId)
       .order('expiration_date', { ascending: false });
     
     if (policiesError) throw policiesError;
@@ -179,7 +179,8 @@ export const accountsService = {
         policy_lob,
         expiration_date,
         policy_status,
-        account:accounts!inner(
+        account_id,
+        account:accounts!policies_account_id_fkey(
           account_unique_id,
           name,
           person_email,
@@ -189,14 +190,15 @@ export const accountsService = {
           primary_contact_last_name
         )
       `)
-      .eq('accounts.owner_id', ownerId)
       .eq('policy_status', 'Active')
       .lte('expiration_date', futureDate.toISOString().split('T')[0])
       .gte('expiration_date', new Date().toISOString().split('T')[0])
       .order('expiration_date');
     
     if (error) throw error;
-    return data;
+    
+    // Filter by owner_id on the account side
+    return data.filter(p => p.account?.owner_id === ownerId);
   },
 
   /**
@@ -262,24 +264,34 @@ export const accountsService = {
    * Get accounts eligible for automation
    */
   async getEligibleForAutomation(ownerId, filterConfig) {
-    // This is a simplified version - in production, you'd build dynamic queries
-    // based on the filter config structure
-    
+    // Get accounts first
     let query = supabase
       .from('accounts')
-      .select(`
-        *,
-        policies(*)
-      `)
+      .select('*')
       .eq('owner_id', ownerId)
       .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
       .not('person_email', 'is', null);
     
-    const { data, error } = await query;
+    const { data: accounts, error } = await query;
     if (error) throw error;
     
+    // Get policies separately for each account if needed
+    const accountIds = accounts.map(a => a.account_unique_id);
+    const { data: policies, error: policyError } = await supabase
+      .from('policies')
+      .select('*')
+      .in('account_id', accountIds);
+    
+    if (policyError) throw policyError;
+    
+    // Attach policies to accounts
+    const accountsWithPolicies = accounts.map(account => ({
+      ...account,
+      policies: policies.filter(p => p.account_id === account.account_unique_id)
+    }));
+    
     // Additional filtering would happen here based on filterConfig
-    return data.filter(account => this.canReceiveMarketing(account));
+    return accountsWithPolicies.filter(account => this.canReceiveMarketing(account));
   }
 };
 

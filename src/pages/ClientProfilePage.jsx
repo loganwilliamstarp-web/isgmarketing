@@ -70,6 +70,10 @@ const PolicyCard = ({ policy, theme: t }) => {
   const daysUntilExpiry = policy.expiration_date 
     ? Math.ceil((new Date(policy.expiration_date) - new Date()) / (1000 * 60 * 60 * 24))
     : null;
+  
+  const policyType = policy.policy_lob || policy.policy_type || 'Unknown';
+  const policyStatus = policy.policy_status || policy.status || 'unknown';
+  const carrierName = policy.carrier?.name || policy.carrier_name || policy.carrier || '—';
 
   return (
     <div style={{
@@ -87,19 +91,19 @@ const PolicyCard = ({ policy, theme: t }) => {
           fontWeight: '600',
           color: t.primary
         }}>
-          {policy.policy_type}
+          {policyType}
         </div>
-        <StatusBadge status={policy.status} theme={t} />
+        <StatusBadge status={policyStatus.toLowerCase()} theme={t} />
       </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Policy Number</div>
-          <div style={{ color: t.text }}>{policy.policy_number || '—'}</div>
+          <div style={{ color: t.text }}>{policy.policy_number || policy.policy_unique_id || '—'}</div>
         </div>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Carrier</div>
-          <div style={{ color: t.text }}>{policy.carrier || '—'}</div>
+          <div style={{ color: t.text }}>{carrierName}</div>
         </div>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Effective Date</div>
@@ -292,12 +296,12 @@ const ClientProfilePage = ({ t }) => {
         textAlign: 'center'
       }}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>😕</div>
-        <h2 style={{ color: t.text, marginBottom: '8px' }}>Client Not Found</h2>
+        <h2 style={{ color: t.text, marginBottom: '8px' }}>Account Not Found</h2>
         <p style={{ color: t.textSecondary, marginBottom: '24px' }}>
-          We couldn't find the client you're looking for.
+          We couldn't find the account you're looking for.
         </p>
         <button
-          onClick={() => navigate(`/${userId}/clients`)}
+          onClick={() => navigate(`/${userId}/accounts`)}
           style={{
             padding: '10px 20px',
             backgroundColor: t.primary,
