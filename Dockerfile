@@ -12,6 +12,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Build args for Vite env vars
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
 # Build the app
 RUN npm run build
 
@@ -27,8 +31,11 @@ RUN npm install -g serve
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/serve.json ./dist/
 
-# Expose port
-EXPOSE 3000
+# Railway sets PORT dynamically
+ENV PORT=3000
 
-# Start the server
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Expose port
+EXPOSE $PORT
+
+# Start the server using shell form to expand $PORT
+CMD serve -s dist -l $PORT
