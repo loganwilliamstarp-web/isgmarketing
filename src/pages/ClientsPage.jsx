@@ -13,13 +13,14 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 
 // Account type badge
 const TypeBadge = ({ type, theme: t }) => {
+  const normalizedType = (type || '').toLowerCase();
   const colors = {
-    Customer: { bg: `${t.success}20`, text: t.success },
-    Prospect: { bg: `${t.primary}20`, text: t.primary },
-    Prior: { bg: `${t.textMuted}20`, text: t.textMuted },
-    Lead: { bg: `${t.warning}20`, text: t.warning },
+    customer: { bg: `${t.success}20`, text: t.success, label: 'Customer' },
+    prospect: { bg: `${t.primary}20`, text: t.primary, label: 'Prospect' },
+    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior' },
+    lead: { bg: `${t.warning}20`, text: t.warning, label: 'Lead' },
   };
-  const c = colors[type] || colors.Prospect;
+  const c = colors[normalizedType] || colors.prospect;
   
   return (
     <span style={{
@@ -30,7 +31,7 @@ const TypeBadge = ({ type, theme: t }) => {
       fontSize: '12px',
       fontWeight: '500'
     }}>
-      {type}
+      {c.label || type || 'Unknown'}
     </span>
   );
 };
@@ -188,9 +189,10 @@ const ClientsPage = ({ t }) => {
     
     if (!accounts) return [];
     
-    // Apply type filter (based on account_status)
+    // Apply type filter (based on account_status, case-insensitive)
     if (typeFilter !== 'all') {
-      accounts = accounts.filter(a => a.account_status === typeFilter);
+      const filterLower = typeFilter.toLowerCase();
+      accounts = accounts.filter(a => (a.account_status || '').toLowerCase() === filterLower);
     }
     
     // Apply sorting
@@ -216,21 +218,30 @@ const ClientsPage = ({ t }) => {
     });
   }, [allAccounts, searchResults, searchQuery, typeFilter, sortBy, sortOrder]);
 
-  // Use stats from hook or calculate from loaded accounts as fallback
+  // Calculate stats from loaded accounts (most reliable)
   const stats = useMemo(() => {
-    if (accountStats) {
-      return accountStats;
+    if (!allAccounts || allAccounts.length === 0) {
+      return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: accountStats?.expiring || 0 };
     }
-    // Fallback to calculating from loaded accounts (using account_status)
-    if (!allAccounts) return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
-    return {
-      Customer: allAccounts.filter(a => a.account_status === 'Customer').length,
-      Prospect: allAccounts.filter(a => a.account_status === 'Prospect').length,
-      Prior: allAccounts.filter(a => a.account_status === 'Prior').length,
-      Lead: allAccounts.filter(a => a.account_status === 'Lead').length,
+    
+    const counts = {
+      Customer: 0,
+      Prospect: 0,
+      Prior: 0,
+      Lead: 0,
       total: allAccounts.length,
-      expiring: 0
+      expiring: accountStats?.expiring || 0
     };
+    
+    allAccounts.forEach(a => {
+      const status = (a.account_status || '').toLowerCase();
+      if (status === 'customer') counts.Customer++;
+      else if (status === 'prospect') counts.Prospect++;
+      else if (status === 'prior') counts.Prior++;
+      else if (status === 'lead') counts.Lead++;
+    });
+    
+    return counts;
   }, [allAccounts, accountStats]);
 
   // Navigation

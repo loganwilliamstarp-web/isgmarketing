@@ -74,7 +74,7 @@ export const accountsService = {
     
     if (accountError) throw accountError;
     
-    // Count by status
+    // Count by status (case-insensitive)
     const statusCounts = {
       Customer: 0,
       Prospect: 0,
@@ -84,10 +84,11 @@ export const accountsService = {
     };
     
     accounts?.forEach(a => {
-      const status = a.account_status || 'Prospect';
-      if (statusCounts.hasOwnProperty(status)) {
-        statusCounts[status]++;
-      }
+      const status = (a.account_status || '').toLowerCase();
+      if (status === 'customer') statusCounts.Customer++;
+      else if (status === 'prospect') statusCounts.Prospect++;
+      else if (status === 'prior') statusCounts.Prior++;
+      else if (status === 'lead') statusCounts.Lead++;
     });
     
     // Get expiring policies count (next 30 days) - join through accounts
