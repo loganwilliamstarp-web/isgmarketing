@@ -30,7 +30,8 @@ export function useAccountActivity(accountId, limit = 20) {
   return useQuery({
     queryKey: ['activity', ownerId, 'account', accountId],
     queryFn: () => activityLogService.getByAccount(ownerId, accountId, limit),
-    enabled: !!ownerId && !!accountId
+    enabled: !!ownerId && !!accountId,
+    staleTime: 30000, // Cache for 30 seconds
   });
 }
 

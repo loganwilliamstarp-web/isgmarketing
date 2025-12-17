@@ -26,7 +26,8 @@ export function useAccountEnrollments(accountId, options = {}) {
   return useQuery({
     queryKey: ['enrollments', 'account', accountId, options],
     queryFn: () => enrollmentsService.getByAccount(accountId, options),
-    enabled: !!accountId
+    enabled: !!accountId,
+    staleTime: 30000, // Cache for 30 seconds
   });
 }
 

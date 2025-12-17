@@ -17,7 +17,8 @@ export function useAccounts(options = {}) {
   return useQuery({
     queryKey: ['accounts', ownerId, options],
     queryFn: () => accountsService.getAll(ownerId, options),
-    enabled: !!ownerId
+    enabled: !!ownerId,
+    staleTime: 30000, // Cache for 30 seconds
   });
 }
 
@@ -39,7 +40,8 @@ export function useAccountWithPolicies(accountId) {
   return useQuery({
     queryKey: ['account', accountId, 'policies'],
     queryFn: () => accountsService.getByIdWithPolicies(accountId),
-    enabled: !!accountId
+    enabled: !!accountId,
+    staleTime: 30000, // Cache for 30 seconds
   });
 }
 

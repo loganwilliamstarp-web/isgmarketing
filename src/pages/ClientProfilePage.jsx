@@ -275,11 +275,21 @@ const ClientProfilePage = ({ t }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Fetch client data
+  // Primary data - always load
   const { data: client, isLoading, error } = useAccountWithPolicies(accountId);
-  const { data: emailLogs, isLoading: logsLoading } = useAccountEmailLogs(accountId);
-  const { data: activities, isLoading: activitiesLoading } = useAccountActivity(accountId);
-  const { data: enrollments, isLoading: enrollmentsLoading } = useAccountEnrollments(accountId);
+  
+  // Lazy load other data based on tab (or for overview stats)
+  const { data: emailLogs, isLoading: logsLoading } = useAccountEmailLogs(
+    activeTab === 'overview' || activeTab === 'emails' ? accountId : null
+  );
+  const { data: activities, isLoading: activitiesLoading } = useAccountActivity(
+    activeTab === 'activity' ? accountId : null
+  );
+  const { data: enrollments, isLoading: enrollmentsLoading } = useAccountEnrollments(
+    activeTab === 'overview' || activeTab === 'automations' ? accountId : null
+  );
+  
+  // Don't load org stats on initial render - it's secondary info
   const { data: orgStats } = useQuickStats();
 
   // Calculate this account's stats
@@ -541,13 +551,23 @@ const ClientProfilePage = ({ t }) => {
             padding: '20px',
             backgroundColor: t.bgCard,
             borderRadius: '12px',
-            border: `1px solid ${t.border}`
+            border: `1px solid ${t.border}`,
+            maxHeight: '400px',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px', flexShrink: 0 }}>
               Policies ({client.policies?.length || 0})
             </h3>
             {client.policies?.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '12px',
+                overflowY: 'auto',
+                flex: 1,
+                paddingRight: '8px'
+              }}>
                 {client.policies.map((policy, i) => (
                   <PolicyCard key={i} policy={policy} theme={t} />
                 ))}

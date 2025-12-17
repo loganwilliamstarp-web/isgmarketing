@@ -56,7 +56,8 @@ export function useAccountEmailLogs(accountId, options = {}) {
   return useQuery({
     queryKey: ['emailLogs', ownerId, 'account', accountId, options],
     queryFn: () => emailLogsService.getByAccount(ownerId, accountId, options),
-    enabled: !!ownerId && !!accountId
+    enabled: !!ownerId && !!accountId,
+    staleTime: 30000, // Cache for 30 seconds
   });
 }
 

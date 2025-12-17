@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   useAccounts, 
-  useAccountSearch,
   useAccountStats
 } from '../hooks';
 
@@ -193,32 +192,46 @@ const ClientsPage = ({ t }) => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 25;
 
-  // Fetch accounts
-  const { data: allAccounts, isLoading, error } = useAccounts();
-  const { data: searchResults, isLoading: searchLoading } = useAccountSearch(
-    searchQuery.length >= 2 ? searchQuery : null
-  );
-  const { data: accountStats } = useAccountStats();
-
-  // Use search results if searching, otherwise filter all accounts
-  const displayAccounts = useMemo(() => {
-    let accounts = searchQuery.length >= 2 ? searchResults : allAccounts;
+  // Build query options based on filters
+  const queryOptions = useMemo(() => {
+    const opts = {
+      limit: pageSize,
+      offset: (currentPage - 1) * pageSize
+    };
     
-    if (!accounts) return [];
-    
-    // Apply type filter (based on account_status or expiring, case-insensitive)
-    if (typeFilter !== 'all') {
-      if (typeFilter === 'expiring') {
-        // Filter to accounts with expiring policies
-        accounts = accounts.filter(a => a.has_expiring_policy);
-      } else {
-        const filterLower = typeFilter.toLowerCase();
-        accounts = accounts.filter(a => (a.account_status || '').toLowerCase() === filterLower);
-      }
+    if (typeFilter !== 'all' && typeFilter !== 'expiring') {
+      opts.status = typeFilter;
+    }
+    if (typeFilter === 'expiring') {
+      opts.expiring = true;
+      opts.limit = 100; // Get more for expiring filter since we filter client-side
+      opts.offset = 0;
+    }
+    if (searchQuery.length >= 2) {
+      opts.search = searchQuery;
     }
     
-    // Apply sorting
+    return opts;
+  }, [typeFilter, currentPage, searchQuery]);
+
+  // Fetch paginated accounts
+  const { data: accountsData, isLoading, error } = useAccounts(queryOptions);
+  
+  // Fetch stats separately (counts ALL accounts)
+  const { data: stats, isLoading: statsLoading } = useAccountStats();
+
+  // Extract accounts and total from response
+  const accounts = accountsData?.accounts || [];
+  const totalAccounts = accountsData?.total || 0;
+  const totalPages = Math.ceil(totalAccounts / pageSize);
+
+  // Apply client-side sorting (server doesn't sort)
+  const displayAccounts = useMemo(() => {
+    if (!accounts || accounts.length === 0) return [];
+    
     return [...accounts].sort((a, b) => {
       let aVal = a[sortBy];
       let bVal = b[sortBy];
@@ -239,41 +252,26 @@ const ClientsPage = ({ t }) => {
         return aVal < bVal ? 1 : -1;
       }
     });
-  }, [allAccounts, searchResults, searchQuery, typeFilter, sortBy, sortOrder]);
+  }, [accounts, sortBy, sortOrder]);
 
-  // Calculate stats from loaded accounts (most reliable)
-  const stats = useMemo(() => {
-    if (!allAccounts || allAccounts.length === 0) {
-      return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
-    }
-    
-    const counts = {
-      Customer: 0,
-      Prospect: 0,
-      Prior: 0,
-      Lead: 0,
-      total: allAccounts.length,
-      expiring: 0
-    };
-    
-    allAccounts.forEach(a => {
-      const status = (a.account_status || '').toLowerCase();
-      if (status === 'customer') counts.Customer++;
-      else if (status === 'prospect') counts.Prospect++;
-      else if (status === 'prior') counts.Prior++;
-      else if (status === 'lead') counts.Lead++;
-      
-      // Count accounts with expiring policies
-      if (a.has_expiring_policy) counts.expiring++;
-    });
-    
-    return counts;
-  }, [allAccounts]);
+  // Reset to page 1 when filters change
+  const handleFilterChange = (newFilter) => {
+    setTypeFilter(newFilter);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
 
   // Navigation
   const handleViewClient = (accountId) => {
     navigate(`/${userId}/accounts/${accountId}`);
   };
+
+  // Use stats from hook (counts ALL accounts for user)
+  const displayStats = stats || { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
 
   return (
     <div>
@@ -348,47 +346,47 @@ const ClientsPage = ({ t }) => {
       }}>
         <StatsCard 
           label="Total Accounts" 
-          value={stats.total || 0} 
+          value={statsLoading ? '...' : displayStats.total} 
           icon="📊" 
           color={t.text}
           theme={t}
-          onClick={() => setTypeFilter('all')}
+          onClick={() => handleFilterChange('all')}
           active={typeFilter === 'all'}
         />
         <StatsCard 
           label="Customers" 
-          value={stats.Customer || 0} 
+          value={statsLoading ? '...' : displayStats.Customer} 
           icon="👥" 
           color={t.success}
           theme={t}
-          onClick={() => setTypeFilter(typeFilter === 'Customer' ? 'all' : 'Customer')}
+          onClick={() => handleFilterChange(typeFilter === 'Customer' ? 'all' : 'Customer')}
           active={typeFilter === 'Customer'}
         />
         <StatsCard 
           label="Prospects" 
-          value={stats.Prospect || 0} 
+          value={statsLoading ? '...' : displayStats.Prospect} 
           icon="🎯" 
           color={t.primary}
           theme={t}
-          onClick={() => setTypeFilter(typeFilter === 'Prospect' ? 'all' : 'Prospect')}
+          onClick={() => handleFilterChange(typeFilter === 'Prospect' ? 'all' : 'Prospect')}
           active={typeFilter === 'Prospect'}
         />
         <StatsCard 
           label="Prior Clients" 
-          value={stats.Prior || 0} 
+          value={statsLoading ? '...' : displayStats.Prior} 
           icon="📁" 
           color={t.textMuted}
           theme={t}
-          onClick={() => setTypeFilter(typeFilter === 'Prior' ? 'all' : 'Prior')}
+          onClick={() => handleFilterChange(typeFilter === 'Prior' ? 'all' : 'Prior')}
           active={typeFilter === 'Prior'}
         />
         <StatsCard 
           label="Expiring in 30d" 
-          value={stats.expiring || 0} 
+          value={statsLoading ? '...' : displayStats.expiring} 
           icon="⚠️" 
           color={t.warning}
           theme={t}
-          onClick={() => setTypeFilter(typeFilter === 'expiring' ? 'all' : 'expiring')}
+          onClick={() => handleFilterChange(typeFilter === 'expiring' ? 'all' : 'expiring')}
           active={typeFilter === 'expiring'}
         />
       </div>
@@ -407,7 +405,7 @@ const ClientsPage = ({ t }) => {
             type="text"
             placeholder="Search by name, email, or phone..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             style={{
               width: '100%',
               padding: '10px 12px 10px 36px',
@@ -427,24 +425,12 @@ const ClientsPage = ({ t }) => {
           }}>
             🔍
           </span>
-          {searchLoading && (
-            <span style={{ 
-              position: 'absolute', 
-              right: '12px', 
-              top: '50%', 
-              transform: 'translateY(-50%)',
-              color: t.textMuted,
-              fontSize: '12px'
-            }}>
-              Searching...
-            </span>
-          )}
         </div>
 
         {/* Type filter */}
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          onChange={(e) => handleFilterChange(e.target.value)}
           style={{
             padding: '10px 12px',
             backgroundColor: t.bgInput,
@@ -489,8 +475,10 @@ const ClientsPage = ({ t }) => {
 
         {/* Results count */}
         <span style={{ fontSize: '13px', color: t.textMuted, marginLeft: 'auto' }}>
-          {displayAccounts.length} account{displayAccounts.length !== 1 ? 's' : ''}
-          {typeFilter !== 'all' && ` (filtered)`}
+          {typeFilter === 'expiring' 
+            ? `${displayAccounts.length} account${displayAccounts.length !== 1 ? 's' : ''} with expiring policies`
+            : `Showing ${((currentPage - 1) * pageSize) + 1}-${Math.min(currentPage * pageSize, totalAccounts)} of ${totalAccounts} account${totalAccounts !== 1 ? 's' : ''}`
+          }
         </span>
       </div>
 
@@ -577,8 +565,94 @@ const ClientsPage = ({ t }) => {
         </div>
       )}
 
+      {/* Pagination */}
+      {totalPages > 1 && typeFilter !== 'expiring' && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '24px',
+          padding: '16px',
+          backgroundColor: t.bgCard,
+          borderRadius: '12px',
+          border: `1px solid ${t.border}`
+        }}>
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: currentPage === 1 ? t.bgHover : t.bg,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: currentPage === 1 ? t.textMuted : t.text,
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            ⟨⟨ First
+          </button>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: currentPage === 1 ? t.bgHover : t.bg,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: currentPage === 1 ? t.textMuted : t.text,
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            ⟨ Prev
+          </button>
+          
+          <span style={{ 
+            padding: '8px 16px', 
+            fontSize: '14px', 
+            color: t.text,
+            fontWeight: '500'
+          }}>
+            Page {currentPage} of {totalPages}
+          </span>
+          
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: currentPage === totalPages ? t.bgHover : t.bg,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: currentPage === totalPages ? t.textMuted : t.text,
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            Next ⟩
+          </button>
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: currentPage === totalPages ? t.bgHover : t.bg,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: currentPage === totalPages ? t.textMuted : t.text,
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            Last ⟩⟩
+          </button>
+        </div>
+      )}
+
       {/* Expiring Policies Alert */}
-      {stats.expiring > 0 && (
+      {displayStats.expiring > 0 && typeFilter !== 'expiring' && (
         <div style={{
           marginTop: '24px',
           padding: '16px 20px',
@@ -593,15 +667,15 @@ const ClientsPage = ({ t }) => {
             <span style={{ fontSize: '24px' }}>⚠️</span>
             <div>
               <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
-                {stats.expiring} policies expiring in the next 30 days
+                {displayStats.expiring} account{displayStats.expiring !== 1 ? 's have' : ' has'} policies expiring in the next 30 days
               </div>
               <div style={{ fontSize: '12px', color: t.textSecondary }}>
                 Consider setting up renewal reminders for these accounts.
               </div>
             </div>
           </div>
-          <Link
-            to={`/${userId}/automations/new?template=renewal`}
+          <button
+            onClick={() => handleFilterChange('expiring')}
             style={{
               padding: '8px 16px',
               backgroundColor: t.warning,
@@ -610,12 +684,11 @@ const ClientsPage = ({ t }) => {
               color: '#fff',
               cursor: 'pointer',
               fontSize: '13px',
-              fontWeight: '500',
-              textDecoration: 'none'
+              fontWeight: '500'
             }}
           >
-            Set Up Renewal Automation
-          </Link>
+            View Expiring
+          </button>
         </div>
       )}
     </div>
