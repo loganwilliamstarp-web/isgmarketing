@@ -81,7 +81,8 @@ export {
   useProspects,
   usePriorCustomers,
   useExpiringPolicies,
-  useAccountCounts
+  useAccountCounts,
+  useAccountStats
 } from './useAccounts';
 
 // Activity

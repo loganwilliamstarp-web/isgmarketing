@@ -134,4 +134,17 @@ export function useAccountCounts() {
   });
 }
 
+/**
+ * Get account stats summary (type counts + expiring policies)
+ */
+export function useAccountStats() {
+  const ownerId = useOwnerId();
+  
+  return useQuery({
+    queryKey: ['accounts', ownerId, 'stats'],
+    queryFn: () => accountsService.getStats(ownerId),
+    enabled: !!ownerId
+  });
+}
+
 export default useAccounts;

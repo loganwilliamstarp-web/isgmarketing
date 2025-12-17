@@ -3,11 +3,12 @@ import { supabase } from '../lib/supabase';
 
 export const accountsService = {
   /**
-   * Get all accounts for an owner
+   * Get all accounts for an owner with policy counts
    */
   async getAll(ownerId, options = {}) {
-    const { status, search, limit = 50, offset = 0 } = options;
+    const { status, search, limit = 100, offset = 0 } = options;
     
+    // Get accounts
     let query = supabase
       .from('accounts')
       .select('*')
@@ -23,9 +24,98 @@ export const accountsService = {
       query = query.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
     }
     
-    const { data, error } = await query;
+    const { data: accounts, error } = await query;
     if (error) throw error;
-    return data;
+    
+    if (!accounts || accounts.length === 0) return [];
+    
+    // Get policy counts for these accounts
+    const accountIds = accounts.map(a => a.account_unique_id).filter(Boolean);
+    
+    if (accountIds.length > 0) {
+      const { data: policies, error: policyError } = await supabase
+        .from('policies')
+        .select('account_id, policy_lob, policy_status')
+        .in('account_id', accountIds);
+      
+      if (!policyError && policies) {
+        // Group policies by account
+        const policyMap = {};
+        policies.forEach(p => {
+          if (!policyMap[p.account_id]) {
+            policyMap[p.account_id] = [];
+          }
+          policyMap[p.account_id].push({
+            policy_type: p.policy_lob,
+            status: p.policy_status?.toLowerCase() || 'unknown'
+          });
+        });
+        
+        // Attach policies to accounts
+        accounts.forEach(account => {
+          account.policies = policyMap[account.account_unique_id] || [];
+          account.policy_count = account.policies.length;
+        });
+      }
+    }
+    
+    return accounts;
+  },
+
+  /**
+   * Get account stats summary
+   */
+  async getStats(ownerId) {
+    // Get account type counts
+    const { data: accounts, error: accountError } = await supabase
+      .from('accounts')
+      .select('account_type, account_unique_id')
+      .eq('owner_id', ownerId);
+    
+    if (accountError) throw accountError;
+    
+    // Count by type
+    const typeCounts = {
+      Customer: 0,
+      Prospect: 0,
+      Prior: 0,
+      Lead: 0,
+      total: accounts?.length || 0
+    };
+    
+    accounts?.forEach(a => {
+      const type = a.account_type || 'Prospect';
+      if (typeCounts.hasOwnProperty(type)) {
+        typeCounts[type]++;
+      }
+    });
+    
+    // Get expiring policies count (next 30 days) - join through accounts
+    let expiringCount = 0;
+    if (accounts && accounts.length > 0) {
+      const accountIds = accounts.map(a => a.account_unique_id).filter(Boolean);
+      
+      if (accountIds.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        const futureDate = thirtyDaysFromNow.toISOString().split('T')[0];
+        
+        const { count } = await supabase
+          .from('policies')
+          .select('*', { count: 'exact', head: true })
+          .in('account_id', accountIds)
+          .gte('expiration_date', today)
+          .lte('expiration_date', futureDate);
+        
+        expiringCount = count || 0;
+      }
+    }
+    
+    return {
+      ...typeCounts,
+      expiring: expiringCount
+    };
   },
 
   /**

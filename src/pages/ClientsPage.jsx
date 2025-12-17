@@ -3,9 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   useAccounts, 
   useAccountSearch,
-  useCustomers,
-  useProspects,
-  useExpiringPolicies
+  useAccountStats
 } from '../hooks';
 
 // Loading skeleton
@@ -84,39 +82,39 @@ const ClientRow = ({ client, onClick, theme: t }) => (
             {client.name}
           </div>
           <div style={{ fontSize: '12px', color: t.textMuted }}>
-            {client.email}
+            {client.person_email || client.email || '—'}
           </div>
         </div>
       </div>
     </td>
     <td style={{ padding: '14px 16px' }}>
-      <TypeBadge type={client.account_type || client.type} theme={t} />
+      <TypeBadge type={client.account_type || 'Prospect'} theme={t} />
     </td>
     <td style={{ padding: '14px 16px' }}>
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {client.policies?.slice(0, 3).map((policy, i) => (
-          <PolicyBadge 
-            key={i} 
-            policyType={policy.policy_type} 
-            status={policy.status}
-            theme={t} 
-          />
-        )) || <span style={{ fontSize: '13px', color: t.textMuted }}>No policies</span>}
-        {client.policies?.length > 3 && (
-          <span style={{ fontSize: '11px', color: t.textMuted }}>
-            +{client.policies.length - 3} more
-          </span>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {client.policies?.length > 0 ? (
+          <>
+            {client.policies.slice(0, 3).map((policy, i) => (
+              <PolicyBadge 
+                key={i} 
+                policyType={policy.policy_type || 'Policy'} 
+                status={policy.status}
+                theme={t} 
+              />
+            ))}
+            {client.policies.length > 3 && (
+              <span style={{ fontSize: '11px', color: t.textMuted }}>
+                +{client.policies.length - 3} more
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: '13px', color: t.textMuted }}>No policies</span>
         )}
       </div>
     </td>
-    <td style={{ padding: '14px 16px', fontSize: '14px', color: t.textSecondary }}>
-      {client.email_stats?.total_sent || 0}
-    </td>
-    <td style={{ padding: '14px 16px', fontSize: '14px', color: t.textSecondary }}>
-      {client.email_stats?.last_sent 
-        ? new Date(client.email_stats.last_sent).toLocaleDateString() 
-        : 'Never'
-      }
+    <td style={{ padding: '14px 16px', fontSize: '14px', color: t.textSecondary, textAlign: 'center' }}>
+      {client.policy_count || client.policies?.length || 0}
     </td>
     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -182,7 +180,7 @@ const ClientsPage = ({ t }) => {
   const { data: searchResults, isLoading: searchLoading } = useAccountSearch(
     searchQuery.length >= 2 ? searchQuery : null
   );
-  const { data: expiringPolicies } = useExpiringPolicies(30);
+  const { data: accountStats } = useAccountStats();
 
   // Use search results if searching, otherwise filter all accounts
   const displayAccounts = useMemo(() => {
@@ -192,7 +190,7 @@ const ClientsPage = ({ t }) => {
     
     // Apply type filter
     if (typeFilter !== 'all') {
-      accounts = accounts.filter(a => (a.account_type || a.type) === typeFilter);
+      accounts = accounts.filter(a => a.account_type === typeFilter);
     }
     
     // Apply sorting
@@ -205,6 +203,11 @@ const ClientsPage = ({ t }) => {
         bVal = bVal?.toLowerCase() || '';
       }
       
+      if (sortBy === 'policy_count') {
+        aVal = a.policy_count || 0;
+        bVal = b.policy_count || 0;
+      }
+      
       if (sortOrder === 'asc') {
         return aVal > bVal ? 1 : -1;
       } else {
@@ -213,16 +216,22 @@ const ClientsPage = ({ t }) => {
     });
   }, [allAccounts, searchResults, searchQuery, typeFilter, sortBy, sortOrder]);
 
-  // Calculate stats
+  // Use stats from hook or calculate from loaded accounts as fallback
   const stats = useMemo(() => {
-    if (!allAccounts) return { customers: 0, prospects: 0, prior: 0, expiring: 0 };
+    if (accountStats) {
+      return accountStats;
+    }
+    // Fallback to calculating from loaded accounts
+    if (!allAccounts) return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
     return {
-      customers: allAccounts.filter(a => (a.account_type || a.type) === 'Customer').length,
-      prospects: allAccounts.filter(a => (a.account_type || a.type) === 'Prospect').length,
-      prior: allAccounts.filter(a => (a.account_type || a.type) === 'Prior').length,
-      expiring: expiringPolicies?.length || 0
+      Customer: allAccounts.filter(a => a.account_type === 'Customer').length,
+      Prospect: allAccounts.filter(a => a.account_type === 'Prospect').length,
+      Prior: allAccounts.filter(a => a.account_type === 'Prior').length,
+      Lead: allAccounts.filter(a => a.account_type === 'Lead').length,
+      total: allAccounts.length,
+      expiring: 0
     };
-  }, [allAccounts, expiringPolicies]);
+  }, [allAccounts, accountStats]);
 
   // Navigation
   const handleViewClient = (accountId) => {
@@ -234,10 +243,10 @@ const ClientsPage = ({ t }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
-            Clients
+            Accounts
           </h1>
           <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
-            View and manage your client database
+            View and manage your account database
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
@@ -273,7 +282,7 @@ const ClientsPage = ({ t }) => {
               gap: '6px'
             }}
           >
-            + Add Client
+            + Add Account
           </button>
         </div>
       </div>
@@ -296,34 +305,41 @@ const ClientsPage = ({ t }) => {
       {/* Quick Stats */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gridTemplateColumns: 'repeat(5, 1fr)', 
         gap: '16px', 
         marginBottom: '24px' 
       }}>
         <StatsCard 
+          label="Total Accounts" 
+          value={stats.total || 0} 
+          icon="📊" 
+          color={t.text}
+          theme={t} 
+        />
+        <StatsCard 
           label="Customers" 
-          value={stats.customers} 
+          value={stats.Customer || 0} 
           icon="👥" 
           color={t.success}
           theme={t} 
         />
         <StatsCard 
           label="Prospects" 
-          value={stats.prospects} 
+          value={stats.Prospect || 0} 
           icon="🎯" 
           color={t.primary}
           theme={t} 
         />
         <StatsCard 
           label="Prior Clients" 
-          value={stats.prior} 
+          value={stats.Prior || 0} 
           icon="📁" 
           color={t.textMuted}
           theme={t} 
         />
         <StatsCard 
           label="Expiring in 30d" 
-          value={stats.expiring} 
+          value={stats.expiring || 0} 
           icon="⚠️" 
           color={t.warning}
           theme={t} 
@@ -463,7 +479,7 @@ const ClientsPage = ({ t }) => {
             <thead>
               <tr style={{ backgroundColor: t.bgHover }}>
                 <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
-                  Client
+                  Account
                 </th>
                 <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
                   Type
@@ -471,11 +487,8 @@ const ClientsPage = ({ t }) => {
                 <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
                   Policies
                 </th>
-                <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
-                  Emails Sent
-                </th>
-                <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
-                  Last Contact
+                <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                  # Policies
                 </th>
                 <th style={{ padding: '14px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
                   Actions
