@@ -105,61 +105,102 @@ export const accountsService = {
   },
 
   /**
-   * Get account stats summary - counts ALL accounts for user
+   * Get account stats summary - counts ALL accounts for user using proper count queries
    */
   async getStats(ownerId) {
-    // Get all accounts for this user (no limit)
-    const { data: accounts, error: accountError } = await supabase
+    // Use count queries instead of fetching all rows (Supabase has 1000 row default limit)
+    
+    // Total count
+    const { count: totalCount, error: totalError } = await supabase
       .from('accounts')
-      .select('account_status, account_unique_id')
+      .select('*', { count: 'exact', head: true })
       .eq('owner_id', ownerId);
     
-    if (accountError) throw accountError;
+    if (totalError) throw totalError;
     
-    // Count by status (case-insensitive)
-    const statusCounts = {
-      Customer: 0,
-      Prospect: 0,
-      Prior: 0,
-      Lead: 0,
-      total: accounts?.length || 0
-    };
+    // Count by status - use ilike for case-insensitive matching
+    const { count: customerCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'customer');
     
-    accounts?.forEach(a => {
-      const status = (a.account_status || '').toLowerCase();
-      if (status === 'customer') statusCounts.Customer++;
-      else if (status === 'prospect') statusCounts.Prospect++;
-      else if (status === 'prior') statusCounts.Prior++;
-      else if (status === 'lead') statusCounts.Lead++;
-    });
+    const { count: prospectCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'prospect');
     
-    // Get count of ACCOUNTS with expiring policies (next 30 days)
+    const { count: priorCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'prior');
+    
+    const { count: leadCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'lead');
+    
+    // For expiring policies count, we'll estimate based on a sample
+    // This avoids hitting row limits when there are many expiring policies
     let expiringAccountCount = 0;
-    if (accounts && accounts.length > 0) {
-      const accountIds = accounts.map(a => a.account_unique_id).filter(Boolean);
+    
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const futureDate = thirtyDaysFromNow.toISOString().split('T')[0];
+    
+    // Count expiring policies first
+    const { count: expiringPolicyCount } = await supabase
+      .from('policies')
+      .select('*', { count: 'exact', head: true })
+      .gte('expiration_date', today)
+      .lte('expiration_date', futureDate);
+    
+    // If there are expiring policies, get unique account IDs (up to 1000)
+    // and count how many belong to this owner
+    if (expiringPolicyCount && expiringPolicyCount > 0) {
+      // Get distinct account_ids with expiring policies
+      const { data: expiringPolicies } = await supabase
+        .from('policies')
+        .select('account_id')
+        .gte('expiration_date', today)
+        .lte('expiration_date', futureDate)
+        .limit(5000); // Get more to improve accuracy
       
-      if (accountIds.length > 0) {
-        const today = new Date().toISOString().split('T')[0];
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        const futureDate = thirtyDaysFromNow.toISOString().split('T')[0];
+      if (expiringPolicies && expiringPolicies.length > 0) {
+        // Get unique account IDs
+        const uniqueAccountIds = [...new Set(expiringPolicies.map(p => p.account_id).filter(Boolean))];
         
-        // Get distinct account_ids with expiring policies
-        const { data: expiringPolicies } = await supabase
-          .from('policies')
-          .select('account_id')
-          .in('account_id', accountIds)
-          .gte('expiration_date', today)
-          .lte('expiration_date', futureDate);
-        
-        // Count unique accounts
-        const uniqueAccountsWithExpiring = new Set(expiringPolicies?.map(p => p.account_id) || []);
-        expiringAccountCount = uniqueAccountsWithExpiring.size;
+        if (uniqueAccountIds.length > 0) {
+          // Count in batches of 100 to avoid query limits
+          let ownerExpiringCount = 0;
+          const batchSize = 100;
+          
+          for (let i = 0; i < uniqueAccountIds.length; i += batchSize) {
+            const batch = uniqueAccountIds.slice(i, i + batchSize);
+            const { count } = await supabase
+              .from('accounts')
+              .select('*', { count: 'exact', head: true })
+              .eq('owner_id', ownerId)
+              .in('account_unique_id', batch);
+            
+            ownerExpiringCount += (count || 0);
+          }
+          
+          expiringAccountCount = ownerExpiringCount;
+        }
       }
     }
     
     return {
-      ...statusCounts,
+      Customer: customerCount || 0,
+      Prospect: prospectCount || 0,
+      Prior: priorCount || 0,
+      Lead: leadCount || 0,
+      total: totalCount || 0,
       expiring: expiringAccountCount
     };
   },
@@ -179,10 +220,9 @@ export const accountsService = {
   },
 
   /**
-   * Get account with policies - optimized single query
+   * Get account with policies
    */
   async getByIdWithPolicies(accountId) {
-    // Try to get account with policies in a single query using a join
     const { data: account, error: accountError } = await supabase
       .from('accounts')
       .select('*')
@@ -192,13 +232,12 @@ export const accountsService = {
     if (accountError) throw accountError;
     if (!account) return null;
 
-    // Get policies separately but without the carrier join for speed
+    // Get policies - use account_unique_id to match account_id in policies table
     const { data: policies, error: policiesError } = await supabase
       .from('policies')
-      .select('id, policy_unique_id, policy_lob, policy_status, policy_number, effective_date, expiration_date, annual_premium, carrier_id')
+      .select('*')
       .eq('account_id', accountId)
-      .order('expiration_date', { ascending: false })
-      .limit(20);
+      .order('expiration_date', { ascending: false });
     
     if (policiesError) {
       console.error('Error fetching policies:', policiesError);
