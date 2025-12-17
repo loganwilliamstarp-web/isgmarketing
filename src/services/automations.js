@@ -198,21 +198,21 @@ export const automationsService = {
    * Activate an automation
    */
   async activate(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'Active');
+    return this.updateStatus(ownerId, automationId, 'active');
   },
 
   /**
    * Pause an automation
    */
   async pause(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'Paused');
+    return this.updateStatus(ownerId, automationId, 'paused');
   },
 
   /**
    * Archive an automation
    */
   async archive(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'Archived');
+    return this.updateStatus(ownerId, automationId, 'archived');
   },
 
   /**

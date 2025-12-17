@@ -186,10 +186,7 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle(automation.id, isActive ? 'pause' : 'activate');
-            }}
+            onClick={() => onToggle(automation.id, isActive ? 'pause' : 'activate')}
             style={{
               width: '44px',
               height: '24px',
@@ -198,7 +195,8 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
               backgroundColor: isActive ? t.success : t.bgHover,
               cursor: 'pointer',
               position: 'relative',
-              transition: 'background-color 0.2s'
+              transition: 'background-color 0.2s',
+              flexShrink: 0
             }}
           >
             <div style={{
@@ -210,7 +208,8 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
               top: '3px',
               left: isActive ? '23px' : '3px',
               transition: 'left 0.2s',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              pointerEvents: 'none'
             }} />
           </button>
           <span style={{ 
