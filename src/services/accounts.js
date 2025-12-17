@@ -29,13 +29,20 @@ export const accountsService = {
     
     if (!accounts || accounts.length === 0) return [];
     
-    // Get policy counts for these accounts
+    // Get policies for these accounts (including expiration dates)
     const accountIds = accounts.map(a => a.account_unique_id).filter(Boolean);
+    
+    // Calculate date range for expiring policies (next 30 days)
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const futureStr = thirtyDaysFromNow.toISOString().split('T')[0];
     
     if (accountIds.length > 0) {
       const { data: policies, error: policyError } = await supabase
         .from('policies')
-        .select('account_id, policy_lob, policy_status')
+        .select('account_id, policy_lob, policy_status, expiration_date')
         .in('account_id', accountIds);
       
       if (!policyError && policies) {
@@ -45,9 +52,17 @@ export const accountsService = {
           if (!policyMap[p.account_id]) {
             policyMap[p.account_id] = [];
           }
+          
+          // Check if this policy is expiring in next 30 days
+          const isExpiring = p.expiration_date && 
+            p.expiration_date >= todayStr && 
+            p.expiration_date <= futureStr;
+          
           policyMap[p.account_id].push({
             policy_type: p.policy_lob,
-            status: p.policy_status?.toLowerCase() || 'unknown'
+            status: p.policy_status?.toLowerCase() || 'unknown',
+            expiration_date: p.expiration_date,
+            is_expiring: isExpiring
           });
         });
         
@@ -55,6 +70,8 @@ export const accountsService = {
         accounts.forEach(account => {
           account.policies = policyMap[account.account_unique_id] || [];
           account.policy_count = account.policies.length;
+          account.has_expiring_policy = account.policies.some(p => p.is_expiring);
+          account.expiring_policy_count = account.policies.filter(p => p.is_expiring).length;
         });
       }
     }
