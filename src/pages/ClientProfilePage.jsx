@@ -385,22 +385,28 @@ const ClientProfilePage = ({ t }) => {
                 {client.name}
               </h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{
-                  padding: '4px 10px',
-                  backgroundColor: client.account_status === 'Customer' ? `${t.success}20` 
-                    : client.account_status === 'Prospect' ? `${t.primary}20`
-                    : client.account_status === 'Prior' ? `${t.textMuted}20`
-                    : `${t.warning}20`,
-                  color: client.account_status === 'Customer' ? t.success 
-                    : client.account_status === 'Prospect' ? t.primary
-                    : client.account_status === 'Prior' ? t.textMuted
-                    : t.warning,
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: '500'
-                }}>
-                  {client.account_status || 'Unknown'}
-                </span>
+                {(() => {
+                  const status = (client.account_status || '').toLowerCase();
+                  const statusColors = {
+                    customer: { bg: `${t.success}20`, text: t.success, label: 'Customer' },
+                    prospect: { bg: `${t.primary}20`, text: t.primary, label: 'Prospect' },
+                    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior' },
+                    lead: { bg: `${t.warning}20`, text: t.warning, label: 'Lead' },
+                  };
+                  const c = statusColors[status] || statusColors.prospect;
+                  return (
+                    <span style={{
+                      padding: '4px 10px',
+                      backgroundColor: c.bg,
+                      color: c.text,
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}>
+                      {c.label}
+                    </span>
+                  );
+                })()}
                 {client.account_unique_id && (
                   <span style={{ fontSize: '12px', color: t.textMuted }}>
                     ID: {client.account_unique_id}
