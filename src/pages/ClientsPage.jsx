@@ -88,7 +88,7 @@ const ClientRow = ({ client, onClick, theme: t }) => (
       </div>
     </td>
     <td style={{ padding: '14px 16px' }}>
-      <TypeBadge type={client.account_type || 'Prospect'} theme={t} />
+      <TypeBadge type={client.account_status || 'Prospect'} theme={t} />
     </td>
     <td style={{ padding: '14px 16px' }}>
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -188,9 +188,9 @@ const ClientsPage = ({ t }) => {
     
     if (!accounts) return [];
     
-    // Apply type filter
+    // Apply type filter (based on account_status)
     if (typeFilter !== 'all') {
-      accounts = accounts.filter(a => a.account_type === typeFilter);
+      accounts = accounts.filter(a => a.account_status === typeFilter);
     }
     
     // Apply sorting
@@ -221,13 +221,13 @@ const ClientsPage = ({ t }) => {
     if (accountStats) {
       return accountStats;
     }
-    // Fallback to calculating from loaded accounts
+    // Fallback to calculating from loaded accounts (using account_status)
     if (!allAccounts) return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
     return {
-      Customer: allAccounts.filter(a => a.account_type === 'Customer').length,
-      Prospect: allAccounts.filter(a => a.account_type === 'Prospect').length,
-      Prior: allAccounts.filter(a => a.account_type === 'Prior').length,
-      Lead: allAccounts.filter(a => a.account_type === 'Lead').length,
+      Customer: allAccounts.filter(a => a.account_status === 'Customer').length,
+      Prospect: allAccounts.filter(a => a.account_status === 'Prospect').length,
+      Prior: allAccounts.filter(a => a.account_status === 'Prior').length,
+      Lead: allAccounts.filter(a => a.account_status === 'Lead').length,
       total: allAccounts.length,
       expiring: 0
     };
