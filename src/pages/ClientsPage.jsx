@@ -153,14 +153,32 @@ const ClientRow = ({ client, onClick, theme: t }) => (
 );
 
 // Stats card
-const StatsCard = ({ label, value, icon, color, theme: t }) => (
-  <div style={{
-    padding: '16px',
-    backgroundColor: t.bgCard,
-    borderRadius: '10px',
-    border: `1px solid ${t.border}`,
-    textAlign: 'center'
-  }}>
+const StatsCard = ({ label, value, icon, color, theme: t, onClick, active }) => (
+  <div 
+    onClick={onClick}
+    style={{
+      padding: '16px',
+      backgroundColor: active ? `${color}15` : t.bgCard,
+      borderRadius: '10px',
+      border: `2px solid ${active ? color : t.border}`,
+      textAlign: 'center',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.2s ease',
+      transform: active ? 'scale(1.02)' : 'scale(1)'
+    }}
+    onMouseOver={(e) => {
+      if (onClick) {
+        e.currentTarget.style.borderColor = color;
+        e.currentTarget.style.transform = 'scale(1.02)';
+      }
+    }}
+    onMouseOut={(e) => {
+      if (onClick && !active) {
+        e.currentTarget.style.borderColor = t.border;
+        e.currentTarget.style.transform = 'scale(1)';
+      }
+    }}
+  >
     <div style={{ fontSize: '24px', marginBottom: '4px' }}>{icon}</div>
     <div style={{ fontSize: '24px', fontWeight: '700', color: color || t.text }}>{value}</div>
     <div style={{ fontSize: '12px', color: t.textSecondary }}>{label}</div>
@@ -189,10 +207,15 @@ const ClientsPage = ({ t }) => {
     
     if (!accounts) return [];
     
-    // Apply type filter (based on account_status, case-insensitive)
+    // Apply type filter (based on account_status or expiring, case-insensitive)
     if (typeFilter !== 'all') {
-      const filterLower = typeFilter.toLowerCase();
-      accounts = accounts.filter(a => (a.account_status || '').toLowerCase() === filterLower);
+      if (typeFilter === 'expiring') {
+        // Filter to accounts with expiring policies
+        accounts = accounts.filter(a => a.has_expiring_policy);
+      } else {
+        const filterLower = typeFilter.toLowerCase();
+        accounts = accounts.filter(a => (a.account_status || '').toLowerCase() === filterLower);
+      }
     }
     
     // Apply sorting
@@ -221,7 +244,7 @@ const ClientsPage = ({ t }) => {
   // Calculate stats from loaded accounts (most reliable)
   const stats = useMemo(() => {
     if (!allAccounts || allAccounts.length === 0) {
-      return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: accountStats?.expiring || 0 };
+      return { Customer: 0, Prospect: 0, Prior: 0, Lead: 0, total: 0, expiring: 0 };
     }
     
     const counts = {
@@ -230,7 +253,7 @@ const ClientsPage = ({ t }) => {
       Prior: 0,
       Lead: 0,
       total: allAccounts.length,
-      expiring: accountStats?.expiring || 0
+      expiring: 0
     };
     
     allAccounts.forEach(a => {
@@ -239,10 +262,13 @@ const ClientsPage = ({ t }) => {
       else if (status === 'prospect') counts.Prospect++;
       else if (status === 'prior') counts.Prior++;
       else if (status === 'lead') counts.Lead++;
+      
+      // Count accounts with expiring policies
+      if (a.has_expiring_policy) counts.expiring++;
     });
     
     return counts;
-  }, [allAccounts, accountStats]);
+  }, [allAccounts]);
 
   // Navigation
   const handleViewClient = (accountId) => {
@@ -325,35 +351,45 @@ const ClientsPage = ({ t }) => {
           value={stats.total || 0} 
           icon="📊" 
           color={t.text}
-          theme={t} 
+          theme={t}
+          onClick={() => setTypeFilter('all')}
+          active={typeFilter === 'all'}
         />
         <StatsCard 
           label="Customers" 
           value={stats.Customer || 0} 
           icon="👥" 
           color={t.success}
-          theme={t} 
+          theme={t}
+          onClick={() => setTypeFilter(typeFilter === 'Customer' ? 'all' : 'Customer')}
+          active={typeFilter === 'Customer'}
         />
         <StatsCard 
           label="Prospects" 
           value={stats.Prospect || 0} 
           icon="🎯" 
           color={t.primary}
-          theme={t} 
+          theme={t}
+          onClick={() => setTypeFilter(typeFilter === 'Prospect' ? 'all' : 'Prospect')}
+          active={typeFilter === 'Prospect'}
         />
         <StatsCard 
           label="Prior Clients" 
           value={stats.Prior || 0} 
           icon="📁" 
           color={t.textMuted}
-          theme={t} 
+          theme={t}
+          onClick={() => setTypeFilter(typeFilter === 'Prior' ? 'all' : 'Prior')}
+          active={typeFilter === 'Prior'}
         />
         <StatsCard 
           label="Expiring in 30d" 
           value={stats.expiring || 0} 
           icon="⚠️" 
           color={t.warning}
-          theme={t} 
+          theme={t}
+          onClick={() => setTypeFilter(typeFilter === 'expiring' ? 'all' : 'expiring')}
+          active={typeFilter === 'expiring'}
         />
       </div>
 
@@ -424,6 +460,7 @@ const ClientsPage = ({ t }) => {
           <option value="Prospect">Prospects</option>
           <option value="Prior">Prior</option>
           <option value="Lead">Leads</option>
+          <option value="expiring">Expiring Policies</option>
         </select>
 
         {/* Sort */}
@@ -452,7 +489,8 @@ const ClientsPage = ({ t }) => {
 
         {/* Results count */}
         <span style={{ fontSize: '13px', color: t.textMuted, marginLeft: 'auto' }}>
-          {displayAccounts.length} client{displayAccounts.length !== 1 ? 's' : ''}
+          {displayAccounts.length} account{displayAccounts.length !== 1 ? 's' : ''}
+          {typeFilter !== 'all' && ` (filtered)`}
         </span>
       </div>
 
