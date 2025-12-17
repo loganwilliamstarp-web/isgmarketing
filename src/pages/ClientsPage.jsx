@@ -487,7 +487,7 @@ const ClientsPage = ({ t }) => {
                 <ClientRow
                   key={client.id}
                   client={client}
-                  onClick={() => handleViewClient(client.id)}
+                  onClick={() => handleViewClient(client.account_unique_id)}
                   theme={t}
                 />
               ))}

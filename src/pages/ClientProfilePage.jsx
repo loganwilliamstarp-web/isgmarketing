@@ -312,7 +312,7 @@ const ClientProfilePage = ({ t }) => {
             fontSize: '14px'
           }}
         >
-          Back to Clients
+          Back to Accounts
         </button>
       </div>
     );
@@ -330,7 +330,7 @@ const ClientProfilePage = ({ t }) => {
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
         <button
-          onClick={() => navigate(`/${userId}/clients`)}
+          onClick={() => navigate(`/${userId}/accounts`)}
           style={{
             background: 'none',
             border: 'none',
@@ -344,7 +344,7 @@ const ClientProfilePage = ({ t }) => {
             gap: '6px'
           }}
         >
-          ← Back to Clients
+          ← Back to Accounts
         </button>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
