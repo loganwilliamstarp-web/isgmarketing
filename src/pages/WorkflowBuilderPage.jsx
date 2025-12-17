@@ -147,6 +147,21 @@ const WorkflowBuilderPage = ({ t }) => {
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button
+            onClick={handleBack}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: t?.textSecondary || '#a1a1aa',
+              cursor: 'pointer',
+              fontSize: '20px',
+              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+          >
+            ←
+          </button>
           <h1 style={{ 
             fontSize: '16px', 
             fontWeight: '600', 
