@@ -5,7 +5,8 @@ import {
   useAccountWithEmailHistory,
   useAccountEmailLogs,
   useAccountActivity,
-  useAccountEnrollments
+  useAccountEnrollments,
+  useQuickStats
 } from '../hooks';
 
 // Loading skeleton
@@ -279,6 +280,23 @@ const ClientProfilePage = ({ t }) => {
   const { data: emailLogs, isLoading: logsLoading } = useAccountEmailLogs(accountId);
   const { data: activities, isLoading: activitiesLoading } = useAccountActivity(accountId);
   const { data: enrollments, isLoading: enrollmentsLoading } = useAccountEnrollments(accountId);
+  const { data: orgStats } = useQuickStats();
+
+  // Calculate this account's stats
+  const accountStats = {
+    emailsSent: emailLogs?.length || 0,
+    opened: emailLogs?.filter(l => l.opened_at).length || 0,
+    clicked: emailLogs?.filter(l => l.clicked_at).length || 0,
+    openRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.opened_at).length / emailLogs.length) * 100) : 0,
+    clickRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.clicked_at).length / emailLogs.length) * 100) : 0,
+    activeEnrollments: enrollments?.filter(e => e.status === 'active').length || 0
+  };
+
+  // Org averages for comparison
+  const orgAverages = {
+    openRate: orgStats?.openRate || 25,
+    clickRate: orgStats?.clickRate || 5
+  };
 
   if (isLoading) {
     return (
@@ -432,13 +450,14 @@ const ClientProfilePage = ({ t }) => {
         backgroundColor: t.bgCard,
         borderRadius: '12px',
         border: `1px solid ${t.border}`,
-        marginBottom: '24px'
+        marginBottom: '24px',
+        flexWrap: 'wrap'
       }}>
-        {client.email && (
+        {(client.person_email || client.email) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '16px' }}>📧</span>
-            <a href={`mailto:${client.email}`} style={{ color: t.primary, textDecoration: 'none', fontSize: '14px' }}>
-              {client.email}
+            <a href={`mailto:${client.person_email || client.email}`} style={{ color: t.primary, textDecoration: 'none', fontSize: '14px' }}>
+              {client.person_email || client.email}
             </a>
           </div>
         )}
@@ -450,11 +469,23 @@ const ClientProfilePage = ({ t }) => {
             </a>
           </div>
         )}
-        {(client.city || client.state) && (
+        {(client.billing_street || client.billing_city || client.billing_state) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '16px' }}>📍</span>
             <span style={{ color: t.textSecondary, fontSize: '14px' }}>
-              {[client.city, client.state].filter(Boolean).join(', ')}
+              {[
+                client.billing_street,
+                [client.billing_city, client.billing_state].filter(Boolean).join(', '),
+                client.billing_postal_code
+              ].filter(Boolean).join(' • ')}
+            </span>
+          </div>
+        )}
+        {client.primary_contact_first_name && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '16px' }}>👤</span>
+            <span style={{ color: t.textSecondary, fontSize: '14px' }}>
+              {client.primary_contact_first_name} {client.primary_contact_last_name}
             </span>
           </div>
         )}
@@ -516,7 +547,7 @@ const ClientProfilePage = ({ t }) => {
             )}
           </div>
 
-          {/* Email Stats & Recent Activity */}
+          {/* Email Stats & Analytics */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Email Stats */}
             <div style={{
@@ -528,22 +559,22 @@ const ClientProfilePage = ({ t }) => {
               <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
                 Email Engagement
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>
-                    {emailLogs?.length || 0}
+                    {accountStats.emailsSent}
                   </div>
                   <div style={{ fontSize: '11px', color: t.textMuted }}>Sent</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>
-                    {emailLogs?.filter(l => l.opened_at).length || 0}
+                    {accountStats.opened}
                   </div>
                   <div style={{ fontSize: '11px', color: t.textMuted }}>Opened</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: t.warning }}>
-                    {emailLogs?.filter(l => l.clicked_at).length || 0}
+                    {accountStats.clicked}
                   </div>
                   <div style={{ fontSize: '11px', color: t.textMuted }}>Clicked</div>
                 </div>
@@ -552,6 +583,127 @@ const ClientProfilePage = ({ t }) => {
                     {emailLogs?.filter(l => l.bounced_at).length || 0}
                   </div>
                   <div style={{ fontSize: '11px', color: t.textMuted }}>Bounced</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comparison Analytics */}
+            <div style={{
+              padding: '20px',
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`
+            }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
+                Compared to Average
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Open Rate Comparison */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '13px', color: t.textSecondary }}>Open Rate</span>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: accountStats.openRate >= orgAverages.openRate ? t.success : t.danger }}>
+                      {accountStats.openRate}%
+                      {accountStats.openRate >= orgAverages.openRate ? ' ↑' : ' ↓'}
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative', height: '8px', backgroundColor: t.bgHover, borderRadius: '4px', overflow: 'hidden' }}>
+                    {/* Average marker */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${Math.min(orgAverages.openRate, 100)}%`,
+                      top: 0,
+                      width: '2px',
+                      height: '100%',
+                      backgroundColor: t.textMuted,
+                      zIndex: 2
+                    }} />
+                    {/* Account's rate */}
+                    <div style={{
+                      width: `${Math.min(accountStats.openRate, 100)}%`,
+                      height: '100%',
+                      backgroundColor: accountStats.openRate >= orgAverages.openRate ? t.success : t.warning,
+                      borderRadius: '4px',
+                      transition: 'width 0.3s'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>0%</span>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>Avg: {orgAverages.openRate}%</span>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>100%</span>
+                  </div>
+                </div>
+
+                {/* Click Rate Comparison */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '13px', color: t.textSecondary }}>Click Rate</span>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: accountStats.clickRate >= orgAverages.clickRate ? t.success : t.danger }}>
+                      {accountStats.clickRate}%
+                      {accountStats.clickRate >= orgAverages.clickRate ? ' ↑' : ' ↓'}
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative', height: '8px', backgroundColor: t.bgHover, borderRadius: '4px', overflow: 'hidden' }}>
+                    {/* Average marker */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${Math.min(orgAverages.clickRate * 5, 100)}%`, // Scale for visibility
+                      top: 0,
+                      width: '2px',
+                      height: '100%',
+                      backgroundColor: t.textMuted,
+                      zIndex: 2
+                    }} />
+                    {/* Account's rate */}
+                    <div style={{
+                      width: `${Math.min(accountStats.clickRate * 5, 100)}%`, // Scale for visibility
+                      height: '100%',
+                      backgroundColor: accountStats.clickRate >= orgAverages.clickRate ? t.success : t.warning,
+                      borderRadius: '4px',
+                      transition: 'width 0.3s'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>0%</span>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>Avg: {orgAverages.clickRate}%</span>
+                    <span style={{ fontSize: '10px', color: t.textMuted }}>20%+</span>
+                  </div>
+                </div>
+
+                {/* Engagement Score */}
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: t.bg,
+                  borderRadius: '10px',
+                  textAlign: 'center',
+                  marginTop: '8px'
+                }}>
+                  <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px' }}>ENGAGEMENT SCORE</div>
+                  <div style={{ 
+                    fontSize: '32px', 
+                    fontWeight: '700', 
+                    color: accountStats.openRate >= orgAverages.openRate && accountStats.clickRate >= orgAverages.clickRate 
+                      ? t.success 
+                      : accountStats.openRate >= orgAverages.openRate || accountStats.clickRate >= orgAverages.clickRate
+                        ? t.warning
+                        : t.danger
+                  }}>
+                    {accountStats.emailsSent === 0 ? '—' : 
+                      accountStats.openRate >= orgAverages.openRate && accountStats.clickRate >= orgAverages.clickRate 
+                        ? 'High' 
+                        : accountStats.openRate >= orgAverages.openRate || accountStats.clickRate >= orgAverages.clickRate
+                          ? 'Medium'
+                          : 'Low'
+                    }
+                  </div>
+                  <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '4px' }}>
+                    {accountStats.emailsSent === 0 
+                      ? 'No emails sent yet'
+                      : accountStats.openRate >= orgAverages.openRate 
+                        ? 'Above average engagement' 
+                        : 'Below average engagement'
+                    }
+                  </div>
                 </div>
               </div>
             </div>
