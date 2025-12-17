@@ -155,26 +155,48 @@ const WorkflowBuilderPage = ({ t }) => {
           }}>
             {isNew ? 'Create Automation' : `Edit: ${automation?.name || 'Automation'}`}
           </h1>
-          {automation?.status && (
-            <span style={{
-              padding: '4px 10px',
-              backgroundColor: automation.status === 'active' 
-                ? `${t?.success || '#22c55e'}20` 
-                : `${t?.textMuted || '#71717a'}20`,
-              color: automation.status === 'active' 
-                ? (t?.success || '#22c55e')
-                : (t?.textMuted || '#71717a'),
-              borderRadius: '20px',
-              fontSize: '11px',
-              fontWeight: '500',
-              textTransform: 'capitalize'
-            }}>
-              {automation.status}
-            </span>
-          )}
         </div>
         
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Status Toggle */}
+          {!isNew && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', color: t?.textSecondary || '#a1a1aa' }}>
+                {automationData.status === 'active' ? 'Active' : 'Inactive'}
+              </span>
+              <button
+                onClick={() => {
+                  const newStatus = automationData.status === 'active' ? 'inactive' : 'active';
+                  setAutomationData(prev => ({ ...prev, status: newStatus }));
+                }}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  backgroundColor: automationData.status === 'active' 
+                    ? (t?.success || '#22c55e') 
+                    : (t?.bgHover || '#27272a'),
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                <div style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  backgroundColor: '#fff',
+                  position: 'absolute',
+                  top: '3px',
+                  left: automationData.status === 'active' ? '23px' : '3px',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                }} />
+              </button>
+            </div>
+          )}
+          
           <button
             onClick={() => handleSave(automationData)}
             disabled={createAutomation.isPending || updateAutomation.isPending}
