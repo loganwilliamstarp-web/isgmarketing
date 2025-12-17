@@ -100,7 +100,7 @@ const PolicyCard = ({ policy, theme: t }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Policy Number</div>
-          <div style={{ color: t.text }}>{policy.policy_number || policy.policy_number__c || policy.policy_unique_id || '—'}</div>
+          <div style={{ color: t.text }}>{policy.policy_number || '—'}</div>
         </div>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Carrier</div>
