@@ -1329,50 +1329,48 @@ const FilterBuilder = ({ onClose, t = defaultTheme }) => {
 // ============================================
 // WORKFLOW BUILDER COMPONENT
 // ============================================
+
+const defaultNodes = [
+  {
+    id: 'entry-criteria',
+    type: 'entry_criteria',
+    title: 'Entry Criteria',
+    subtitle: 'Define who enters this automation',
+    config: { filterConfig: {} }
+  },
+  {
+    id: 'trigger',
+    type: 'trigger',
+    title: 'Trigger',
+    subtitle: 'Daily at 09:00 (Central)',
+    config: { time: '09:00', timezone: 'America/Chicago', frequency: 'Daily' }
+  },
+  {
+    id: 'node-1',
+    type: 'send_email',
+    title: 'Send Email',
+    subtitle: 'Select template...',
+    config: { template: '' }
+  }
+];
+
 const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   // Use provided theme or default
   const t = themeProp || defaultTheme;
   
-  const [nodes, setNodes] = useState(automation?.nodes || [
-    {
-      id: 'trigger',
-      type: 'trigger',
-      title: 'Trigger enrollment',
-      subtitle: 'daily at 09:00 (Eastern)',
-      config: { time: '09:00', timezone: 'Eastern', frequency: 'Daily' }
-    },
-    {
-      id: 'node-1',
-      type: 'send_email',
-      title: 'Send Email',
-      subtitle: 'Cross-Sell Introduction',
-      config: { template: 'Cross-Sell Introduction' }
-    },
-    {
-      id: 'node-2',
-      type: 'delay',
-      title: 'Wait',
-      subtitle: '3 days',
-      config: { duration: 3, unit: 'days' }
-    },
-    {
-      id: 'node-3',
-      type: 'condition',
-      title: 'Email Engagement',
-      subtitle: 'Check if opened',
-      config: { type: 'email_opened' },
-      branches: {
-        yes: [{ id: 'node-4', type: 'send_email', title: 'Send Email', subtitle: 'Follow-up', config: {} }],
-        no: [{ id: 'node-5', type: 'send_email', title: 'Send Email', subtitle: 'Re-engagement', config: {} }]
-      }
-    }
-  ]);
+  // Use automation nodes if they exist and have items, otherwise use defaults
+  const initialNodes = (automation?.nodes && automation.nodes.length > 0) 
+    ? automation.nodes 
+    : defaultNodes;
+  
+  const [nodes, setNodes] = useState(initialNodes);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   const nodeTypes = {
+    entry_criteria: { icon: '🎯', color: '#8b5cf6', label: 'Entry Criteria' },
     trigger: { icon: '⚡', color: t.primary, label: 'Trigger' },
     send_email: { icon: '📧', color: t.success, label: 'Send Email' },
     delay: { icon: '⏱', color: t.warning, label: 'Delay' },
@@ -1427,7 +1425,8 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   };
 
   const deleteNode = (nodeId) => {
-    setNodes(prev => prev.filter(n => n.id !== nodeId && n.id !== 'trigger'));
+    // Don't allow deleting entry_criteria or trigger nodes
+    setNodes(prev => prev.filter(n => n.id !== nodeId && n.id !== 'trigger' && n.id !== 'entry-criteria'));
     if (selectedNode === nodeId) setSelectedNode(null);
   };
 
@@ -1435,77 +1434,84 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const WorkflowNode = ({ node }) => {
     const typeConfig = nodeTypes[node.type] || nodeTypes.send_email;
     const isSelected = selectedNode === node.id;
+    const isEntryCriteria = node.type === 'entry_criteria';
     const isTrigger = node.type === 'trigger';
+    const isProtected = isEntryCriteria || isTrigger; // Can't delete these
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div
-          onClick={() => setSelectedNode(node.id)}
+          onClick={() => {
+            setSelectedNode(node.id);
+            if (isEntryCriteria) {
+              setShowFilterPanel(true);
+            }
+          }}
           style={{
-            width: '260px',
-            backgroundColor: isSelected ? t.bgCard : '#18181b',
-            border: isSelected ? `2px solid ${typeConfig.color}` : '1px solid #27272a',
+            width: '320px',
+            backgroundColor: t.bgCard,
+            border: isSelected ? `2px solid ${typeConfig.color}` : `1px solid ${t.border}`,
             borderRadius: '12px',
-            padding: '12px 14px',
+            padding: '16px 18px',
             cursor: 'pointer',
             position: 'relative'
           }}
         >
-          {!isTrigger && (
+          {!isProtected && (
             <button
               onClick={(e) => { e.stopPropagation(); deleteNode(node.id); }}
               style={{
                 position: 'absolute',
-                top: '6px',
-                right: '6px',
+                top: '8px',
+                right: '8px',
                 background: 'none',
                 border: 'none',
                 color: t.textMuted,
                 cursor: 'pointer',
-                fontSize: '14px'
+                fontSize: '16px'
               }}
             >×</button>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
               backgroundColor: `${typeConfig.color}20`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '16px'
+              fontSize: '20px'
             }}>
               {typeConfig.icon}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '12px', fontWeight: '600', color: t.text }}>{node.title}</div>
-              <div style={{ fontSize: '11px', color: t.textMuted }}>{node.subtitle}</div>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>{node.title}</div>
+              <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '2px' }}>{node.subtitle}</div>
             </div>
           </div>
 
-          {isTrigger && (
+          {isEntryCriteria && (
             <button
               onClick={(e) => { e.stopPropagation(); setShowFilterPanel(true); }}
               style={{
-                marginTop: '10px',
+                marginTop: '12px',
                 width: '100%',
-                padding: '8px',
+                padding: '10px',
                 backgroundColor: t.bgHover,
                 border: `1px solid ${t.borderLight}`,
-                borderRadius: '6px',
+                borderRadius: '8px',
                 color: t.textSecondary,
                 cursor: 'pointer',
-                fontSize: '11px',
+                fontSize: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '8px'
               }}
             >
-              <span>🎯</span> Edit Audience Criteria
+              <span>🎯</span> Edit Entry Criteria
             </button>
           )}
         </div>
@@ -1513,24 +1519,24 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         {/* Connector */}
         {!node.branches && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
+            <div style={{ width: '2px', height: '20px', backgroundColor: t.borderLight }} />
             <button
               onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: null })}
               style={{
-                width: '22px',
-                height: '22px',
+                width: '28px',
+                height: '28px',
                 borderRadius: '50%',
                 backgroundColor: t.bgHover,
                 border: `1px solid ${t.borderLight}`,
                 color: t.textMuted,
                 cursor: 'pointer',
-                fontSize: '12px',
+                fontSize: '14px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
             >+</button>
-            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
+            <div style={{ width: '2px', height: '20px', backgroundColor: t.borderLight }} />
             
             {showAddMenu?.afterNodeId === node.id && !showAddMenu?.branch && (
               <AddNodeMenu onSelect={(type) => addNode(node.id, type)} onClose={() => setShowAddMenu(null)} />
@@ -1541,28 +1547,28 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         {/* Branches */}
         {node.branches && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '2px', height: '16px', backgroundColor: t.borderLight }} />
+            <div style={{ width: '2px', height: '20px', backgroundColor: t.borderLight }} />
             <div style={{ display: 'flex' }}>
               {/* Yes */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '280px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '340px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{ width: '50px', height: '2px', backgroundColor: t.success }} />
-                  <span style={{ padding: '3px 8px', backgroundColor: '#22c55e20', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: t.success }}>YES</span>
+                  <div style={{ width: '60px', height: '2px', backgroundColor: t.success }} />
+                  <span style={{ padding: '4px 10px', backgroundColor: '#22c55e20', borderRadius: '12px', fontSize: '10px', fontWeight: '600', color: t.success }}>YES</span>
                 </div>
-                <div style={{ width: '2px', height: '16px', backgroundColor: t.success }} />
+                <div style={{ width: '2px', height: '20px', backgroundColor: t.success }} />
                 {node.branches.yes.map(n => <WorkflowNode key={n.id} node={n} />)}
                 <button
                   onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: 'yes' })}
                   style={{
-                    width: '22px',
-                    height: '22px',
+                    width: '28px',
+                    height: '28px',
                     borderRadius: '50%',
                     backgroundColor: t.bgHover,
                     border: '1px dashed #22c55e',
                     color: t.success,
                     cursor: 'pointer',
-                    fontSize: '12px',
-                    marginTop: '8px'
+                    fontSize: '14px',
+                    marginTop: '10px'
                   }}
                 >+</button>
                 {showAddMenu?.afterNodeId === node.id && showAddMenu?.branch === 'yes' && (
@@ -1570,25 +1576,25 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                 )}
               </div>
               {/* No */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '280px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '340px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span style={{ padding: '3px 8px', backgroundColor: '#ef444420', borderRadius: '10px', fontSize: '9px', fontWeight: '600', color: t.danger }}>NO</span>
-                  <div style={{ width: '50px', height: '2px', backgroundColor: t.danger }} />
+                  <span style={{ padding: '4px 10px', backgroundColor: '#ef444420', borderRadius: '12px', fontSize: '10px', fontWeight: '600', color: t.danger }}>NO</span>
+                  <div style={{ width: '60px', height: '2px', backgroundColor: t.danger }} />
                 </div>
-                <div style={{ width: '2px', height: '16px', backgroundColor: t.danger }} />
+                <div style={{ width: '2px', height: '20px', backgroundColor: t.danger }} />
                 {node.branches.no.map(n => <WorkflowNode key={n.id} node={n} />)}
                 <button
                   onClick={() => setShowAddMenu({ afterNodeId: node.id, branch: 'no' })}
                   style={{
-                    width: '22px',
-                    height: '22px',
+                    width: '28px',
+                    height: '28px',
                     borderRadius: '50%',
                     backgroundColor: t.bgHover,
                     border: '1px dashed #ef4444',
                     color: t.danger,
                     cursor: 'pointer',
-                    fontSize: '12px',
-                    marginTop: '8px'
+                    fontSize: '14px',
+                    marginTop: '10px'
                   }}
                 >+</button>
                 {showAddMenu?.afterNodeId === node.id && showAddMenu?.branch === 'no' && (
@@ -1610,13 +1616,13 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         top: '100%',
         left: '50%',
         transform: 'translateX(-50%)',
-        marginTop: '8px',
+        marginTop: '10px',
         backgroundColor: t.bgCard,
         border: `1px solid ${t.borderLight}`,
-        borderRadius: '10px',
-        padding: '6px',
+        borderRadius: '12px',
+        padding: '8px',
         zIndex: 100,
-        width: '200px',
+        width: '240px',
         boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
       }}>
         {availableNodes.map(node => (
@@ -1625,22 +1631,22 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
             onClick={() => onSelect(node.type)}
             style={{
               width: '100%',
-              padding: '8px 10px',
+              padding: '10px 12px',
               backgroundColor: 'transparent',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: '8px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '10px',
               color: t.text,
               textAlign: 'left'
             }}
           >
-            <span style={{ fontSize: '14px' }}>{node.icon}</span>
+            <span style={{ fontSize: '18px' }}>{node.icon}</span>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: '500' }}>{node.label}</div>
-              <div style={{ fontSize: '9px', color: t.textMuted }}>{node.desc}</div>
+              <div style={{ fontSize: '13px', fontWeight: '500' }}>{node.label}</div>
+              <div style={{ fontSize: '11px', color: t.textMuted }}>{node.desc}</div>
             </div>
           </button>
         ))}
@@ -1655,84 +1661,59 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     <div style={{
       fontFamily: "'IBM Plex Sans', -apple-system, sans-serif",
       backgroundColor: t.bg,
-      minHeight: '100vh',
+      height: '100%',
       color: t.text,
-      display: 'flex',
-      flexDirection: 'column'
+      display: 'flex'
     }}>
-      {/* Header */}
-      <div style={{
-        padding: '10px 20px',
-        borderBottom: `1px solid ${t.border}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: t.bgCard
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '16px' }}>←</button>
-          <input
-            type="text"
-            defaultValue="Cross-Sell Automation"
-            style={{ background: 'none', border: 'none', color: t.text, fontSize: '15px', fontWeight: '600', width: '220px' }}
-          />
-          <span style={{ padding: '3px 8px', backgroundColor: t.bgHover, borderRadius: '4px', fontSize: '10px', color: t.textMuted }}>Draft</span>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={{ padding: '7px 14px', backgroundColor: t.bgHover, border: `1px solid ${t.borderLight}`, borderRadius: '6px', color: t.textSecondary, cursor: 'pointer', fontSize: '12px' }}>Save</button>
-          <button style={{ padding: '7px 14px', backgroundColor: t.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Publish</button>
-        </div>
-      </div>
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left - Nodes */}
-        <div style={{ width: '200px', borderRight: `1px solid ${t.border}`, padding: '14px', backgroundColor: t.bgCard, overflowY: 'auto' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, marginBottom: '10px', textTransform: 'uppercase' }}>Add Nodes</div>
+        <div style={{ width: '220px', borderRight: `1px solid ${t.border}`, padding: '16px', backgroundColor: t.bgCard, overflowY: 'auto' }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: t.textMuted, marginBottom: '12px', textTransform: 'uppercase' }}>Add Nodes</div>
           {availableNodes.map(node => (
             <div key={node.type} style={{
-              padding: '10px',
+              padding: '12px',
               backgroundColor: t.bgHover,
-              borderRadius: '6px',
-              marginBottom: '6px',
+              borderRadius: '8px',
+              marginBottom: '8px',
               cursor: 'grab',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '10px'
             }}>
-              <span style={{ fontSize: '14px' }}>{node.icon}</span>
+              <span style={{ fontSize: '18px' }}>{node.icon}</span>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '500', color: t.text }}>{node.label}</div>
-                <div style={{ fontSize: '9px', color: t.textMuted }}>{node.desc}</div>
+                <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{node.label}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted }}>{node.desc}</div>
               </div>
             </div>
           ))}
         </div>
 
         {/* Center - Canvas */}
-        <div style={{ flex: 1, padding: '30px', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ flex: 1, padding: '40px', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {nodes.map(node => <WorkflowNode key={node.id} node={node} />)}
-            <div style={{ marginTop: '10px', padding: '6px 14px', backgroundColor: t.bgHover, borderRadius: '16px', fontSize: '10px', color: t.textMuted }}>
+            <div style={{ marginTop: '16px', padding: '8px 18px', backgroundColor: t.bgHover, borderRadius: '20px', fontSize: '12px', color: t.textMuted }}>
               End of automation
             </div>
           </div>
         </div>
 
         {/* Right - Config */}
-        <div style={{ width: '260px', borderLeft: '1px solid #27272a', backgroundColor: t.bgCard, overflowY: 'auto' }}>
-          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${t.border}`, fontSize: '10px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase' }}>
+        <div style={{ width: '300px', borderLeft: `1px solid ${t.border}`, backgroundColor: t.bgCard, overflowY: 'auto' }}>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${t.border}`, fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase' }}>
             Configuration
           </div>
-          <div style={{ padding: '14px' }}>
+          <div style={{ padding: '18px' }}>
             {selectedNodeData ? (
-              <div style={{ fontSize: '12px', color: t.textSecondary }}>
-                <div style={{ fontWeight: '600', color: t.text, marginBottom: '8px' }}>{selectedNodeData.title}</div>
+              <div style={{ fontSize: '13px', color: t.textSecondary }}>
+                <div style={{ fontWeight: '600', color: t.text, marginBottom: '10px', fontSize: '15px' }}>{selectedNodeData.title}</div>
                 <p>Configure this {nodeTypes[selectedNodeData.type]?.label || 'node'} step.</p>
               </div>
             ) : (
-              <div style={{ textAlign: 'center', color: t.textMuted, padding: '20px 0' }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>👆</div>
-                <div style={{ fontSize: '11px' }}>Select a node to configure</div>
+              <div style={{ textAlign: 'center', color: t.textMuted, padding: '30px 0' }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px' }}>👆</div>
+                <div style={{ fontSize: '13px' }}>Select a node to configure</div>
               </div>
             )}
           </div>
