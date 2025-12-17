@@ -22,7 +22,26 @@ const WorkflowBuilderPage = ({ t }) => {
   const { data: automation, isLoading, error } = useAutomation(isNew ? null : automationId);
   
   // Mutations
-  const { createAutomation, updateAutomation } = useAutomationMutations();
+  const { createAutomation, updateAutomation, activateAutomation, pauseAutomation } = useAutomationMutations();
+  
+  // Handle status toggle - saves immediately to database
+  const handleStatusToggle = async () => {
+    if (isNew) return;
+    
+    const isCurrentlyActive = automationData.status === 'active';
+    const newStatus = isCurrentlyActive ? 'paused' : 'active';
+    
+    try {
+      if (isCurrentlyActive) {
+        await pauseAutomation.mutateAsync(automationId);
+      } else {
+        await activateAutomation.mutateAsync(automationId);
+      }
+      setAutomationData(prev => ({ ...prev, status: newStatus }));
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    }
+  };
   
   // Local state for the builder
   const [automationData, setAutomationData] = useState({
@@ -180,10 +199,8 @@ const WorkflowBuilderPage = ({ t }) => {
                 {automationData.status === 'active' ? 'Active' : 'Inactive'}
               </span>
               <button
-                onClick={() => {
-                  const newStatus = automationData.status === 'active' ? 'inactive' : 'active';
-                  setAutomationData(prev => ({ ...prev, status: newStatus }));
-                }}
+                onClick={handleStatusToggle}
+                disabled={activateAutomation.isPending || pauseAutomation.isPending}
                 style={{
                   width: '44px',
                   height: '24px',
@@ -194,7 +211,8 @@ const WorkflowBuilderPage = ({ t }) => {
                     : (t?.bgHover || '#27272a'),
                   cursor: 'pointer',
                   position: 'relative',
-                  transition: 'background-color 0.2s'
+                  transition: 'background-color 0.2s',
+                  opacity: (activateAutomation.isPending || pauseAutomation.isPending) ? 0.6 : 1
                 }}
               >
                 <div style={{
@@ -206,7 +224,8 @@ const WorkflowBuilderPage = ({ t }) => {
                   top: '3px',
                   left: automationData.status === 'active' ? '23px' : '3px',
                   transition: 'left 0.2s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  pointerEvents: 'none'
                 }} />
               </button>
             </div>
