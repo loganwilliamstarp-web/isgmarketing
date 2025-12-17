@@ -153,6 +153,7 @@ const TemplateCard = ({ template, onUse, theme: t }) => (
 // Automation row component
 const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
   const stats = automation.stats || {};
+  const isActive = automation.status === 'active';
   
   return (
     <tr style={{ borderTop: `1px solid ${t.border}` }}>
@@ -183,7 +184,43 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
         </div>
       </td>
       <td style={{ padding: '14px 16px' }}>
-        <StatusBadge status={automation.status} theme={t} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle(automation.id, isActive ? 'pause' : 'activate');
+            }}
+            style={{
+              width: '44px',
+              height: '24px',
+              borderRadius: '12px',
+              border: 'none',
+              backgroundColor: isActive ? t.success : t.bgHover,
+              cursor: 'pointer',
+              position: 'relative',
+              transition: 'background-color 0.2s'
+            }}
+          >
+            <div style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '50%',
+              backgroundColor: '#fff',
+              position: 'absolute',
+              top: '3px',
+              left: isActive ? '23px' : '3px',
+              transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+            }} />
+          </button>
+          <span style={{ 
+            fontSize: '12px', 
+            color: isActive ? t.success : t.textMuted,
+            fontWeight: '500'
+          }}>
+            {isActive ? 'Active' : automation.status === 'draft' ? 'Draft' : 'Paused'}
+          </span>
+        </div>
       </td>
       <td style={{ padding: '14px 16px', fontSize: '14px', color: t.textSecondary }}>
         {stats.totalSent?.toLocaleString() || 0}
@@ -198,55 +235,20 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
         {stats.activeEnrollments || 0}
       </td>
       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-          {automation.status === 'active' ? (
-            <button 
-              onClick={() => onToggle(automation.id, 'pause')}
-              style={{
-                padding: '6px 10px',
-                backgroundColor: `${t.warning}15`,
-                border: 'none',
-                borderRadius: '6px',
-                color: t.warning,
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontWeight: '500'
-              }}
-            >
-              Pause
-            </button>
-          ) : automation.status === 'paused' ? (
-            <button 
-              onClick={() => onToggle(automation.id, 'activate')}
-              style={{
-                padding: '6px 10px',
-                backgroundColor: `${t.success}15`,
-                border: 'none',
-                borderRadius: '6px',
-                color: t.success,
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontWeight: '500'
-              }}
-            >
-              Activate
-            </button>
-          ) : null}
-          <button 
-            onClick={() => onEdit(automation.id)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: t.bgHover,
-              border: `1px solid ${t.border}`,
-              borderRadius: '6px',
-              color: t.textSecondary,
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            Edit
-          </button>
-        </div>
+        <button 
+          onClick={() => onEdit(automation.id)}
+          style={{
+            padding: '6px 12px',
+            backgroundColor: t.bgHover,
+            border: `1px solid ${t.border}`,
+            borderRadius: '6px',
+            color: t.textSecondary,
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          Edit
+        </button>
       </td>
     </tr>
   );
