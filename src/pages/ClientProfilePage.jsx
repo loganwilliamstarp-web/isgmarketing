@@ -100,7 +100,7 @@ const PolicyCard = ({ policy, theme: t }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Policy Number</div>
-          <div style={{ color: t.text }}>{policy.policy_number || policy.policy_unique_id || '—'}</div>
+          <div style={{ color: t.text }}>{policy.policy_number || policy.policy_number__c || policy.policy_unique_id || '—'}</div>
         </div>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Carrier</div>
@@ -376,28 +376,14 @@ const ClientProfilePage = ({ t }) => {
         </button>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              backgroundColor: t.bgHover,
-              borderRadius: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '28px',
-              color: t.primary
-            }}>
-              {client.name?.charAt(0).toUpperCase() || '?'}
-            </div>
-            <div>
-              <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
-                {client.name}
-              </h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {(() => {
-                  const rawStatus = (client.account_status || '').toLowerCase();
-                  // Handle variations like "prior_customer" -> "prior"
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
+              {client.name}
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {(() => {
+                const rawStatus = (client.account_status || '').toLowerCase();
+                // Handle variations like "prior_customer" -> "prior"
                   let status = rawStatus;
                   if (rawStatus === 'prior_customer' || rawStatus.startsWith('prior')) status = 'prior';
                   if (rawStatus.startsWith('customer')) status = 'customer';
@@ -431,7 +417,6 @@ const ClientProfilePage = ({ t }) => {
                 )}
               </div>
             </div>
-          </div>
           
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
