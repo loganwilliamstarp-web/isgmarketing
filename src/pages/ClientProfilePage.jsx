@@ -131,7 +131,7 @@ const PolicyCard = ({ policy, theme: t }) => {
         </div>
       </div>
       
-      {policy.premium && (
+      {(policy.premium || policy.annual_premium) && (
         <div style={{ 
           marginTop: '12px', 
           paddingTop: '12px', 
@@ -142,7 +142,7 @@ const PolicyCard = ({ policy, theme: t }) => {
         }}>
           <span style={{ fontSize: '12px', color: t.textMuted }}>Annual Premium</span>
           <span style={{ fontSize: '16px', fontWeight: '600', color: t.success }}>
-            ${policy.premium.toLocaleString()}
+            ${(policy.premium || policy.annual_premium).toLocaleString()}
           </span>
         </div>
       )}
