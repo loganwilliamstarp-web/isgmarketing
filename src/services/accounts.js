@@ -15,7 +15,11 @@ export const accountsService = {
       .eq('owner_id', ownerId);
     
     if (status) {
-      countQuery = countQuery.ilike('account_status', status);
+      // Map UI filter values to database values
+      let dbStatus = status;
+      if (status.toLowerCase() === 'prior') dbStatus = 'prior_customer';
+      
+      countQuery = countQuery.ilike('account_status', dbStatus);
     }
     
     if (search) {
@@ -34,7 +38,11 @@ export const accountsService = {
       .range(offset, offset + limit - 1);
     
     if (status) {
-      query = query.ilike('account_status', status);
+      // Map UI filter values to database values
+      let dbStatus = status;
+      if (status.toLowerCase() === 'prior') dbStatus = 'prior_customer';
+      
+      query = query.ilike('account_status', dbStatus);
     }
     
     if (search) {
@@ -131,11 +139,12 @@ export const accountsService = {
       .eq('owner_id', ownerId)
       .ilike('account_status', 'prospect');
     
+    // Match "prior_customer" or "prior"
     const { count: priorCount } = await supabase
       .from('accounts')
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', ownerId)
-      .ilike('account_status', 'prior');
+      .ilike('account_status', 'prior_customer');
     
     const { count: leadCount } = await supabase
       .from('accounts')
