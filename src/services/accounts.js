@@ -66,16 +66,16 @@ export const accountsService = {
    * Get account stats summary
    */
   async getStats(ownerId) {
-    // Get account type counts
+    // Get account status counts
     const { data: accounts, error: accountError } = await supabase
       .from('accounts')
-      .select('account_type, account_unique_id')
+      .select('account_status, account_unique_id')
       .eq('owner_id', ownerId);
     
     if (accountError) throw accountError;
     
-    // Count by type
-    const typeCounts = {
+    // Count by status
+    const statusCounts = {
       Customer: 0,
       Prospect: 0,
       Prior: 0,
@@ -84,9 +84,9 @@ export const accountsService = {
     };
     
     accounts?.forEach(a => {
-      const type = a.account_type || 'Prospect';
-      if (typeCounts.hasOwnProperty(type)) {
-        typeCounts[type]++;
+      const status = a.account_status || 'Prospect';
+      if (statusCounts.hasOwnProperty(status)) {
+        statusCounts[status]++;
       }
     });
     
@@ -113,7 +113,7 @@ export const accountsService = {
     }
     
     return {
-      ...typeCounts,
+      ...statusCounts,
       expiring: expiringCount
     };
   },

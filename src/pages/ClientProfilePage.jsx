@@ -387,17 +387,23 @@ const ClientProfilePage = ({ t }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{
                   padding: '4px 10px',
-                  backgroundColor: client.account_type === 'Customer' ? `${t.success}20` : `${t.primary}20`,
-                  color: client.account_type === 'Customer' ? t.success : t.primary,
+                  backgroundColor: client.account_status === 'Customer' ? `${t.success}20` 
+                    : client.account_status === 'Prospect' ? `${t.primary}20`
+                    : client.account_status === 'Prior' ? `${t.textMuted}20`
+                    : `${t.warning}20`,
+                  color: client.account_status === 'Customer' ? t.success 
+                    : client.account_status === 'Prospect' ? t.primary
+                    : client.account_status === 'Prior' ? t.textMuted
+                    : t.warning,
                   borderRadius: '20px',
                   fontSize: '12px',
                   fontWeight: '500'
                 }}>
-                  {client.account_type}
+                  {client.account_status || 'Unknown'}
                 </span>
-                {client.salesforce_id && (
+                {client.account_unique_id && (
                   <span style={{ fontSize: '12px', color: t.textMuted }}>
-                    SF: {client.salesforce_id}
+                    ID: {client.account_unique_id}
                   </span>
                 )}
               </div>
