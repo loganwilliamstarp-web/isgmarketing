@@ -1706,9 +1706,179 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
           </div>
           <div style={{ padding: '18px' }}>
             {selectedNodeData ? (
-              <div style={{ fontSize: '13px', color: t.textSecondary }}>
-                <div style={{ fontWeight: '600', color: t.text, marginBottom: '10px', fontSize: '15px' }}>{selectedNodeData.title}</div>
-                <p>Configure this {nodeTypes[selectedNodeData.type]?.label || 'node'} step.</p>
+              <div>
+                {/* Node header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    backgroundColor: `${nodeTypes[selectedNodeData.type]?.color || t.primary}20`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '20px'
+                  }}>
+                    {nodeTypes[selectedNodeData.type]?.icon || '📧'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: '600', color: t.text, fontSize: '15px' }}>{selectedNodeData.title}</div>
+                    <div style={{ fontSize: '12px', color: t.textMuted }}>{nodeTypes[selectedNodeData.type]?.label || 'Node'}</div>
+                  </div>
+                </div>
+
+                {/* Node-specific config */}
+                {selectedNodeData.type === 'entry_criteria' && (
+                  <div>
+                    <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '16px' }}>
+                      Define which contacts enter this automation based on their attributes and behavior.
+                    </p>
+                    <button
+                      onClick={() => setShowFilterPanel(true)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        backgroundColor: t.primary,
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Edit Entry Criteria
+                    </button>
+                  </div>
+                )}
+
+                {selectedNodeData.type === 'trigger' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Run Time</label>
+                    <input
+                      type="time"
+                      defaultValue={selectedNodeData.config?.time || '09:00'}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        backgroundColor: t.bgHover,
+                        border: `1px solid ${t.border}`,
+                        borderRadius: '8px',
+                        color: t.text,
+                        fontSize: '14px',
+                        marginBottom: '16px'
+                      }}
+                    />
+                    <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Frequency</label>
+                    <select
+                      defaultValue={selectedNodeData.config?.frequency || 'Daily'}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        backgroundColor: t.bgHover,
+                        border: `1px solid ${t.border}`,
+                        borderRadius: '8px',
+                        color: t.text,
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option>Daily</option>
+                      <option>Weekly</option>
+                      <option>Monthly</option>
+                    </select>
+                  </div>
+                )}
+
+                {selectedNodeData.type === 'send_email' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Email Template</label>
+                    <select
+                      defaultValue={selectedNodeData.config?.template || ''}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        backgroundColor: t.bgHover,
+                        border: `1px solid ${t.border}`,
+                        borderRadius: '8px',
+                        color: t.text,
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option value="">Select template...</option>
+                      <option>Welcome Email</option>
+                      <option>Cross-Sell Introduction</option>
+                      <option>Renewal Reminder</option>
+                      <option>Follow-Up</option>
+                      <option>Re-engagement</option>
+                    </select>
+                  </div>
+                )}
+
+                {selectedNodeData.type === 'delay' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Wait Duration</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="number"
+                        defaultValue={selectedNodeData.config?.duration || 1}
+                        min="1"
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          backgroundColor: t.bgHover,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: '8px',
+                          color: t.text,
+                          fontSize: '14px'
+                        }}
+                      />
+                      <select
+                        defaultValue={selectedNodeData.config?.unit || 'days'}
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          backgroundColor: t.bgHover,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: '8px',
+                          color: t.text,
+                          fontSize: '14px'
+                        }}
+                      >
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {(selectedNodeData.type === 'condition' || selectedNodeData.type === 'field_condition') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Condition Type</label>
+                    <select
+                      defaultValue={selectedNodeData.config?.type || 'email_opened'}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        backgroundColor: t.bgHover,
+                        border: `1px solid ${t.border}`,
+                        borderRadius: '8px',
+                        color: t.text,
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option value="email_opened">Email Opened</option>
+                      <option value="email_clicked">Email Clicked</option>
+                      <option value="field_value">Field Value</option>
+                    </select>
+                  </div>
+                )}
+
+                {selectedNodeData.type === 'end' && (
+                  <p style={{ fontSize: '13px', color: t.textSecondary }}>
+                    This node ends the automation flow. Contacts reaching this point will exit the automation.
+                  </p>
+                )}
               </div>
             ) : (
               <div style={{ textAlign: 'center', color: t.textMuted, padding: '30px 0' }}>
