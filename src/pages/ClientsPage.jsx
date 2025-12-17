@@ -13,13 +13,21 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 // Account type badge
 const TypeBadge = ({ type, theme: t }) => {
   const normalizedType = (type || '').toLowerCase();
+  
+  // Handle variations like "prior_customer" -> "prior"
+  let matchType = normalizedType;
+  if (normalizedType === 'prior_customer' || normalizedType.startsWith('prior')) matchType = 'prior';
+  if (normalizedType.startsWith('customer')) matchType = 'customer';
+  if (normalizedType.startsWith('prospect')) matchType = 'prospect';
+  if (normalizedType.startsWith('lead')) matchType = 'lead';
+  
   const colors = {
     customer: { bg: `${t.success}20`, text: t.success, label: 'Customer' },
     prospect: { bg: `${t.primary}20`, text: t.primary, label: 'Prospect' },
-    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior' },
+    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior Customer' },
     lead: { bg: `${t.warning}20`, text: t.warning, label: 'Lead' },
   };
-  const c = colors[normalizedType] || colors.prospect;
+  const c = colors[matchType] || colors.prospect;
   
   return (
     <span style={{
@@ -372,7 +380,7 @@ const ClientsPage = ({ t }) => {
           active={typeFilter === 'Prospect'}
         />
         <StatsCard 
-          label="Prior Clients" 
+          label="Prior Customers" 
           value={statsLoading ? '...' : displayStats.Prior} 
           icon="📁" 
           color={t.textMuted}
@@ -444,7 +452,7 @@ const ClientsPage = ({ t }) => {
           <option value="all">All Types</option>
           <option value="Customer">Customers</option>
           <option value="Prospect">Prospects</option>
-          <option value="Prior">Prior</option>
+          <option value="Prior">Prior Customers</option>
           <option value="Lead">Leads</option>
           <option value="expiring">Expiring Policies</option>
         </select>

@@ -396,11 +396,18 @@ const ClientProfilePage = ({ t }) => {
               </h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {(() => {
-                  const status = (client.account_status || '').toLowerCase();
+                  const rawStatus = (client.account_status || '').toLowerCase();
+                  // Handle variations like "prior_customer" -> "prior"
+                  let status = rawStatus;
+                  if (rawStatus === 'prior_customer' || rawStatus.startsWith('prior')) status = 'prior';
+                  if (rawStatus.startsWith('customer')) status = 'customer';
+                  if (rawStatus.startsWith('prospect')) status = 'prospect';
+                  if (rawStatus.startsWith('lead')) status = 'lead';
+                  
                   const statusColors = {
                     customer: { bg: `${t.success}20`, text: t.success, label: 'Customer' },
                     prospect: { bg: `${t.primary}20`, text: t.primary, label: 'Prospect' },
-                    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior' },
+                    prior: { bg: `${t.textMuted}20`, text: t.textMuted, label: 'Prior Customer' },
                     lead: { bg: `${t.warning}20`, text: t.warning, label: 'Lead' },
                   };
                   const c = statusColors[status] || statusColors.prospect;
