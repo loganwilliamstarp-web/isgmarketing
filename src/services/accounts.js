@@ -242,11 +242,12 @@ export const accountsService = {
     if (!account) return null;
 
     // Get policies - use account_unique_id to match account_id in policies table
+    // Sort by expiration date ascending (nearest future expiration first)
     const { data: policies, error: policiesError } = await supabase
       .from('policies')
       .select('*')
       .eq('account_id', accountId)
-      .order('expiration_date', { ascending: false });
+      .order('expiration_date', { ascending: true });
 
     if (policiesError) {
       console.error('Error fetching policies:', policiesError);
@@ -255,11 +256,7 @@ export const accountsService = {
 
     // If we have policies, fetch carrier names
     if (policies && policies.length > 0) {
-      // Debug: log policy carrier_id values
-      console.log('Policies carrier_id values:', policies.map(p => ({ id: p.policy_unique_id, carrier_id: p.carrier_id })));
-
       const carrierIds = [...new Set(policies.map(p => p.carrier_id).filter(Boolean))];
-      console.log('Unique carrier IDs to fetch:', carrierIds);
 
       if (carrierIds.length > 0) {
         const { data: carriers, error: carrierError } = await supabase
@@ -267,14 +264,11 @@ export const accountsService = {
           .select('id, name')
           .in('id', carrierIds);
 
-        console.log('Carriers fetch result:', { carriers, error: carrierError });
-
         if (carriers && carriers.length > 0) {
           const carrierMap = {};
           carriers.forEach(c => {
             carrierMap[c.id] = c.name;
           });
-          console.log('Carrier map:', carrierMap);
 
           // Attach carrier name to each policy
           policies.forEach(p => {
