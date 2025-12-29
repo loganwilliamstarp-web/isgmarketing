@@ -9,6 +9,7 @@ import {
   useMassEmailBatchesWithStats,
   useMassEmailRecipients,
   useMassEmailRecipientCount,
+  useMassEmailLocationBreakdown,
   useMassEmailMutations
 } from '../hooks';
 
@@ -1163,8 +1164,152 @@ const LocationFilterInput = ({ rule, onUpdate, theme: t }) => {
   );
 };
 
+// Location breakdown display component
+const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  if (isLoading) {
+    return (
+      <div style={{
+        padding: '12px 16px',
+        backgroundColor: t.bgHover,
+        borderRadius: '8px',
+        marginTop: '12px',
+        fontSize: '13px',
+        color: t.textSecondary
+      }}>
+        Loading location data...
+      </div>
+    );
+  }
+
+  if (!breakdown || breakdown.total === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{
+      marginTop: '12px',
+      backgroundColor: t.bgCard,
+      borderRadius: '8px',
+      border: `1px solid ${t.border}`,
+      overflow: 'hidden'
+    }}>
+      <button
+        onClick={() => setShowBreakdown(!showBreakdown)}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: t.text
+        }}
+      >
+        <span style={{ fontSize: '13px', fontWeight: '500' }}>
+          📊 View Recipients by Location
+        </span>
+        <span style={{ fontSize: '12px', color: t.textSecondary }}>
+          {showBreakdown ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {showBreakdown && (
+        <div style={{ padding: '0 16px 16px' }}>
+          {/* By State */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '600',
+              color: t.textSecondary,
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>
+              By State
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {breakdown.byState.map(({ state, count }) => (
+                <div
+                  key={state}
+                  style={{
+                    padding: '6px 10px',
+                    backgroundColor: t.bgHover,
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span style={{ fontWeight: '500', color: t.text }}>{state}</span>
+                  <span style={{
+                    backgroundColor: t.primary,
+                    color: '#fff',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    {count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* By City */}
+          <div>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '600',
+              color: t.textSecondary,
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>
+              Top Cities
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {breakdown.byCity.slice(0, 8).map(({ city, count }) => (
+                <div
+                  key={city}
+                  style={{
+                    padding: '6px 10px',
+                    backgroundColor: t.bgHover,
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span style={{ color: t.text }}>{city}</span>
+                  <span style={{
+                    backgroundColor: `${t.primary}30`,
+                    color: t.primary,
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    {count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Recipients filter step with dynamic filter builder
-const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, theme: t }) => {
+const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, locationBreakdown, isLoadingBreakdown, theme: t }) => {
   const rules = filterConfig.rules || [];
 
   const addRule = () => {
@@ -1334,6 +1479,13 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
           {isLoading ? '...' : (recipientCount || 0).toLocaleString()}
         </div>
       </div>
+
+      {/* Location Breakdown */}
+      <LocationBreakdown
+        breakdown={locationBreakdown}
+        isLoading={isLoadingBreakdown}
+        theme={t}
+      />
     </div>
   );
 };
@@ -1509,6 +1661,9 @@ const MassEmailPage = ({ t }) => {
   const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useTemplates();
   const { data: batches, isLoading: loadingBatches, refetch: refetchBatches } = useMassEmailBatchesWithStats();
   const { data: recipientCount, isLoading: loadingCount } = useMassEmailRecipientCount(
+    step >= 1 ? filterConfig : null
+  );
+  const { data: locationBreakdown, isLoading: loadingBreakdown } = useMassEmailLocationBreakdown(
     step >= 1 ? filterConfig : null
   );
   const { data: recipients, isLoading: loadingRecipients } = useMassEmailRecipients(
@@ -1700,6 +1855,8 @@ const MassEmailPage = ({ t }) => {
                 setFilterConfig={setFilterConfig}
                 recipientCount={recipientCount}
                 isLoading={loadingCount}
+                locationBreakdown={locationBreakdown}
+                isLoadingBreakdown={loadingBreakdown}
                 theme={t}
               />
             )}

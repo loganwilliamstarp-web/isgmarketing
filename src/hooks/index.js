@@ -121,6 +121,7 @@ export {
   useMassEmailBatch,
   useMassEmailRecipients,
   useMassEmailRecipientCount,
+  useMassEmailLocationBreakdown,
   useMassEmailBatchStats,
   useMassEmailMutations
 } from './useMassEmails';
