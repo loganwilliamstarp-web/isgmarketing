@@ -487,6 +487,47 @@ export const massEmailsService = {
   },
 
   /**
+   * Get location breakdown of recipients (counts by state and top cities)
+   */
+  async getRecipientLocationBreakdown(ownerId, filterConfig) {
+    // Get the actual filtered recipients
+    const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+
+    // Count by state
+    const stateCounts = {};
+    const cityCounts = {};
+
+    recipients.forEach(account => {
+      const state = account.billing_state || 'Unknown';
+      const city = account.billing_city || 'Unknown';
+
+      stateCounts[state] = (stateCounts[state] || 0) + 1;
+
+      const cityKey = city !== 'Unknown' && state !== 'Unknown'
+        ? `${city}, ${state}`
+        : city;
+      cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
+    });
+
+    // Sort and get top entries
+    const stateBreakdown = Object.entries(stateCounts)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const cityBreakdown = Object.entries(cityCounts)
+      .map(([city, count]) => ({ city, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return {
+      total: recipients.length,
+      byState: stateBreakdown,
+      byCity: cityBreakdown
+    };
+  },
+
+  /**
    * Schedule a mass email batch for sending
    * Creates scheduled_emails entries for each recipient
    */

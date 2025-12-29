@@ -74,6 +74,19 @@ export function useMassEmailRecipientCount(filterConfig) {
 }
 
 /**
+ * Get location breakdown of recipients
+ */
+export function useMassEmailLocationBreakdown(filterConfig) {
+  const ownerId = useOwnerId();
+
+  return useQuery({
+    queryKey: ['massEmailLocationBreakdown', ownerId, filterConfig],
+    queryFn: () => massEmailsService.getRecipientLocationBreakdown(ownerId, filterConfig),
+    enabled: !!ownerId && !!filterConfig
+  });
+}
+
+/**
  * Get batch stats
  */
 export function useMassEmailBatchStats(batchId) {
