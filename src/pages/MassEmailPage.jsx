@@ -1,8 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Circle, Marker, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   useTemplates,
   useTemplateMutations,
@@ -13,13 +10,8 @@ import {
   useMassEmailMutations
 } from '../hooks';
 
-// Fix Leaflet default marker icon issue
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+// Google Maps API key
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -591,33 +583,89 @@ const OPERATORS = {
 // Radius options in miles
 const RADIUS_OPTIONS = [5, 10, 15, 25, 50, 100];
 
-// Component to fit map bounds to circle
-const FitBoundsToCircle = ({ center, radiusMeters }) => {
-  const map = useMap();
+// Google Maps component with circle overlay
+const GoogleMapWithCircle = ({ lat, lng, radiusMiles, theme: t }) => {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const circleRef = useRef(null);
+  const markerRef = useRef(null);
 
   useEffect(() => {
-    if (center && radiusMeters && map) {
-      // Calculate bounds manually using the center and radius
-      // radiusMeters in degrees (rough approximation: 1 degree ≈ 111km at equator)
-      const radiusDegrees = radiusMeters / 111320;
-      const bounds = L.latLngBounds(
-        [center[0] - radiusDegrees, center[1] - radiusDegrees],
-        [center[0] + radiusDegrees, center[1] + radiusDegrees]
-      );
-      map.fitBounds(bounds, { padding: [20, 20] });
+    // Load Google Maps script if not already loaded
+    if (!window.google?.maps) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => initMap();
+      document.head.appendChild(script);
+    } else {
+      initMap();
     }
-  }, [map, center, radiusMeters]);
 
-  return null;
+    function initMap() {
+      if (!mapRef.current || !window.google?.maps) return;
+
+      const center = { lat, lng };
+      const radiusMeters = radiusMiles * 1609.34;
+
+      // Create map
+      mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+        center,
+        zoom: getZoomLevel(radiusMiles),
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        styles: [
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+        ]
+      });
+
+      // Add circle
+      circleRef.current = new window.google.maps.Circle({
+        map: mapInstanceRef.current,
+        center,
+        radius: radiusMeters,
+        fillColor: t.primary,
+        fillOpacity: 0.2,
+        strokeColor: t.primary,
+        strokeWeight: 2
+      });
+
+      // Add marker
+      markerRef.current = new window.google.maps.Marker({
+        map: mapInstanceRef.current,
+        position: center
+      });
+
+      // Fit bounds to circle
+      mapInstanceRef.current.fitBounds(circleRef.current.getBounds());
+    }
+
+    return () => {
+      if (circleRef.current) circleRef.current.setMap(null);
+      if (markerRef.current) markerRef.current.setMap(null);
+    };
+  }, [lat, lng, radiusMiles, t.primary]);
+
+  // Calculate appropriate zoom level based on radius
+  function getZoomLevel(miles) {
+    if (miles <= 5) return 12;
+    if (miles <= 15) return 11;
+    if (miles <= 25) return 10;
+    if (miles <= 50) return 9;
+    return 8;
+  }
+
+  return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
 };
 
-// Map modal component with Leaflet
+// Map modal component with Google Maps
 const LocationMapModal = ({ location, radius, onClose, theme: t }) => {
   if (!location) return null;
 
   const lat = parseFloat(location.lat);
   const lng = parseFloat(location.lng);
-  const radiusMeters = radius * 1609.34; // Convert miles to meters
 
   return (
     <>
@@ -689,28 +737,7 @@ const LocationMapModal = ({ location, radius, onClose, theme: t }) => {
 
         {/* Map */}
         <div style={{ height: '400px' }}>
-          <MapContainer
-            center={[lat, lng]}
-            zoom={10}
-            style={{ height: '100%', width: '100%' }}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <Circle
-              center={[lat, lng]}
-              radius={radiusMeters}
-              pathOptions={{
-                color: t.primary,
-                fillColor: t.primary,
-                fillOpacity: 0.2,
-                weight: 3
-              }}
-            />
-            <Marker position={[lat, lng]} />
-            <FitBoundsToCircle center={[lat, lng]} radiusMeters={radiusMeters} />
-          </MapContainer>
+          <GoogleMapWithCircle lat={lat} lng={lng} radiusMiles={radius} theme={t} />
         </div>
 
         {/* Footer */}
