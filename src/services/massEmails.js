@@ -34,16 +34,34 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
   }
 };
 
-// Geocode a zip code or city using Nominatim with rate limiting
+// Geocode a zip code or city using multiple services with fallback
 const geocodeLocation = async (location, skipDelay = false) => {
   if (geocodeCache[location]) {
     return geocodeCache[location];
   }
 
+  // Try Photon API first (faster, no strict rate limits)
   try {
-    // Rate limit: Nominatim requires max 1 request per second
+    const response = await fetchWithTimeout(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(location)}&limit=1&lang=en`,
+      {},
+      3000 // 3 second timeout
+    );
+    const data = await response.json();
+    if (data?.features?.length > 0) {
+      const coords = data.features[0].geometry.coordinates;
+      const result = { lat: coords[1], lng: coords[0] };
+      geocodeCache[location] = result;
+      return result;
+    }
+  } catch (err) {
+    // Photon failed, try Nominatim as fallback
+  }
+
+  // Fallback to Nominatim
+  try {
     if (!skipDelay) {
-      await delay(100); // Small delay to be respectful of rate limits
+      await delay(100);
     }
 
     const response = await fetchWithTimeout(
@@ -53,7 +71,7 @@ const geocodeLocation = async (location, skipDelay = false) => {
           'User-Agent': 'ISGMarketing/1.0'
         }
       },
-      5000 // 5 second timeout
+      3000 // 3 second timeout
     );
     const data = await response.json();
     if (data && data.length > 0) {
