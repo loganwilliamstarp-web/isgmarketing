@@ -12,7 +12,8 @@ import {
   ClientsPage,
   ClientProfilePage,
   SettingsPage,
-  WorkflowBuilderPage
+  WorkflowBuilderPage,
+  MassEmailPage
 } from './pages';
 
 // ============================================
@@ -303,24 +304,6 @@ const AppLayout = () => {
 // ============================================
 // PLACEHOLDER PAGES
 // ============================================
-const MassEmailPage = ({ t }) => (
-  <div>
-    <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>Mass Email</h1>
-    <p style={{ color: t.textSecondary, fontSize: '14px' }}>Send one-off emails to filtered recipients</p>
-    <div style={{ 
-      marginTop: '24px', 
-      padding: '60px', 
-      textAlign: 'center', 
-      backgroundColor: t.bgCard,
-      borderRadius: '12px',
-      border: `1px solid ${t.border}`
-    }}>
-      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
-      <p style={{ color: t.textMuted }}>Mass Email functionality coming soon...</p>
-    </div>
-  </div>
-);
-
 const TimelinePage = ({ t }) => (
   <div>
     <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>Activity Timeline</h1>
