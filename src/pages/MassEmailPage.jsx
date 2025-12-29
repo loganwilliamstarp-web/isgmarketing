@@ -525,6 +525,27 @@ const FILTER_FIELDS = [
   ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
   { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
+  { value: 'location', label: 'Location', type: 'location' },
+  { value: 'state', label: 'State', type: 'select', options: [
+    { value: 'AL', label: 'Alabama' }, { value: 'AK', label: 'Alaska' }, { value: 'AZ', label: 'Arizona' },
+    { value: 'AR', label: 'Arkansas' }, { value: 'CA', label: 'California' }, { value: 'CO', label: 'Colorado' },
+    { value: 'CT', label: 'Connecticut' }, { value: 'DE', label: 'Delaware' }, { value: 'FL', label: 'Florida' },
+    { value: 'GA', label: 'Georgia' }, { value: 'HI', label: 'Hawaii' }, { value: 'ID', label: 'Idaho' },
+    { value: 'IL', label: 'Illinois' }, { value: 'IN', label: 'Indiana' }, { value: 'IA', label: 'Iowa' },
+    { value: 'KS', label: 'Kansas' }, { value: 'KY', label: 'Kentucky' }, { value: 'LA', label: 'Louisiana' },
+    { value: 'ME', label: 'Maine' }, { value: 'MD', label: 'Maryland' }, { value: 'MA', label: 'Massachusetts' },
+    { value: 'MI', label: 'Michigan' }, { value: 'MN', label: 'Minnesota' }, { value: 'MS', label: 'Mississippi' },
+    { value: 'MO', label: 'Missouri' }, { value: 'MT', label: 'Montana' }, { value: 'NE', label: 'Nebraska' },
+    { value: 'NV', label: 'Nevada' }, { value: 'NH', label: 'New Hampshire' }, { value: 'NJ', label: 'New Jersey' },
+    { value: 'NM', label: 'New Mexico' }, { value: 'NY', label: 'New York' }, { value: 'NC', label: 'North Carolina' },
+    { value: 'ND', label: 'North Dakota' }, { value: 'OH', label: 'Ohio' }, { value: 'OK', label: 'Oklahoma' },
+    { value: 'OR', label: 'Oregon' }, { value: 'PA', label: 'Pennsylvania' }, { value: 'RI', label: 'Rhode Island' },
+    { value: 'SC', label: 'South Carolina' }, { value: 'SD', label: 'South Dakota' }, { value: 'TN', label: 'Tennessee' },
+    { value: 'TX', label: 'Texas' }, { value: 'UT', label: 'Utah' }, { value: 'VT', label: 'Vermont' },
+    { value: 'VA', label: 'Virginia' }, { value: 'WA', label: 'Washington' }, { value: 'WV', label: 'West Virginia' },
+    { value: 'WI', label: 'Wisconsin' }, { value: 'WY', label: 'Wyoming' }
+  ]},
+  { value: 'city', label: 'City', type: 'text' },
 ];
 
 const OPERATORS = {
@@ -545,6 +566,59 @@ const OPERATORS = {
     { value: 'between', label: 'is between' },
     { value: 'in_next_days', label: 'is in the next' },
   ],
+  location: [
+    { value: 'within_radius', label: 'is within' },
+  ],
+  text: [
+    { value: 'contains', label: 'contains' },
+    { value: 'equals', label: 'equals' },
+    { value: 'starts_with', label: 'starts with' },
+  ],
+};
+
+// Radius options in miles
+const RADIUS_OPTIONS = [5, 10, 15, 25, 50, 100];
+
+// Map preview component for location filter
+const LocationMapPreview = ({ location, radius, theme: t }) => {
+  if (!location) return null;
+
+  // Create OpenStreetMap embed URL with marker
+  const zoom = radius <= 10 ? 12 : radius <= 25 ? 11 : radius <= 50 ? 10 : 9;
+  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
+    `${parseFloat(location.lng) - (radius / 50)},${parseFloat(location.lat) - (radius / 50)},${parseFloat(location.lng) + (radius / 50)},${parseFloat(location.lat) + (radius / 50)}`
+  )}&layer=mapnik&marker=${location.lat},${location.lng}`;
+
+  return (
+    <div style={{
+      marginTop: '12px',
+      borderRadius: '8px',
+      overflow: 'hidden',
+      border: `1px solid ${t.border}`
+    }}>
+      <div style={{
+        padding: '8px 12px',
+        backgroundColor: t.bgHover,
+        fontSize: '12px',
+        color: t.textSecondary,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <span>📍</span>
+        <span>{location.display} - {radius} mile radius</span>
+      </div>
+      <iframe
+        title="Location Preview"
+        src={mapUrl}
+        style={{
+          width: '100%',
+          height: '200px',
+          border: 'none'
+        }}
+      />
+    </div>
+  );
 };
 
 // Single filter rule component
@@ -715,6 +789,24 @@ const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
               style={inputStyle}
             />
           )}
+
+          {field?.type === 'text' && (
+            <input
+              type="text"
+              value={rule.value || ''}
+              onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+              placeholder={`Enter ${field.label.toLowerCase()}...`}
+              style={{ ...inputStyle, width: '160px' }}
+            />
+          )}
+
+          {field?.type === 'location' && (
+            <LocationFilterInput
+              rule={rule}
+              onUpdate={(updates) => onUpdate(index, { ...rule, ...updates })}
+              theme={t}
+            />
+          )}
         </>
       )}
 
@@ -735,6 +827,166 @@ const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
       >
         ×
       </button>
+    </div>
+  );
+};
+
+// Location filter input with geocoding and map preview
+const LocationFilterInput = ({ rule, onUpdate, theme: t }) => {
+  const [searchText, setSearchText] = useState(rule.locationDisplay || '');
+  const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const inputStyle = {
+    padding: '8px 12px',
+    backgroundColor: t.bgInput,
+    border: `1px solid ${t.border}`,
+    borderRadius: '6px',
+    color: t.text,
+    fontSize: '13px'
+  };
+
+  // Debounced geocoding search using Nominatim (free, no API key needed)
+  const searchLocation = async (query) => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(query)}&limit=5`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await response.json();
+      setSuggestions(data.map(item => ({
+        display: item.display_name,
+        lat: item.lat,
+        lng: item.lon,
+        type: item.type
+      })));
+      setShowSuggestions(true);
+    } catch (err) {
+      console.error('Geocoding error:', err);
+      setSuggestions([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Debounce search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchText && searchText !== rule.locationDisplay) {
+        searchLocation(searchText);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  const selectLocation = (location) => {
+    setSearchText(location.display.split(',').slice(0, 2).join(','));
+    onUpdate({
+      value: `${location.lat},${location.lng}`,
+      locationDisplay: location.display.split(',').slice(0, 2).join(','),
+      locationData: location
+    });
+    setShowSuggestions(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '300px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            placeholder="Enter zip code, city, or address..."
+            style={{ ...inputStyle, width: '100%', paddingRight: '30px' }}
+          />
+          {isSearching && (
+            <span style={{
+              position: 'absolute',
+              right: '10px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: t.textMuted,
+              fontSize: '12px'
+            }}>
+              ...
+            </span>
+          )}
+
+          {/* Suggestions dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              backgroundColor: t.bgCard,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              marginTop: '4px',
+              zIndex: 100,
+              maxHeight: '200px',
+              overflow: 'auto',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}>
+              {suggestions.map((loc, i) => (
+                <button
+                  key={i}
+                  onClick={() => selectLocation(loc)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderBottom: i < suggestions.length - 1 ? `1px solid ${t.border}` : 'none',
+                    color: t.text,
+                    fontSize: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = t.bgHover}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                >
+                  <span>📍</span>
+                  <span style={{ lineHeight: '1.4' }}>{loc.display}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <span style={{ fontSize: '13px', color: t.textSecondary }}>of</span>
+
+        <select
+          value={rule.radius || '25'}
+          onChange={(e) => onUpdate({ radius: e.target.value })}
+          style={{ ...inputStyle, minWidth: '100px' }}
+        >
+          {RADIUS_OPTIONS.map(r => (
+            <option key={r} value={r}>{r} miles</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Map Preview */}
+      {rule.locationData && (
+        <LocationMapPreview
+          location={rule.locationData}
+          radius={parseInt(rule.radius || '25', 10)}
+          theme={t}
+        />
+      )}
     </div>
   );
 };

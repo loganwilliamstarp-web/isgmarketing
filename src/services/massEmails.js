@@ -1,6 +1,44 @@
 // src/services/massEmails.js
 import { supabase } from '../lib/supabase';
 
+// Haversine formula to calculate distance between two points in miles
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 3959; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Simple geocoding cache to avoid repeated lookups
+const geocodeCache = {};
+
+// Geocode a zip code or city using Nominatim
+const geocodeLocation = async (location) => {
+  if (geocodeCache[location]) {
+    return geocodeCache[location];
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(location)}&limit=1`
+    );
+    const data = await response.json();
+    if (data && data.length > 0) {
+      const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      geocodeCache[location] = result;
+      return result;
+    }
+  } catch (err) {
+    console.error('Geocoding error:', err);
+  }
+  return null;
+};
+
 export const massEmailsService = {
   /**
    * Get all mass email batches for a user
@@ -113,11 +151,14 @@ export const massEmailsService = {
     const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
     const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
     const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
+    const locationRules = rules.filter(r => r.field === 'location' && r.value);
+    const stateRules = rules.filter(r => r.field === 'state' && r.value);
+    const cityRules = rules.filter(r => r.field === 'city' && r.value);
 
-    // Get accounts first
+    // Get accounts first - include location fields for filtering
     let query = supabase
       .from('accounts')
-      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email')
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street')
       .eq('owner_id', ownerId);
 
     // Apply account status filters at query level
@@ -241,6 +282,80 @@ export const massEmailsService = {
       });
     }
 
+    // Apply state filter
+    if (stateRules.length > 0 && recipients.length > 0) {
+      recipients = recipients.filter(account => {
+        for (const rule of stateRules) {
+          const accountState = (account.billing_state || '').toUpperCase();
+          if (rule.operator === 'is') {
+            if (accountState !== rule.value.toUpperCase()) return false;
+          } else if (rule.operator === 'is_not') {
+            if (accountState === rule.value.toUpperCase()) return false;
+          } else if (rule.operator === 'is_any') {
+            const values = rule.value.split(',').map(v => v.toUpperCase());
+            if (!values.includes(accountState)) return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    // Apply city filter
+    if (cityRules.length > 0 && recipients.length > 0) {
+      recipients = recipients.filter(account => {
+        for (const rule of cityRules) {
+          const accountCity = (account.billing_city || '').toLowerCase();
+          const ruleValue = (rule.value || '').toLowerCase();
+          if (rule.operator === 'contains') {
+            if (!accountCity.includes(ruleValue)) return false;
+          } else if (rule.operator === 'equals') {
+            if (accountCity !== ruleValue) return false;
+          } else if (rule.operator === 'starts_with') {
+            if (!accountCity.startsWith(ruleValue)) return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    // Apply location/radius filter
+    if (locationRules.length > 0 && recipients.length > 0) {
+      for (const rule of locationRules) {
+        const [centerLat, centerLng] = rule.value.split(',').map(parseFloat);
+        const radiusMiles = parseInt(rule.radius || '25', 10);
+
+        // Geocode each account's address and filter by distance
+        const geocodedRecipients = await Promise.all(
+          recipients.map(async (account) => {
+            // Build address string for geocoding
+            const addressParts = [
+              account.billing_postal_code,
+              account.billing_city,
+              account.billing_state
+            ].filter(Boolean);
+
+            if (addressParts.length === 0) {
+              return { account, inRadius: false };
+            }
+
+            const addressStr = addressParts.join(', ');
+            const coords = await geocodeLocation(addressStr);
+
+            if (!coords) {
+              return { account, inRadius: false };
+            }
+
+            const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
+            return { account, inRadius: distance <= radiusMiles };
+          })
+        );
+
+        recipients = geocodedRecipients
+          .filter(r => r.inRadius)
+          .map(r => r.account);
+      }
+    }
+
     return recipients;
   },
 
@@ -254,14 +369,18 @@ export const massEmailsService = {
       search = ''
     } = filterConfig || {};
 
-    // Check if we need policy filtering (requires client-side filtering)
+    // Check if we need client-side filtering (policy or location filters)
     const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
     const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
     const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
-    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
+    const locationRules = rules.filter(r => r.field === 'location' && r.value);
+    const cityRules = rules.filter(r => r.field === 'city' && r.value);
 
-    // If we need policy filtering, fetch and filter client-side
-    if (needsPolicyFilter) {
+    const needsClientSideFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 ||
+      policyExpirationRules.length > 0 || locationRules.length > 0 || cityRules.length > 0;
+
+    // If we need client-side filtering, fetch and filter
+    if (needsClientSideFilter) {
       const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
       return recipients.length;
     }
@@ -284,6 +403,22 @@ export const massEmailsService = {
         const values = statusRule.value.split(',').filter(v => v);
         if (values.length > 0) {
           query = query.in('account_status', values);
+        }
+      }
+    }
+
+    // Apply state filters at query level
+    const stateRules = rules.filter(r => r.field === 'state' && r.value);
+    if (stateRules.length > 0) {
+      const stateRule = stateRules[0];
+      if (stateRule.operator === 'is') {
+        query = query.ilike('billing_state', stateRule.value);
+      } else if (stateRule.operator === 'is_not') {
+        query = query.not('billing_state', 'ilike', stateRule.value);
+      } else if (stateRule.operator === 'is_any') {
+        const values = stateRule.value.split(',').filter(v => v);
+        if (values.length > 0) {
+          query = query.in('billing_state', values);
         }
       }
     }
