@@ -120,6 +120,7 @@ export {
   useMassEmailBatchesWithStats,
   useMassEmailBatch,
   useMassEmailRecipients,
+  useMassEmailRecipientStats,
   useMassEmailRecipientCount,
   useMassEmailLocationBreakdown,
   useMassEmailBatchStats,

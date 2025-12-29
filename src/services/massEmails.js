@@ -420,9 +420,10 @@ export const massEmailsService = {
   },
 
   /**
-   * Count recipients based on filter config with dynamic rules
+   * Get recipient count and location breakdown in a single call
+   * This avoids duplicate geocoding when both are needed
    */
-  async countRecipients(ownerId, filterConfig) {
+  async getRecipientStats(ownerId, filterConfig) {
     const {
       rules = [],
       notOptedOut = true,
@@ -439,96 +440,21 @@ export const massEmailsService = {
     const needsClientSideFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 ||
       policyExpirationRules.length > 0 || locationRules.length > 0 || cityRules.length > 0;
 
-    // If we need client-side filtering, fetch and filter
-    if (needsClientSideFilter) {
-      const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
-      return recipients.length;
-    }
-
-    // Otherwise, use a count query for efficiency
-    let query = supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId);
-
-    // Apply account status filters
-    const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
-    if (accountStatusRules.length > 0) {
-      const statusRule = accountStatusRules[0];
-      if (statusRule.operator === 'is') {
-        query = query.eq('account_status', statusRule.value);
-      } else if (statusRule.operator === 'is_not') {
-        query = query.neq('account_status', statusRule.value);
-      } else if (statusRule.operator === 'is_any') {
-        const values = statusRule.value.split(',').filter(v => v);
-        if (values.length > 0) {
-          query = query.in('account_status', values);
-        }
-      }
-    }
-
-    // Apply state filters at query level
-    const stateRules = rules.filter(r => r.field === 'state' && r.value);
-    if (stateRules.length > 0) {
-      const stateRule = stateRules[0];
-      if (stateRule.operator === 'is') {
-        query = query.ilike('billing_state', stateRule.value);
-      } else if (stateRule.operator === 'is_not') {
-        query = query.not('billing_state', 'ilike', stateRule.value);
-      } else if (stateRule.operator === 'is_any') {
-        const values = stateRule.value.split(',').filter(v => v);
-        if (values.length > 0) {
-          query = query.in('billing_state', values);
-        }
-      }
-    }
-
-    // Not opted out
-    if (notOptedOut) {
-      query = query.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
-    }
-
-    // Search filter
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
-    }
-
-    const { count, error } = await query;
-    if (error) throw error;
-
-    return count || 0;
-  },
-
-  /**
-   * Get location breakdown of recipients (counts by state and top cities)
-   * When location filter is applied, uses full getRecipients to show accurate breakdown
-   */
-  async getRecipientLocationBreakdown(ownerId, filterConfig) {
-    const {
-      rules = [],
-      notOptedOut = true,
-      search = ''
-    } = filterConfig || {};
-
-    // Check if we have location rules - if so, we need to use getRecipients for accurate counts
-    const locationRules = rules.filter(r => r.field === 'location' && r.value);
-    const hasLocationFilter = locationRules.length > 0;
-
-    // Check if we have any slow filters (policy filters)
-    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
-    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
-    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
-    const needsClientSideFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 ||
-      policyExpirationRules.length > 0 || hasLocationFilter;
-
     let recipients;
+    let count;
 
     if (needsClientSideFilter) {
-      // Use getRecipients for policy/location filtering to get accurate breakdown
+      // Fetch and filter recipients once, use for both count and breakdown
       recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+      count = recipients.length;
     } else {
-      // Fast path: direct query without policy/location filtering
-      let query = supabase
+      // Fast path: use count query and separate location query
+      let countQuery = supabase
+        .from('accounts')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', ownerId);
+
+      let locationQuery = supabase
         .from('accounts')
         .select('billing_city, billing_state')
         .eq('owner_id', ownerId);
@@ -538,48 +464,65 @@ export const massEmailsService = {
       if (accountStatusRules.length > 0) {
         const statusRule = accountStatusRules[0];
         if (statusRule.operator === 'is') {
-          query = query.eq('account_status', statusRule.value);
+          countQuery = countQuery.eq('account_status', statusRule.value);
+          locationQuery = locationQuery.eq('account_status', statusRule.value);
         } else if (statusRule.operator === 'is_not') {
-          query = query.neq('account_status', statusRule.value);
+          countQuery = countQuery.neq('account_status', statusRule.value);
+          locationQuery = locationQuery.neq('account_status', statusRule.value);
         } else if (statusRule.operator === 'is_any') {
           const values = statusRule.value.split(',').filter(v => v);
           if (values.length > 0) {
-            query = query.in('account_status', values);
+            countQuery = countQuery.in('account_status', values);
+            locationQuery = locationQuery.in('account_status', values);
           }
         }
       }
 
-      // Apply state filters
+      // Apply state filters at query level
       const stateRules = rules.filter(r => r.field === 'state' && r.value);
       if (stateRules.length > 0) {
         const stateRule = stateRules[0];
         if (stateRule.operator === 'is') {
-          query = query.ilike('billing_state', stateRule.value);
+          countQuery = countQuery.ilike('billing_state', stateRule.value);
+          locationQuery = locationQuery.ilike('billing_state', stateRule.value);
         } else if (stateRule.operator === 'is_not') {
-          query = query.not('billing_state', 'ilike', stateRule.value);
+          countQuery = countQuery.not('billing_state', 'ilike', stateRule.value);
+          locationQuery = locationQuery.not('billing_state', 'ilike', stateRule.value);
         } else if (stateRule.operator === 'is_any') {
           const values = stateRule.value.split(',').filter(v => v);
           if (values.length > 0) {
-            query = query.in('billing_state', values);
+            countQuery = countQuery.in('billing_state', values);
+            locationQuery = locationQuery.in('billing_state', values);
           }
         }
       }
 
       // Not opted out
       if (notOptedOut) {
-        query = query.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
+        countQuery = countQuery.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
+        locationQuery = locationQuery.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
       }
 
-      const { data: accounts, error } = await query;
-      if (error) throw error;
-      recipients = accounts || [];
+      // Search filter
+      if (search) {
+        countQuery = countQuery.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+
+      // Run both queries in parallel
+      const [countResult, locationResult] = await Promise.all([
+        countQuery,
+        locationQuery
+      ]);
+
+      if (countResult.error) throw countResult.error;
+      if (locationResult.error) throw locationResult.error;
+
+      count = countResult.count || 0;
+      recipients = locationResult.data || [];
     }
 
-    // Count by state (case-insensitive, skip unknown)
-    const stateCounts = {};
+    // Build location breakdown from recipients
     const cityCounts = {};
-
-    // Helper to title case a string
     const titleCase = (str) => {
       if (!str) return '';
       return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -589,14 +532,6 @@ export const massEmailsService = {
       const rawState = (account.billing_state || '').trim();
       const rawCity = (account.billing_city || '').trim();
 
-      // Skip if no state
-      if (rawState) {
-        // Normalize state - uppercase for 2-letter codes, title case otherwise
-        const state = rawState.length === 2 ? rawState.toUpperCase() : titleCase(rawState);
-        stateCounts[state] = (stateCounts[state] || 0) + 1;
-      }
-
-      // Skip if no city
       if (rawCity && rawState) {
         const city = titleCase(rawCity);
         const state = rawState.length === 2 ? rawState.toUpperCase() : titleCase(rawState);
@@ -605,22 +540,36 @@ export const massEmailsService = {
       }
     });
 
-    // Sort and get top entries
-    const stateBreakdown = Object.entries(stateCounts)
-      .map(([state, count]) => ({ state, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-
     const cityBreakdown = Object.entries(cityCounts)
-      .map(([city, count]) => ({ city, count }))
+      .map(([city, cnt]) => ({ city, count: cnt }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     return {
-      total: recipients.length,
-      byState: stateBreakdown,
-      byCity: cityBreakdown
+      count,
+      breakdown: {
+        total: recipients.length,
+        byCity: cityBreakdown
+      }
     };
+  },
+
+  /**
+   * Count recipients based on filter config with dynamic rules
+   * @deprecated Use getRecipientStats instead for better performance
+   */
+  async countRecipients(ownerId, filterConfig) {
+    const stats = await this.getRecipientStats(ownerId, filterConfig);
+    return stats.count;
+  },
+
+  /**
+   * Get location breakdown of recipients
+   * @deprecated Use getRecipientStats instead for better performance
+   */
+  async getRecipientLocationBreakdown(ownerId, filterConfig) {
+    const stats = await this.getRecipientStats(ownerId, filterConfig);
+    return stats.breakdown;
   },
 
   /**

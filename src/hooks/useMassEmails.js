@@ -61,9 +61,10 @@ export function useMassEmailRecipients(filterConfig, options = {}) {
 }
 
 /**
- * Count recipients for a filter config
+ * Get recipient stats (count and breakdown) in a single query
+ * This avoids duplicate geocoding when both are needed
  */
-export function useMassEmailRecipientCount(filterConfig) {
+export function useMassEmailRecipientStats(filterConfig) {
   const ownerId = useOwnerId();
 
   // Create a stable filter key that only includes filter-relevant data
@@ -81,26 +82,41 @@ export function useMassEmailRecipientCount(filterConfig) {
   } : null;
 
   return useQuery({
-    queryKey: ['massEmailRecipientCount', ownerId, stableFilterConfig],
-    queryFn: () => massEmailsService.countRecipients(ownerId, filterConfig),
+    queryKey: ['massEmailRecipientStats', ownerId, stableFilterConfig],
+    queryFn: () => massEmailsService.getRecipientStats(ownerId, filterConfig),
     enabled: !!ownerId && !!filterConfig,
     staleTime: 30000, // Keep data fresh for 30 seconds
     gcTime: 60000, // Cache for 1 minute
-    placeholderData: (previousData) => previousData // Show previous count while loading
+    placeholderData: (previousData) => previousData // Show previous data while loading
   });
 }
 
 /**
+ * Count recipients for a filter config
+ * Uses the combined stats query internally
+ */
+export function useMassEmailRecipientCount(filterConfig) {
+  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig);
+  return {
+    data: data?.count,
+    isLoading,
+    isFetching,
+    error
+  };
+}
+
+/**
  * Get location breakdown of recipients
+ * Uses the combined stats query internally
  */
 export function useMassEmailLocationBreakdown(filterConfig) {
-  const ownerId = useOwnerId();
-
-  return useQuery({
-    queryKey: ['massEmailLocationBreakdown', ownerId, filterConfig],
-    queryFn: () => massEmailsService.getRecipientLocationBreakdown(ownerId, filterConfig),
-    enabled: !!ownerId && !!filterConfig
-  });
+  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig);
+  return {
+    data: data?.breakdown,
+    isLoading,
+    isFetching,
+    error
+  };
 }
 
 /**
