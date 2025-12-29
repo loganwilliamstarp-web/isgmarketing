@@ -242,12 +242,12 @@ export const accountsService = {
     if (!account) return null;
 
     // Get policies - use account_unique_id to match account_id in policies table
-    // Sort by expiration date ascending (nearest future expiration first)
+    // Sort by expiration date descending (furthest expiration first)
     const { data: policies, error: policiesError } = await supabase
       .from('policies')
       .select('*')
       .eq('account_id', accountId)
-      .order('expiration_date', { ascending: true });
+      .order('expiration_date', { ascending: false });
 
     if (policiesError) {
       console.error('Error fetching policies:', policiesError);
