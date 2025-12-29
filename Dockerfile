@@ -15,6 +15,7 @@ COPY . .
 # Build args for Vite env vars
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_GOOGLE_MAPS_API_KEY
 
 # Build the app using node to run vite directly
 RUN node ./node_modules/vite/bin/vite.js build && cp serve.json dist/
