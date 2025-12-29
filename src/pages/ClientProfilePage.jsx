@@ -544,8 +544,6 @@ const ClientProfilePage = ({ t }) => {
             backgroundColor: t.bgCard,
             borderRadius: '12px',
             border: `1px solid ${t.border}`,
-            minHeight: '420px',
-            maxHeight: '420px',
             display: 'flex',
             flexDirection: 'column'
           }}>
