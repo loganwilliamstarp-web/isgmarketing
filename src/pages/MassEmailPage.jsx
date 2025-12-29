@@ -579,15 +579,32 @@ const OPERATORS = {
 // Radius options in miles
 const RADIUS_OPTIONS = [5, 10, 15, 25, 50, 100];
 
-// Map preview component for location filter
+// Map preview component for location filter with radius circle
 const LocationMapPreview = ({ location, radius, theme: t }) => {
   if (!location) return null;
 
-  // Create OpenStreetMap embed URL with marker
-  const zoom = radius <= 10 ? 12 : radius <= 25 ? 11 : radius <= 50 ? 10 : 9;
+  // Calculate zoom level and bounding box based on radius
+  // Adjust zoom: smaller radius = higher zoom
+  const zoom = radius <= 5 ? 13 : radius <= 10 ? 12 : radius <= 15 ? 11.5 : radius <= 25 ? 11 : radius <= 50 ? 10 : 9;
+
+  // Calculate degrees per mile at this latitude (rough approximation)
+  // At equator: 1 degree lat ≈ 69 miles, 1 degree lng ≈ 69 miles
+  // At higher latitudes, longitude degrees cover less distance
+  const latDegPerMile = 1 / 69;
+  const lngDegPerMile = 1 / (69 * Math.cos(parseFloat(location.lat) * Math.PI / 180));
+
+  // Bounding box needs to be slightly larger than the radius
+  const bboxPadding = 1.3; // 30% padding around the radius
+  const latOffset = radius * latDegPerMile * bboxPadding;
+  const lngOffset = radius * lngDegPerMile * bboxPadding;
+
   const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
-    `${parseFloat(location.lng) - (radius / 50)},${parseFloat(location.lat) - (radius / 50)},${parseFloat(location.lng) + (radius / 50)},${parseFloat(location.lat) + (radius / 50)}`
+    `${parseFloat(location.lng) - lngOffset},${parseFloat(location.lat) - latOffset},${parseFloat(location.lng) + lngOffset},${parseFloat(location.lat) + latOffset}`
   )}&layer=mapnik&marker=${location.lat},${location.lng}`;
+
+  // Calculate the circle size as a percentage of the container
+  // Since we added 30% padding, the radius should take up about 1/1.3 = ~77% of half the container
+  const circlePercentage = (1 / bboxPadding) * 100;
 
   return (
     <div style={{
@@ -608,15 +625,45 @@ const LocationMapPreview = ({ location, radius, theme: t }) => {
         <span>📍</span>
         <span>{location.display} - {radius} mile radius</span>
       </div>
-      <iframe
-        title="Location Preview"
-        src={mapUrl}
-        style={{
-          width: '100%',
-          height: '200px',
-          border: 'none'
-        }}
-      />
+      <div style={{ position: 'relative', width: '100%', height: '200px' }}>
+        <iframe
+          title="Location Preview"
+          src={mapUrl}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none'
+          }}
+        />
+        {/* Radius circle overlay */}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: `${circlePercentage}%`,
+          height: `${circlePercentage}%`,
+          borderRadius: '50%',
+          border: `3px solid ${t.primary}`,
+          backgroundColor: `${t.primary}20`,
+          pointerEvents: 'none',
+          boxSizing: 'border-box'
+        }} />
+        {/* Center marker dot */}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          backgroundColor: t.primary,
+          border: '2px solid #fff',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+          pointerEvents: 'none'
+        }} />
+      </div>
     </div>
   );
 };
