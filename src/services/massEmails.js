@@ -52,19 +52,37 @@ const geocodeLocation = async (location, skipDelay = false) => {
   return null;
 };
 
-// Batch geocode with rate limiting - processes in sequence to respect rate limits
-const batchGeocode = async (locations) => {
+// Batch geocode with rate limiting - processes in parallel batches for speed
+const batchGeocode = async (locations, maxConcurrent = 5) => {
   const results = {};
   const uniqueLocations = [...new Set(locations.filter(Boolean))];
 
+  // First, get all cached results immediately
+  const uncachedLocations = [];
   for (const location of uniqueLocations) {
     if (geocodeCache[location]) {
       results[location] = geocodeCache[location];
     } else {
-      const coords = await geocodeLocation(location, false);
-      if (coords) {
-        results[location] = coords;
+      uncachedLocations.push(location);
+    }
+  }
+
+  // Process uncached locations in parallel batches
+  for (let i = 0; i < uncachedLocations.length; i += maxConcurrent) {
+    const batch = uncachedLocations.slice(i, i + maxConcurrent);
+    const batchResults = await Promise.all(
+      batch.map(location => geocodeLocation(location, true))
+    );
+
+    batch.forEach((location, idx) => {
+      if (batchResults[idx]) {
+        results[location] = batchResults[idx];
       }
+    });
+
+    // Small delay between batches to respect rate limits
+    if (i + maxConcurrent < uncachedLocations.length) {
+      await delay(200);
     }
   }
 
@@ -356,10 +374,7 @@ export const massEmailsService = {
         const [centerLat, centerLng] = rule.value.split(',').map(parseFloat);
         const radiusMiles = parseInt(rule.radius || '25', 10);
 
-        console.log('Location filter:', { centerLat, centerLng, radiusMiles, recipientCount: recipients.length });
-
         // Build unique location strings for batch geocoding
-        // Always include state for better accuracy
         const locationMap = {};
         recipients.forEach(account => {
           const zip = (account.billing_postal_code || '').trim();
@@ -369,7 +384,6 @@ export const massEmailsService = {
           // Build location key with state for accuracy
           let locationKey = '';
           if (zip && state) {
-            // Use "zip, state" format for best geocoding accuracy
             locationKey = `${zip}, ${state}, USA`;
           } else if (city && state) {
             locationKey = `${city}, ${state}, USA`;
@@ -384,36 +398,21 @@ export const massEmailsService = {
 
         // Get unique locations and batch geocode them
         const uniqueLocations = [...new Set(Object.values(locationMap))];
-        console.log('Unique locations to geocode:', uniqueLocations.length);
 
-        // Batch geocode all unique locations
+        // Batch geocode all unique locations (processes in parallel)
         const geocodeResults = await batchGeocode(uniqueLocations);
-        console.log('Geocode results:', Object.keys(geocodeResults).length);
 
         // Filter recipients by distance
         recipients = recipients.filter(account => {
           const locationKey = locationMap[account.account_unique_id];
-          if (!locationKey) {
-            console.log('No location for account:', account.account_unique_id);
-            return false;
-          }
+          if (!locationKey) return false;
 
           const coords = geocodeResults[locationKey];
-          if (!coords) {
-            console.log('No geocode result for:', locationKey);
-            return false;
-          }
+          if (!coords) return false;
 
           const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
-          const inRadius = distance <= radiusMiles;
-
-          // Debug: log accounts that pass the filter with their distance
-          console.log(`${account.name}: ${locationKey} -> ${distance.toFixed(1)} miles ${inRadius ? '✓' : '✗'}`);
-
-          return inRadius;
+          return distance <= radiusMiles;
         });
-
-        console.log('Recipients after location filter:', recipients.length);
       }
     }
 
