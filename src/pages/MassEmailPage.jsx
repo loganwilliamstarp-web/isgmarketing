@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { MapContainer, TileLayer, Circle, Marker, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   useTemplates,
   useTemplateMutations,
@@ -8,6 +11,14 @@ import {
   useMassEmailRecipientCount,
   useMassEmailMutations
 } from '../hooks';
+
+// Fix Leaflet default marker icon issue
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -579,92 +590,202 @@ const OPERATORS = {
 // Radius options in miles
 const RADIUS_OPTIONS = [5, 10, 15, 25, 50, 100];
 
-// Map preview component for location filter with radius circle
-const LocationMapPreview = ({ location, radius, theme: t }) => {
+// Component to fit map bounds to circle
+const FitBoundsToCircle = ({ center, radiusMeters }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center && radiusMeters) {
+      // Create a circle to get its bounds
+      const circle = L.circle(center, { radius: radiusMeters });
+      const bounds = circle.getBounds();
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }, [map, center, radiusMeters]);
+
+  return null;
+};
+
+// Map modal component with Leaflet
+const LocationMapModal = ({ location, radius, onClose, theme: t }) => {
   if (!location) return null;
 
-  // Calculate zoom level and bounding box based on radius
-  // Adjust zoom: smaller radius = higher zoom
-  const zoom = radius <= 5 ? 13 : radius <= 10 ? 12 : radius <= 15 ? 11.5 : radius <= 25 ? 11 : radius <= 50 ? 10 : 9;
-
-  // Calculate degrees per mile at this latitude (rough approximation)
-  // At equator: 1 degree lat ≈ 69 miles, 1 degree lng ≈ 69 miles
-  // At higher latitudes, longitude degrees cover less distance
-  const latDegPerMile = 1 / 69;
-  const lngDegPerMile = 1 / (69 * Math.cos(parseFloat(location.lat) * Math.PI / 180));
-
-  // Bounding box needs to be slightly larger than the radius
-  const bboxPadding = 1.3; // 30% padding around the radius
-  const latOffset = radius * latDegPerMile * bboxPadding;
-  const lngOffset = radius * lngDegPerMile * bboxPadding;
-
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
-    `${parseFloat(location.lng) - lngOffset},${parseFloat(location.lat) - latOffset},${parseFloat(location.lng) + lngOffset},${parseFloat(location.lat) + latOffset}`
-  )}&layer=mapnik&marker=${location.lat},${location.lng}`;
-
-  // Calculate the circle size as a percentage of the container
-  // Since we added 30% padding, the radius should take up about 1/1.3 = ~77% of half the container
-  const circlePercentage = (1 / bboxPadding) * 100;
+  const lat = parseFloat(location.lat);
+  const lng = parseFloat(location.lng);
+  const radiusMeters = radius * 1609.34; // Convert miles to meters
 
   return (
-    <div style={{
-      marginTop: '12px',
-      borderRadius: '8px',
-      overflow: 'hidden',
-      border: `1px solid ${t.border}`
-    }}>
+    <>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          zIndex: 1000
+        }}
+        onClick={onClose}
+      />
       <div style={{
-        padding: '8px 12px',
-        backgroundColor: t.bgHover,
-        fontSize: '12px',
-        color: t.textSecondary,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '600px',
+        maxWidth: '95vw',
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        border: `1px solid ${t.border}`,
+        zIndex: 1001,
+        overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
-        <span>📍</span>
-        <span>{location.display} - {radius} mile radius</span>
+        {/* Header */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: t.text }}>
+              Location Radius Preview
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: t.textSecondary }}>
+              📍 {location.display}
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              padding: '6px 12px',
+              backgroundColor: `${t.primary}15`,
+              color: t.primary,
+              borderRadius: '6px',
+              fontWeight: '600',
+              fontSize: '14px'
+            }}>
+              {radius} mile radius
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: t.textMuted,
+                cursor: 'pointer',
+                fontSize: '24px',
+                lineHeight: 1
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Map */}
+        <div style={{ height: '400px' }}>
+          <MapContainer
+            center={[lat, lng]}
+            zoom={10}
+            style={{ height: '100%', width: '100%' }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <Circle
+              center={[lat, lng]}
+              radius={radiusMeters}
+              pathOptions={{
+                color: t.primary,
+                fillColor: t.primary,
+                fillOpacity: 0.2,
+                weight: 3
+              }}
+            />
+            <Marker position={[lat, lng]} />
+            <FitBoundsToCircle center={[lat, lng]} radiusMeters={radiusMeters} />
+          </MapContainer>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 20px',
+          borderTop: `1px solid ${t.border}`,
+          backgroundColor: t.bgHover,
+          fontSize: '12px',
+          color: t.textSecondary,
+          textAlign: 'center'
+        }}>
+          Recipients within this area will be included in your campaign
+        </div>
       </div>
-      <div style={{ position: 'relative', width: '100%', height: '200px' }}>
-        <iframe
-          title="Location Preview"
-          src={mapUrl}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none'
-          }}
+    </>
+  );
+};
+
+// Simple preview button that opens the map modal
+const LocationMapPreview = ({ location, radius, theme: t }) => {
+  const [showModal, setShowModal] = useState(false);
+
+  if (!location) return null;
+
+  return (
+    <>
+      <div style={{
+        marginTop: '12px',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: `1px solid ${t.border}`
+      }}>
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: t.bgHover,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '20px' }}>📍</span>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                {location.display}
+              </div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>
+                {radius} mile radius
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '6px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            🗺️ View Map
+          </button>
+        </div>
+      </div>
+
+      {showModal && (
+        <LocationMapModal
+          location={location}
+          radius={radius}
+          onClose={() => setShowModal(false)}
+          theme={t}
         />
-        {/* Radius circle overlay */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: `${circlePercentage}%`,
-          height: `${circlePercentage}%`,
-          borderRadius: '50%',
-          border: `3px solid ${t.primary}`,
-          backgroundColor: `${t.primary}20`,
-          pointerEvents: 'none',
-          boxSizing: 'border-box'
-        }} />
-        {/* Center marker dot */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '12px',
-          height: '12px',
-          borderRadius: '50%',
-          backgroundColor: t.primary,
-          border: '2px solid #fff',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-          pointerEvents: 'none'
-        }} />
-      </div>
-    </div>
+      )}
+    </>
   );
 };
 
