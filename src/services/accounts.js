@@ -1,0 +1,490 @@
+// src/services/accounts.js
+import { supabase } from '../lib/supabase';
+
+export const accountsService = {
+  /**
+   * Get paginated accounts for an owner with policy counts
+   */
+  async getAll(ownerId, options = {}) {
+    const { status, search, limit = 25, offset = 0, expiring = false } = options;
+    
+    // First get total count (without pagination)
+    let countQuery = supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId);
+    
+    if (status) {
+      // Map UI filter values to database values
+      let dbStatus = status;
+      if (status.toLowerCase() === 'prior') dbStatus = 'prior_customer';
+      
+      countQuery = countQuery.ilike('account_status', dbStatus);
+    }
+    
+    if (search) {
+      countQuery = countQuery.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    
+    const { count: totalCount, error: countError } = await countQuery;
+    if (countError) throw countError;
+    
+    // Get paginated accounts
+    let query = supabase
+      .from('accounts')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('name')
+      .range(offset, offset + limit - 1);
+    
+    if (status) {
+      // Map UI filter values to database values
+      let dbStatus = status;
+      if (status.toLowerCase() === 'prior') dbStatus = 'prior_customer';
+      
+      query = query.ilike('account_status', dbStatus);
+    }
+    
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    
+    const { data: accounts, error } = await query;
+    if (error) throw error;
+    
+    if (!accounts || accounts.length === 0) {
+      return { accounts: [], total: totalCount || 0 };
+    }
+    
+    // Get policies for these accounts (including expiration dates)
+    const accountIds = accounts.map(a => a.account_unique_id).filter(Boolean);
+    
+    // Calculate date range for expiring policies (next 30 days)
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const futureStr = thirtyDaysFromNow.toISOString().split('T')[0];
+    
+    if (accountIds.length > 0) {
+      const { data: policies, error: policyError } = await supabase
+        .from('policies')
+        .select('account_id, policy_lob, policy_status, expiration_date')
+        .in('account_id', accountIds);
+      
+      if (!policyError && policies) {
+        // Group policies by account
+        const policyMap = {};
+        policies.forEach(p => {
+          if (!policyMap[p.account_id]) {
+            policyMap[p.account_id] = [];
+          }
+          
+          // Check if this policy is expiring in next 30 days
+          const isExpiring = p.expiration_date && 
+            p.expiration_date >= todayStr && 
+            p.expiration_date <= futureStr;
+          
+          policyMap[p.account_id].push({
+            policy_type: p.policy_lob,
+            status: p.policy_status?.toLowerCase() || 'unknown',
+            expiration_date: p.expiration_date,
+            is_expiring: isExpiring
+          });
+        });
+        
+        // Attach policies to accounts
+        accounts.forEach(account => {
+          account.policies = policyMap[account.account_unique_id] || [];
+          account.policy_count = account.policies.length;
+          account.has_expiring_policy = account.policies.some(p => p.is_expiring);
+          account.expiring_policy_count = account.policies.filter(p => p.is_expiring).length;
+        });
+      }
+    }
+    
+    // If filtering by expiring, we need to filter client-side and adjust count
+    if (expiring) {
+      const expiringAccounts = accounts.filter(a => a.has_expiring_policy);
+      return { accounts: expiringAccounts, total: expiringAccounts.length, isExpiringFilter: true };
+    }
+    
+    return { accounts, total: totalCount || 0 };
+  },
+
+  /**
+   * Get account stats summary - counts ALL accounts for user using proper count queries
+   */
+  async getStats(ownerId) {
+    // Use count queries instead of fetching all rows (Supabase has 1000 row default limit)
+    
+    // Total count
+    const { count: totalCount, error: totalError } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId);
+    
+    if (totalError) throw totalError;
+    
+    // Count by status - use ilike for case-insensitive matching
+    const { count: customerCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'customer');
+    
+    const { count: prospectCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'prospect');
+    
+    // Match "prior_customer" or "prior"
+    const { count: priorCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'prior_customer');
+    
+    const { count: leadCount } = await supabase
+      .from('accounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', ownerId)
+      .ilike('account_status', 'lead');
+    
+    // For expiring policies count, we'll estimate based on a sample
+    // This avoids hitting row limits when there are many expiring policies
+    let expiringAccountCount = 0;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const futureDate = thirtyDaysFromNow.toISOString().split('T')[0];
+    
+    // Count expiring policies first
+    const { count: expiringPolicyCount } = await supabase
+      .from('policies')
+      .select('*', { count: 'exact', head: true })
+      .gte('expiration_date', today)
+      .lte('expiration_date', futureDate);
+    
+    // If there are expiring policies, get unique account IDs (up to 1000)
+    // and count how many belong to this owner
+    if (expiringPolicyCount && expiringPolicyCount > 0) {
+      // Get distinct account_ids with expiring policies
+      const { data: expiringPolicies } = await supabase
+        .from('policies')
+        .select('account_id')
+        .gte('expiration_date', today)
+        .lte('expiration_date', futureDate)
+        .limit(5000); // Get more to improve accuracy
+      
+      if (expiringPolicies && expiringPolicies.length > 0) {
+        // Get unique account IDs
+        const uniqueAccountIds = [...new Set(expiringPolicies.map(p => p.account_id).filter(Boolean))];
+        
+        if (uniqueAccountIds.length > 0) {
+          // Count in batches of 100 to avoid query limits
+          let ownerExpiringCount = 0;
+          const batchSize = 100;
+          
+          for (let i = 0; i < uniqueAccountIds.length; i += batchSize) {
+            const batch = uniqueAccountIds.slice(i, i + batchSize);
+            const { count } = await supabase
+              .from('accounts')
+              .select('*', { count: 'exact', head: true })
+              .eq('owner_id', ownerId)
+              .in('account_unique_id', batch);
+            
+            ownerExpiringCount += (count || 0);
+          }
+          
+          expiringAccountCount = ownerExpiringCount;
+        }
+      }
+    }
+    
+    return {
+      Customer: customerCount || 0,
+      Prospect: prospectCount || 0,
+      Prior: priorCount || 0,
+      Lead: leadCount || 0,
+      total: totalCount || 0,
+      expiring: expiringAccountCount
+    };
+  },
+
+  /**
+   * Get account by ID
+   */
+  async getById(accountId) {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('account_unique_id', accountId)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get account with policies
+   */
+  async getByIdWithPolicies(accountId) {
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('account_unique_id', accountId)
+      .single();
+    
+    if (accountError) throw accountError;
+    if (!account) return null;
+
+    // Get policies - use account_unique_id to match account_id in policies table
+    // Join with carriers table to get carrier name
+    const { data: policies, error: policiesError } = await supabase
+      .from('policies')
+      .select(`
+        *,
+        carrier:carriers!policies_carrier_id_fkey(carrier_unique_id, name)
+      `)
+      .eq('account_id', accountId)
+      .order('expiration_date', { ascending: false });
+    
+    if (policiesError) {
+      console.error('Error fetching policies:', policiesError);
+      return { ...account, policies: [] };
+    }
+
+    return {
+      ...account,
+      policies: policies || []
+    };
+  },
+
+  /**
+   * Get account with email history
+   */
+  async getByIdWithEmailHistory(ownerId, accountId) {
+    const account = await this.getByIdWithPolicies(accountId);
+    
+    // Get email logs
+    const { data: emailLogs, error: logsError } = await supabase
+      .from('email_logs')
+      .select(`
+        *,
+        template:email_templates(id, name),
+        automation:automations(id, name)
+      `)
+      .eq('owner_id', ownerId)
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    
+    if (logsError) throw logsError;
+
+    // Get enrollments
+    const { data: enrollments, error: enrollError } = await supabase
+      .from('automation_enrollments')
+      .select(`
+        *,
+        automation:automations(id, name, category)
+      `)
+      .eq('account_id', accountId)
+      .order('enrolled_at', { ascending: false });
+    
+    if (enrollError) throw enrollError;
+
+    return {
+      ...account,
+      emailLogs,
+      enrollments
+    };
+  },
+
+  /**
+   * Search accounts
+   */
+  async search(ownerId, searchTerm, limit = 20) {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name')
+      .eq('owner_id', ownerId)
+      .or(`name.ilike.%${searchTerm}%,person_email.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,primary_contact_first_name.ilike.%${searchTerm}%,primary_contact_last_name.ilike.%${searchTerm}%`)
+      .limit(limit);
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get accounts by status
+   */
+  async getByStatus(ownerId, status, options = {}) {
+    const { limit = 50, offset = 0 } = options;
+    
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .eq('account_status', status)
+      .order('name')
+      .range(offset, offset + limit - 1);
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get customers (active accounts)
+   */
+  async getCustomers(ownerId, options = {}) {
+    return this.getByStatus(ownerId, 'customer', options);
+  },
+
+  /**
+   * Get prospects
+   */
+  async getProspects(ownerId, options = {}) {
+    return this.getByStatus(ownerId, 'prospect', options);
+  },
+
+  /**
+   * Get prior customers
+   */
+  async getPriorCustomers(ownerId, options = {}) {
+    return this.getByStatus(ownerId, 'prior_customer', options);
+  },
+
+  /**
+   * Get accounts with expiring policies
+   */
+  async getWithExpiringPolicies(ownerId, daysOut = 45) {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysOut);
+    
+    const { data, error } = await supabase
+      .from('policies')
+      .select(`
+        policy_unique_id,
+        policy_lob,
+        expiration_date,
+        policy_status,
+        account_id,
+        account:accounts!policies_account_id_fkey(
+          account_unique_id,
+          name,
+          person_email,
+          email,
+          owner_id,
+          primary_contact_first_name,
+          primary_contact_last_name
+        )
+      `)
+      .eq('policy_status', 'Active')
+      .lte('expiration_date', futureDate.toISOString().split('T')[0])
+      .gte('expiration_date', new Date().toISOString().split('T')[0])
+      .order('expiration_date');
+    
+    if (error) throw error;
+    
+    // Filter by owner_id on the account side
+    return data.filter(p => p.account?.owner_id === ownerId);
+  },
+
+  /**
+   * Get account counts by status
+   */
+  async getCounts(ownerId) {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('account_status')
+      .eq('owner_id', ownerId);
+    
+    if (error) throw error;
+
+    const counts = {
+      total: data.length,
+      customer: 0,
+      prospect: 0,
+      prior_customer: 0,
+      other: 0
+    };
+
+    data.forEach(a => {
+      const status = a.account_status?.toLowerCase().replace(' ', '_') || 'other';
+      if (counts[status] !== undefined) {
+        counts[status]++;
+      } else {
+        counts.other++;
+      }
+    });
+
+    return counts;
+  },
+
+  /**
+   * Get email address for account
+   */
+  getEmail(account) {
+    return account.person_email || account.email;
+  },
+
+  /**
+   * Get display name for account
+   */
+  getDisplayName(account) {
+    if (account.primary_contact_first_name) {
+      return `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim();
+    }
+    return account.name;
+  },
+
+  /**
+   * Check if account can receive marketing emails
+   */
+  canReceiveMarketing(account) {
+    return (
+      account.user_subscribed_to_marketing !== false &&
+      account.person_has_opted_out_of_email !== true &&
+      (account.person_email || account.email)
+    );
+  },
+
+  /**
+   * Get accounts eligible for automation
+   */
+  async getEligibleForAutomation(ownerId, filterConfig) {
+    // Get accounts first
+    let query = supabase
+      .from('accounts')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
+      .not('person_email', 'is', null);
+    
+    const { data: accounts, error } = await query;
+    if (error) throw error;
+    
+    // Get policies separately for each account if needed
+    const accountIds = accounts.map(a => a.account_unique_id);
+    const { data: policies, error: policyError } = await supabase
+      .from('policies')
+      .select('*')
+      .in('account_id', accountIds);
+    
+    if (policyError) throw policyError;
+    
+    // Attach policies to accounts
+    const accountsWithPolicies = accounts.map(account => ({
+      ...account,
+      policies: policies.filter(p => p.account_id === account.account_unique_id)
+    }));
+    
+    // Additional filtering would happen here based on filterConfig
+    return accountsWithPolicies.filter(account => this.canReceiveMarketing(account));
+  }
+};
+
+export default accountsService;
