@@ -359,11 +359,24 @@ export const massEmailsService = {
         console.log('Location filter:', { centerLat, centerLng, radiusMiles, recipientCount: recipients.length });
 
         // Build unique location strings for batch geocoding
+        // Always include state for better accuracy
         const locationMap = {};
         recipients.forEach(account => {
-          // Prefer zip code for geocoding (more reliable)
-          const locationKey = account.billing_postal_code ||
-            [account.billing_city, account.billing_state].filter(Boolean).join(', ');
+          const zip = (account.billing_postal_code || '').trim();
+          const city = (account.billing_city || '').trim();
+          const state = (account.billing_state || '').trim();
+
+          // Build location key with state for accuracy
+          let locationKey = '';
+          if (zip && state) {
+            // Use "zip, state" format for best geocoding accuracy
+            locationKey = `${zip}, ${state}, USA`;
+          } else if (city && state) {
+            locationKey = `${city}, ${state}, USA`;
+          } else if (zip) {
+            locationKey = `${zip}, USA`;
+          }
+
           if (locationKey) {
             locationMap[account.account_unique_id] = locationKey;
           }
@@ -393,9 +406,10 @@ export const massEmailsService = {
 
           const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
           const inRadius = distance <= radiusMiles;
-          if (inRadius) {
-            console.log('Account in radius:', account.name, distance.toFixed(1), 'miles');
-          }
+
+          // Debug: log accounts that pass the filter with their distance
+          console.log(`${account.name}: ${locationKey} -> ${distance.toFixed(1)} miles ${inRadius ? '✓' : '✗'}`);
+
           return inRadius;
         });
 
@@ -561,20 +575,34 @@ export const massEmailsService = {
       recipients = accounts || [];
     }
 
-    // Count by state
+    // Count by state (case-insensitive, skip unknown)
     const stateCounts = {};
     const cityCounts = {};
 
+    // Helper to title case a string
+    const titleCase = (str) => {
+      if (!str) return '';
+      return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    };
+
     recipients.forEach(account => {
-      const state = account.billing_state || 'Unknown';
-      const city = account.billing_city || 'Unknown';
+      const rawState = (account.billing_state || '').trim();
+      const rawCity = (account.billing_city || '').trim();
 
-      stateCounts[state] = (stateCounts[state] || 0) + 1;
+      // Skip if no state
+      if (rawState) {
+        // Normalize state - uppercase for 2-letter codes, title case otherwise
+        const state = rawState.length === 2 ? rawState.toUpperCase() : titleCase(rawState);
+        stateCounts[state] = (stateCounts[state] || 0) + 1;
+      }
 
-      const cityKey = city !== 'Unknown' && state !== 'Unknown'
-        ? `${city}, ${state}`
-        : city;
-      cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
+      // Skip if no city
+      if (rawCity && rawState) {
+        const city = titleCase(rawCity);
+        const state = rawState.length === 2 ? rawState.toUpperCase() : titleCase(rawState);
+        const cityKey = `${city}, ${state}`;
+        cityCounts[cityKey] = (cityCounts[cityKey] || 0) + 1;
+      }
     });
 
     // Sort and get top entries
