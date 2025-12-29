@@ -34,57 +34,41 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
   }
 };
 
-// Geocode a zip code or city using multiple services with fallback
+// Geocode using Zippopotam.us API (free, no rate limits, CORS-friendly)
 const geocodeLocation = async (location, skipDelay = false) => {
   if (geocodeCache[location]) {
     return geocodeCache[location];
   }
 
-  // Try Photon API first (faster, no strict rate limits)
-  try {
-    const response = await fetchWithTimeout(
-      `https://photon.komoot.io/api/?q=${encodeURIComponent(location)}&limit=1&lang=en`,
-      {},
-      3000 // 3 second timeout
-    );
-    const data = await response.json();
-    if (data?.features?.length > 0) {
-      const coords = data.features[0].geometry.coordinates;
-      const result = { lat: coords[1], lng: coords[0] };
-      geocodeCache[location] = result;
-      return result;
-    }
-  } catch (err) {
-    // Photon failed, try Nominatim as fallback
-  }
-
-  // Fallback to Nominatim
-  try {
-    if (!skipDelay) {
-      await delay(100);
-    }
-
-    const response = await fetchWithTimeout(
-      `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(location)}&limit=1`,
-      {
-        headers: {
-          'User-Agent': 'ISGMarketing/1.0'
+  // Extract ZIP code from location string (format: "75001, TX, USA" or "75001, USA")
+  const zipMatch = location.match(/^(\d{5})/);
+  if (zipMatch) {
+    const zip = zipMatch[1];
+    try {
+      const response = await fetchWithTimeout(
+        `https://api.zippopotam.us/us/${zip}`,
+        {},
+        3000
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.places?.length > 0) {
+          const place = data.places[0];
+          const result = {
+            lat: parseFloat(place.latitude),
+            lng: parseFloat(place.longitude)
+          };
+          geocodeCache[location] = result;
+          return result;
         }
-      },
-      3000 // 3 second timeout
-    );
-    const data = await response.json();
-    if (data && data.length > 0) {
-      const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      geocodeCache[location] = result;
-      return result;
-    }
-  } catch (err) {
-    // Don't log abort errors (timeouts)
-    if (err.name !== 'AbortError') {
-      console.error('Geocoding error:', err);
+      }
+    } catch (err) {
+      // Zippopotam failed, continue to fallback
     }
   }
+
+  // Fallback: Try to geocode city/state using a different approach
+  // For now, return null if ZIP lookup fails - the account will be excluded from radius filter
   return null;
 };
 
