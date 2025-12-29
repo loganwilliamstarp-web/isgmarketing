@@ -17,9 +17,6 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 // Simple geocoding cache to avoid repeated lookups
 const geocodeCache = {};
 
-// Rate-limited geocode function with delay
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 // Fetch with timeout helper
 const fetchWithTimeout = async (url, options, timeout = 5000) => {
   const controller = new AbortController();
@@ -34,82 +31,40 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
   }
 };
 
-// Geocode using multiple ZIP code APIs with fallback
-const geocodeLocation = async (location, skipDelay = false) => {
+// Google Maps API key
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+// Geocode using Google Maps Geocoding API
+const geocodeLocation = async (location) => {
   if (geocodeCache[location]) {
     return geocodeCache[location];
   }
 
-  // Extract ZIP code from location string (format: "75001, TX, USA" or "75001, USA")
-  const zipMatch = location.match(/^(\d{5})/);
-  if (!zipMatch) {
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn('Google Maps API key not configured');
+    geocodeCache[location] = null;
     return null;
   }
 
-  const zip = zipMatch[1];
-
-  // Try Zippopotam.us first
   try {
+    const query = encodeURIComponent(location);
     const response = await fetchWithTimeout(
-      `https://api.zippopotam.us/us/${zip}`,
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${GOOGLE_MAPS_API_KEY}`,
       {},
-      3000
+      5000
     );
+
     if (response.ok) {
       const data = await response.json();
-      if (data?.places?.length > 0) {
-        const place = data.places[0];
-        const result = {
-          lat: parseFloat(place.latitude),
-          lng: parseFloat(place.longitude)
-        };
+      if (data.status === 'OK' && data.results?.length > 0) {
+        const { lat, lng } = data.results[0].geometry.location;
+        const result = { lat, lng };
         geocodeCache[location] = result;
         return result;
       }
     }
   } catch (err) {
-    // Zippopotam failed, try next
-  }
-
-  // Try ZipCodeAPI.com (public endpoint)
-  try {
-    const response = await fetchWithTimeout(
-      `https://www.zipcodeapi.com/rest/demo/info.json/${zip}/degrees`,
-      {},
-      3000
-    );
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.lat && data?.lng) {
-        const result = { lat: data.lat, lng: data.lng };
-        geocodeCache[location] = result;
-        return result;
-      }
-    }
-  } catch (err) {
-    // ZipCodeAPI failed, try next
-  }
-
-  // Try geocode.xyz (free tier)
-  try {
-    const response = await fetchWithTimeout(
-      `https://geocode.xyz/${zip}?json=1&auth=free`,
-      {},
-      3000
-    );
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.latt && data?.longt && !data.error) {
-        const result = {
-          lat: parseFloat(data.latt),
-          lng: parseFloat(data.longt)
-        };
-        geocodeCache[location] = result;
-        return result;
-      }
-    }
-  } catch (err) {
-    // geocode.xyz failed
+    console.warn('Geocoding failed for:', location, err.message);
   }
 
   // Cache null result to avoid repeated failed lookups
@@ -141,7 +96,7 @@ const batchGeocode = async (locations, maxConcurrent = 10) => {
   for (let i = 0; i < uncachedLocations.length; i += maxConcurrent) {
     const batch = uncachedLocations.slice(i, i + maxConcurrent);
     const batchResults = await Promise.all(
-      batch.map(location => geocodeLocation(location, true))
+      batch.map(location => geocodeLocation(location))
     );
 
     batch.forEach((location, idx) => {
@@ -149,11 +104,6 @@ const batchGeocode = async (locations, maxConcurrent = 10) => {
         results[location] = batchResults[idx];
       }
     });
-
-    // Small delay between batches to respect rate limits
-    if (i + maxConcurrent < uncachedLocations.length) {
-      await delay(100);
-    }
   }
 
   return results;
