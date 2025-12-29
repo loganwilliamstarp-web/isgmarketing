@@ -264,15 +264,15 @@ export const accountsService = {
       if (carrierIds.length > 0) {
         const { data: carriers, error: carrierError } = await supabase
           .from('carriers')
-          .select('carrier_unique_id, name')
-          .in('carrier_unique_id', carrierIds);
+          .select('id, name')
+          .in('id', carrierIds);
 
         console.log('Carriers fetch result:', { carriers, error: carrierError });
 
         if (carriers && carriers.length > 0) {
           const carrierMap = {};
           carriers.forEach(c => {
-            carrierMap[c.carrier_unique_id] = c.name;
+            carrierMap[c.id] = c.name;
           });
           console.log('Carrier map:', carrierMap);
 
