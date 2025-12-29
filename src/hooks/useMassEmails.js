@@ -66,10 +66,27 @@ export function useMassEmailRecipients(filterConfig, options = {}) {
 export function useMassEmailRecipientCount(filterConfig) {
   const ownerId = useOwnerId();
 
+  // Create a stable filter key that only includes filter-relevant data
+  // This prevents unnecessary refetches when locationData object changes
+  const stableFilterConfig = filterConfig ? {
+    rules: filterConfig.rules?.map(r => ({
+      field: r.field,
+      operator: r.operator,
+      value: r.value,
+      value2: r.value2,
+      radius: r.radius
+    })),
+    search: filterConfig.search,
+    notOptedOut: filterConfig.notOptedOut
+  } : null;
+
   return useQuery({
-    queryKey: ['massEmailRecipientCount', ownerId, filterConfig],
+    queryKey: ['massEmailRecipientCount', ownerId, stableFilterConfig],
     queryFn: () => massEmailsService.countRecipients(ownerId, filterConfig),
-    enabled: !!ownerId && !!filterConfig
+    enabled: !!ownerId && !!filterConfig,
+    staleTime: 30000, // Keep data fresh for 30 seconds
+    gcTime: 60000, // Cache for 1 minute
+    placeholderData: (previousData) => previousData // Show previous count while loading
   });
 }
 
