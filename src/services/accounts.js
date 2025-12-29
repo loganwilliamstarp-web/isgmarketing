@@ -242,19 +242,41 @@ export const accountsService = {
     if (!account) return null;
 
     // Get policies - use account_unique_id to match account_id in policies table
-    // Join with carriers table to get carrier name
     const { data: policies, error: policiesError } = await supabase
       .from('policies')
-      .select(`
-        *,
-        carrier:carriers!policies_carrier_id_fkey(carrier_unique_id, name)
-      `)
+      .select('*')
       .eq('account_id', accountId)
       .order('expiration_date', { ascending: false });
-    
+
     if (policiesError) {
       console.error('Error fetching policies:', policiesError);
       return { ...account, policies: [] };
+    }
+
+    // If we have policies with carrier_id, fetch carrier names
+    if (policies && policies.length > 0) {
+      const carrierIds = [...new Set(policies.map(p => p.carrier_id).filter(Boolean))];
+
+      if (carrierIds.length > 0) {
+        const { data: carriers } = await supabase
+          .from('carriers')
+          .select('carrier_unique_id, name')
+          .in('carrier_unique_id', carrierIds);
+
+        if (carriers) {
+          const carrierMap = {};
+          carriers.forEach(c => {
+            carrierMap[c.carrier_unique_id] = c.name;
+          });
+
+          // Attach carrier name to each policy
+          policies.forEach(p => {
+            if (p.carrier_id && carrierMap[p.carrier_id]) {
+              p.carrier = { name: carrierMap[p.carrier_id] };
+            }
+          });
+        }
+      }
     }
 
     return {
