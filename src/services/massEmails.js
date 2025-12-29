@@ -20,6 +20,20 @@ const geocodeCache = {};
 // Rate-limited geocode function with delay
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Fetch with timeout helper
+const fetchWithTimeout = async (url, options, timeout = 5000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+};
+
 // Geocode a zip code or city using Nominatim with rate limiting
 const geocodeLocation = async (location, skipDelay = false) => {
   if (geocodeCache[location]) {
@@ -32,13 +46,14 @@ const geocodeLocation = async (location, skipDelay = false) => {
       await delay(100); // Small delay to be respectful of rate limits
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(location)}&limit=1`,
       {
         headers: {
           'User-Agent': 'ISGMarketing/1.0'
         }
-      }
+      },
+      5000 // 5 second timeout
     );
     const data = await response.json();
     if (data && data.length > 0) {
@@ -47,13 +62,16 @@ const geocodeLocation = async (location, skipDelay = false) => {
       return result;
     }
   } catch (err) {
-    console.error('Geocoding error:', err);
+    // Don't log abort errors (timeouts)
+    if (err.name !== 'AbortError') {
+      console.error('Geocoding error:', err);
+    }
   }
   return null;
 };
 
 // Batch geocode with rate limiting - processes in parallel batches for speed
-const batchGeocode = async (locations, maxConcurrent = 5) => {
+const batchGeocode = async (locations, maxConcurrent = 10) => {
   const results = {};
   const uniqueLocations = [...new Set(locations.filter(Boolean))];
 
@@ -65,6 +83,11 @@ const batchGeocode = async (locations, maxConcurrent = 5) => {
     } else {
       uncachedLocations.push(location);
     }
+  }
+
+  // If all results are cached, return immediately
+  if (uncachedLocations.length === 0) {
+    return results;
   }
 
   // Process uncached locations in parallel batches
@@ -82,7 +105,7 @@ const batchGeocode = async (locations, maxConcurrent = 5) => {
 
     // Small delay between batches to respect rate limits
     if (i + maxConcurrent < uncachedLocations.length) {
-      await delay(200);
+      await delay(100);
     }
   }
 
