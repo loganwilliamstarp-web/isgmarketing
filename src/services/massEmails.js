@@ -501,7 +501,7 @@ export const massEmailsService = {
 
   /**
    * Get location breakdown of recipients (counts by state and top cities)
-   * This uses a simplified query without location/geocoding filters for speed
+   * When location filter is applied, uses full getRecipients to show accurate breakdown
    */
   async getRecipientLocationBreakdown(ownerId, filterConfig) {
     const {
@@ -510,21 +510,22 @@ export const massEmailsService = {
       search = ''
     } = filterConfig || {};
 
-    // Filter out location rules since we don't want to geocode for breakdown
-    const nonLocationRules = rules.filter(r => r.field !== 'location');
-    const simplifiedConfig = { ...filterConfig, rules: nonLocationRules };
+    // Check if we have location rules - if so, we need to use getRecipients for accurate counts
+    const locationRules = rules.filter(r => r.field === 'location' && r.value);
+    const hasLocationFilter = locationRules.length > 0;
 
     // Check if we have any slow filters (policy filters)
-    const policyTypeRules = nonLocationRules.filter(r => r.field === 'policy_type' && r.value);
-    const policyCountRules = nonLocationRules.filter(r => r.field === 'policy_count' && r.value);
-    const policyExpirationRules = nonLocationRules.filter(r => r.field === 'policy_expiration' && r.value);
-    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
+    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
+    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
+    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
+    const needsClientSideFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 ||
+      policyExpirationRules.length > 0 || hasLocationFilter;
 
     let recipients;
 
-    if (needsPolicyFilter) {
-      // Use getRecipients for policy filtering but without location rules
-      recipients = await this.getRecipients(ownerId, simplifiedConfig, { limit: 10000 });
+    if (needsClientSideFilter) {
+      // Use getRecipients for policy/location filtering to get accurate breakdown
+      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
     } else {
       // Fast path: direct query without policy/location filtering
       let query = supabase
@@ -533,7 +534,7 @@ export const massEmailsService = {
         .eq('owner_id', ownerId);
 
       // Apply account status filters
-      const accountStatusRules = nonLocationRules.filter(r => r.field === 'account_status' && r.value);
+      const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
       if (accountStatusRules.length > 0) {
         const statusRule = accountStatusRules[0];
         if (statusRule.operator === 'is') {
@@ -549,7 +550,7 @@ export const massEmailsService = {
       }
 
       // Apply state filters
-      const stateRules = nonLocationRules.filter(r => r.field === 'state' && r.value);
+      const stateRules = rules.filter(r => r.field === 'state' && r.value);
       if (stateRules.length > 0) {
         const stateRule = stateRules[0];
         if (stateRule.operator === 'is') {
