@@ -7,7 +7,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --legacy-peer-deps
+
+# Ensure node_modules binaries are executable
+RUN chmod -R +x node_modules/.bin/ 2>/dev/null || true
 
 # Copy source code
 COPY . .
@@ -16,8 +19,8 @@ COPY . .
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 
-# Build the app
-RUN npm run build
+# Build the app using npx to ensure binary is found
+RUN npx vite build && cp serve.json dist/
 
 # Production stage
 FROM node:18-alpine AS runner

@@ -17,15 +17,28 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 // Simple geocoding cache to avoid repeated lookups
 const geocodeCache = {};
 
-// Geocode a zip code or city using Nominatim
-const geocodeLocation = async (location) => {
+// Rate-limited geocode function with delay
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Geocode a zip code or city using Nominatim with rate limiting
+const geocodeLocation = async (location, skipDelay = false) => {
   if (geocodeCache[location]) {
     return geocodeCache[location];
   }
 
   try {
+    // Rate limit: Nominatim requires max 1 request per second
+    if (!skipDelay) {
+      await delay(100); // Small delay to be respectful of rate limits
+    }
+
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(location)}&limit=1`
+      `https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&q=${encodeURIComponent(location)}&limit=1`,
+      {
+        headers: {
+          'User-Agent': 'ISGMarketing/1.0'
+        }
+      }
     );
     const data = await response.json();
     if (data && data.length > 0) {
@@ -37,6 +50,25 @@ const geocodeLocation = async (location) => {
     console.error('Geocoding error:', err);
   }
   return null;
+};
+
+// Batch geocode with rate limiting - processes in sequence to respect rate limits
+const batchGeocode = async (locations) => {
+  const results = {};
+  const uniqueLocations = [...new Set(locations.filter(Boolean))];
+
+  for (const location of uniqueLocations) {
+    if (geocodeCache[location]) {
+      results[location] = geocodeCache[location];
+    } else {
+      const coords = await geocodeLocation(location, false);
+      if (coords) {
+        results[location] = coords;
+      }
+    }
+  }
+
+  return results;
 };
 
 export const massEmailsService = {
@@ -324,35 +356,50 @@ export const massEmailsService = {
         const [centerLat, centerLng] = rule.value.split(',').map(parseFloat);
         const radiusMiles = parseInt(rule.radius || '25', 10);
 
-        // Geocode each account's address and filter by distance
-        const geocodedRecipients = await Promise.all(
-          recipients.map(async (account) => {
-            // Build address string for geocoding
-            const addressParts = [
-              account.billing_postal_code,
-              account.billing_city,
-              account.billing_state
-            ].filter(Boolean);
+        console.log('Location filter:', { centerLat, centerLng, radiusMiles, recipientCount: recipients.length });
 
-            if (addressParts.length === 0) {
-              return { account, inRadius: false };
-            }
+        // Build unique location strings for batch geocoding
+        const locationMap = {};
+        recipients.forEach(account => {
+          // Prefer zip code for geocoding (more reliable)
+          const locationKey = account.billing_postal_code ||
+            [account.billing_city, account.billing_state].filter(Boolean).join(', ');
+          if (locationKey) {
+            locationMap[account.account_unique_id] = locationKey;
+          }
+        });
 
-            const addressStr = addressParts.join(', ');
-            const coords = await geocodeLocation(addressStr);
+        // Get unique locations and batch geocode them
+        const uniqueLocations = [...new Set(Object.values(locationMap))];
+        console.log('Unique locations to geocode:', uniqueLocations.length);
 
-            if (!coords) {
-              return { account, inRadius: false };
-            }
+        // Batch geocode all unique locations
+        const geocodeResults = await batchGeocode(uniqueLocations);
+        console.log('Geocode results:', Object.keys(geocodeResults).length);
 
-            const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
-            return { account, inRadius: distance <= radiusMiles };
-          })
-        );
+        // Filter recipients by distance
+        recipients = recipients.filter(account => {
+          const locationKey = locationMap[account.account_unique_id];
+          if (!locationKey) {
+            console.log('No location for account:', account.account_unique_id);
+            return false;
+          }
 
-        recipients = geocodedRecipients
-          .filter(r => r.inRadius)
-          .map(r => r.account);
+          const coords = geocodeResults[locationKey];
+          if (!coords) {
+            console.log('No geocode result for:', locationKey);
+            return false;
+          }
+
+          const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
+          const inRadius = distance <= radiusMiles;
+          if (inRadius) {
+            console.log('Account in radius:', account.name, distance.toFixed(1), 'miles');
+          }
+          return inRadius;
+        });
+
+        console.log('Recipients after location filter:', recipients.length);
       }
     }
 
