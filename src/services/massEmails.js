@@ -34,7 +34,7 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
   }
 };
 
-// Geocode using Zippopotam.us API (free, no rate limits, CORS-friendly)
+// Geocode using multiple ZIP code APIs with fallback
 const geocodeLocation = async (location, skipDelay = false) => {
   if (geocodeCache[location]) {
     return geocodeCache[location];
@@ -42,33 +42,78 @@ const geocodeLocation = async (location, skipDelay = false) => {
 
   // Extract ZIP code from location string (format: "75001, TX, USA" or "75001, USA")
   const zipMatch = location.match(/^(\d{5})/);
-  if (zipMatch) {
-    const zip = zipMatch[1];
-    try {
-      const response = await fetchWithTimeout(
-        `https://api.zippopotam.us/us/${zip}`,
-        {},
-        3000
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.places?.length > 0) {
-          const place = data.places[0];
-          const result = {
-            lat: parseFloat(place.latitude),
-            lng: parseFloat(place.longitude)
-          };
-          geocodeCache[location] = result;
-          return result;
-        }
-      }
-    } catch (err) {
-      // Zippopotam failed, continue to fallback
-    }
+  if (!zipMatch) {
+    return null;
   }
 
-  // Fallback: Try to geocode city/state using a different approach
-  // For now, return null if ZIP lookup fails - the account will be excluded from radius filter
+  const zip = zipMatch[1];
+
+  // Try Zippopotam.us first
+  try {
+    const response = await fetchWithTimeout(
+      `https://api.zippopotam.us/us/${zip}`,
+      {},
+      3000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.places?.length > 0) {
+        const place = data.places[0];
+        const result = {
+          lat: parseFloat(place.latitude),
+          lng: parseFloat(place.longitude)
+        };
+        geocodeCache[location] = result;
+        return result;
+      }
+    }
+  } catch (err) {
+    // Zippopotam failed, try next
+  }
+
+  // Try ZipCodeAPI.com (public endpoint)
+  try {
+    const response = await fetchWithTimeout(
+      `https://www.zipcodeapi.com/rest/demo/info.json/${zip}/degrees`,
+      {},
+      3000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.lat && data?.lng) {
+        const result = { lat: data.lat, lng: data.lng };
+        geocodeCache[location] = result;
+        return result;
+      }
+    }
+  } catch (err) {
+    // ZipCodeAPI failed, try next
+  }
+
+  // Try geocode.xyz (free tier)
+  try {
+    const response = await fetchWithTimeout(
+      `https://geocode.xyz/${zip}?json=1&auth=free`,
+      {},
+      3000
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.latt && data?.longt && !data.error) {
+        const result = {
+          lat: parseFloat(data.latt),
+          lng: parseFloat(data.longt)
+        };
+        geocodeCache[location] = result;
+        return result;
+      }
+    }
+  } catch (err) {
+    // geocode.xyz failed
+  }
+
+  // Cache null result to avoid repeated failed lookups
+  geocodeCache[location] = null;
   return null;
 };
 
