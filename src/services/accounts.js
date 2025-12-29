@@ -253,30 +253,45 @@ export const accountsService = {
       return { ...account, policies: [] };
     }
 
-    // If we have policies with carrier_id, fetch carrier names
+    // If we have policies, fetch carrier and producer names
     if (policies && policies.length > 0) {
       const carrierIds = [...new Set(policies.map(p => p.carrier_id).filter(Boolean))];
+      const producerIds = [...new Set(policies.map(p => p.producer_id).filter(Boolean))];
 
-      if (carrierIds.length > 0) {
-        const { data: carriers } = await supabase
-          .from('carriers')
-          .select('carrier_unique_id, name')
-          .in('carrier_unique_id', carrierIds);
+      // Fetch carriers and producers in parallel
+      const [carriersResult, producersResult] = await Promise.all([
+        carrierIds.length > 0
+          ? supabase.from('carriers').select('carrier_unique_id, name').in('carrier_unique_id', carrierIds)
+          : { data: [] },
+        producerIds.length > 0
+          ? supabase.from('producers').select('producer_unique_id, name').in('producer_unique_id', producerIds)
+          : { data: [] }
+      ]);
 
-        if (carriers) {
-          const carrierMap = {};
-          carriers.forEach(c => {
-            carrierMap[c.carrier_unique_id] = c.name;
-          });
-
-          // Attach carrier name to each policy
-          policies.forEach(p => {
-            if (p.carrier_id && carrierMap[p.carrier_id]) {
-              p.carrier = { name: carrierMap[p.carrier_id] };
-            }
-          });
-        }
+      // Build lookup maps
+      const carrierMap = {};
+      if (carriersResult.data) {
+        carriersResult.data.forEach(c => {
+          carrierMap[c.carrier_unique_id] = c.name;
+        });
       }
+
+      const producerMap = {};
+      if (producersResult.data) {
+        producersResult.data.forEach(p => {
+          producerMap[p.producer_unique_id] = p.name;
+        });
+      }
+
+      // Attach carrier and producer names to each policy
+      policies.forEach(p => {
+        if (p.carrier_id && carrierMap[p.carrier_id]) {
+          p.carrier = { name: carrierMap[p.carrier_id] };
+        }
+        if (p.producer_id && producerMap[p.producer_id]) {
+          p.producer = { name: producerMap[p.producer_id] };
+        }
+      });
     }
 
     return {
