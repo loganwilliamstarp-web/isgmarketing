@@ -595,10 +595,14 @@ const FitBoundsToCircle = ({ center, radiusMeters }) => {
   const map = useMap();
 
   useEffect(() => {
-    if (center && radiusMeters) {
-      // Create a circle to get its bounds
-      const circle = L.circle(center, { radius: radiusMeters });
-      const bounds = circle.getBounds();
+    if (center && radiusMeters && map) {
+      // Calculate bounds manually using the center and radius
+      // radiusMeters in degrees (rough approximation: 1 degree ≈ 111km at equator)
+      const radiusDegrees = radiusMeters / 111320;
+      const bounds = L.latLngBounds(
+        [center[0] - radiusDegrees, center[1] - radiusDegrees],
+        [center[0] + radiusDegrees, center[1] + radiusDegrees]
+      );
       map.fitBounds(bounds, { padding: [20, 20] });
     }
   }, [map, center, radiusMeters]);
