@@ -98,27 +98,31 @@ export const massEmailsService = {
   },
 
   /**
-   * Get recipients based on filter config
+   * Get recipients based on filter config with advanced filtering
    */
   async getRecipients(ownerId, filterConfig, options = {}) {
-    const { limit = 100, offset = 0, countOnly = false } = options;
-    const { statuses = [], hasEmail = true, notOptedOut = true, search = '' } = filterConfig || {};
+    const { limit = 100, offset = 0 } = options;
+    const {
+      statuses = [],
+      notOptedOut = true,
+      search = '',
+      policyTypes = [],
+      hasPolicy = false,
+      hasExpiringPolicy = false,
+      hasNoPolicy = false,
+      expirationFrom = '',
+      expirationTo = ''
+    } = filterConfig || {};
 
-    // Build the query
+    // Get accounts first
     let query = supabase
       .from('accounts')
-      .select(countOnly ? '*' : 'account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email',
-        countOnly ? { count: 'exact', head: true } : undefined)
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email')
       .eq('owner_id', ownerId);
 
     // Filter by statuses
     if (statuses.length > 0) {
       query = query.in('account_status', statuses);
-    }
-
-    // Must have email
-    if (hasEmail) {
-      query = query.or('person_email.neq.,email.neq.');
     }
 
     // Not opted out
@@ -131,33 +135,123 @@ export const massEmailsService = {
       query = query.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    if (countOnly) {
-      const { count, error } = await query;
-      if (error) throw error;
-      return { count };
-    }
-
-    // Apply pagination for data query
+    // Apply pagination
     query = query.order('name').range(offset, offset + limit - 1);
 
-    const { data, error } = await query;
+    const { data: accounts, error } = await query;
     if (error) throw error;
 
     // Filter to only include accounts with valid emails
-    const recipients = data.filter(account => {
+    let recipients = accounts.filter(account => {
       const email = account.person_email || account.email;
       return email && email.includes('@');
     });
+
+    // If we have policy-related filters, we need to fetch policies
+    const needsPolicyFilter = policyTypes.length > 0 || hasPolicy || hasExpiringPolicy || hasNoPolicy || expirationFrom || expirationTo;
+
+    if (needsPolicyFilter && recipients.length > 0) {
+      const accountIds = recipients.map(a => a.account_unique_id);
+
+      // Fetch policies for these accounts
+      let policyQuery = supabase
+        .from('policies')
+        .select('account_id, policy_lob, expiration_date, policy_status')
+        .in('account_id', accountIds);
+
+      const { data: policies, error: policyError } = await policyQuery;
+      if (policyError) throw policyError;
+
+      // Group policies by account
+      const policyMap = {};
+      policies.forEach(p => {
+        if (!policyMap[p.account_id]) {
+          policyMap[p.account_id] = [];
+        }
+        policyMap[p.account_id].push(p);
+      });
+
+      // Calculate date thresholds
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+      // Apply policy filters
+      recipients = recipients.filter(account => {
+        const accountPolicies = policyMap[account.account_unique_id] || [];
+
+        // Has no policy filter
+        if (hasNoPolicy) {
+          return accountPolicies.length === 0;
+        }
+
+        // Has at least one policy filter
+        if (hasPolicy && accountPolicies.length === 0) {
+          return false;
+        }
+
+        // Policy type filter
+        if (policyTypes.length > 0) {
+          const hasMatchingPolicy = accountPolicies.some(p =>
+            policyTypes.some(type => p.policy_lob?.toLowerCase().includes(type.toLowerCase()))
+          );
+          if (!hasMatchingPolicy) return false;
+        }
+
+        // Has expiring policy filter (next 30 days)
+        if (hasExpiringPolicy) {
+          const hasExpiring = accountPolicies.some(p =>
+            p.expiration_date && p.expiration_date >= today && p.expiration_date <= thirtyDaysStr
+          );
+          if (!hasExpiring) return false;
+        }
+
+        // Custom expiration date range
+        if (expirationFrom || expirationTo) {
+          const hasMatchingExpiration = accountPolicies.some(p => {
+            if (!p.expiration_date) return false;
+            if (expirationFrom && p.expiration_date < expirationFrom) return false;
+            if (expirationTo && p.expiration_date > expirationTo) return false;
+            return true;
+          });
+          if (!hasMatchingExpiration) return false;
+        }
+
+        return true;
+      });
+    }
 
     return recipients;
   },
 
   /**
-   * Count recipients based on filter config
+   * Count recipients based on filter config with advanced filtering
    */
   async countRecipients(ownerId, filterConfig) {
-    const { statuses = [], hasEmail = true, notOptedOut = true, search = '' } = filterConfig || {};
+    const {
+      statuses = [],
+      notOptedOut = true,
+      search = '',
+      policyTypes = [],
+      hasPolicy = false,
+      hasExpiringPolicy = false,
+      hasNoPolicy = false,
+      expirationFrom = '',
+      expirationTo = ''
+    } = filterConfig || {};
 
+    // Check if we need policy filtering
+    const needsPolicyFilter = policyTypes.length > 0 || hasPolicy || hasExpiringPolicy || hasNoPolicy || expirationFrom || expirationTo;
+
+    // If we need policy filtering, we have to fetch and filter client-side
+    if (needsPolicyFilter) {
+      // Fetch all matching accounts (up to a reasonable limit for counting)
+      const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+      return recipients.length;
+    }
+
+    // Otherwise, use a count query for efficiency
     let query = supabase
       .from('accounts')
       .select('*', { count: 'exact', head: true })
@@ -194,8 +288,8 @@ export const massEmailsService = {
     if (!batch) throw new Error('Batch not found');
     if (batch.status !== 'Draft') throw new Error('Can only schedule draft batches');
 
-    // Get recipients
-    const recipients = await this.getRecipients(ownerId, batch.filter_config);
+    // Get recipients (fetch more for actual sending)
+    const recipients = await this.getRecipients(ownerId, batch.filter_config, { limit: 10000 });
     if (recipients.length === 0) throw new Error('No recipients match the filter');
 
     const sendTime = scheduledFor || new Date().toISOString();

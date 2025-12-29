@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   useTemplates,
+  useTemplateMutations,
   useMassEmailBatchesWithStats,
   useMassEmailRecipients,
   useMassEmailRecipientCount,
@@ -37,6 +38,251 @@ const StatusBadge = ({ status, theme: t }) => {
     }}>
       {status}
     </span>
+  );
+};
+
+// Template Editor Modal (reused from TemplatesPage pattern)
+const TemplateEditorModal = ({ template, onSave, onClose, theme: t }) => {
+  const [name, setName] = useState(template?.name || '');
+  const [subject, setSubject] = useState(template?.subject || '');
+  const [body, setBody] = useState(template?.body_html || template?.body_text || '');
+  const [category, setCategory] = useState(template?.category || 'general');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const savedTemplate = await onSave({
+        name,
+        subject,
+        body_html: body,
+        body_text: body.replace(/<[^>]*>/g, ''),
+        category
+      });
+      onClose(savedTemplate);
+    } catch (err) {
+      console.error('Failed to save template:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const mergeFields = [
+    { key: '{{first_name}}', label: 'First Name' },
+    { key: '{{last_name}}', label: 'Last Name' },
+    { key: '{{company_name}}', label: 'Company Name' },
+    { key: '{{email}}', label: 'Email' },
+    { key: '{{policy_type}}', label: 'Policy Type' },
+    { key: '{{policy_expiration}}', label: 'Expiration Date' },
+    { key: '{{agent_name}}', label: 'Agent Name' },
+    { key: '{{agent_phone}}', label: 'Agent Phone' },
+  ];
+
+  const insertMergeField = (field) => {
+    setBody(body + field);
+  };
+
+  return (
+    <>
+      <div
+        style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 200 }}
+        onClick={() => onClose(null)}
+      />
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '800px',
+        maxWidth: '95vw',
+        maxHeight: '90vh',
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        border: `1px solid ${t.border}`,
+        zIndex: 201,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
+            {template ? 'Edit Template' : 'Create New Template'}
+          </h2>
+          <button
+            onClick={() => onClose(null)}
+            style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Template Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Welcome Email"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              >
+                <option value="general">General</option>
+                <option value="welcome">Welcome</option>
+                <option value="renewal">Renewal</option>
+                <option value="cross_sell">Cross-Sell</option>
+                <option value="engagement">Engagement</option>
+                <option value="policy_update">Policy Update</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Subject Line
+            </label>
+            <input
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="e.g., Welcome to {{company_name}}!"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Insert Merge Field
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {mergeFields.map((field) => (
+                <button
+                  key={field.key}
+                  onClick={() => insertMergeField(field.key)}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '6px',
+                    color: t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  {field.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Email Body
+            </label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Write your email content here. Use merge fields like {{first_name}} for personalization."
+              rows={10}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                lineHeight: '1.6'
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{
+          padding: '16px 20px',
+          borderTop: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px'
+        }}>
+          <button
+            onClick={() => onClose(null)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.bgHover,
+              border: `1px solid ${t.border}`,
+              borderRadius: '8px',
+              color: t.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !subject}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: isSubmitting ? 'wait' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              opacity: isSubmitting || !name || !subject ? 0.6 : 1
+            }}
+          >
+            {isSubmitting ? 'Creating...' : 'Create & Select'}
+          </button>
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -138,24 +384,44 @@ const StepIndicator = ({ currentStep, steps, theme: t }) => (
   </div>
 );
 
-// Template selection step
-const TemplateStep = ({ selectedTemplate, onSelect, templates, isLoading, theme: t }) => {
+// Template selection step with create new option
+const TemplateStep = ({ selectedTemplate, onSelect, onCreateNew, templates, isLoading, theme: t }) => {
   const [search, setSearch] = useState('');
 
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
     if (!search) return templates;
-    return templates.filter(t =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.subject.toLowerCase().includes(search.toLowerCase())
+    return templates.filter(tmpl =>
+      tmpl.name.toLowerCase().includes(search.toLowerCase()) ||
+      tmpl.subject.toLowerCase().includes(search.toLowerCase())
     );
   }, [templates, search]);
 
   return (
     <div>
-      <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
-        Select an Email Template
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
+          Select an Email Template
+        </h3>
+        <button
+          onClick={onCreateNew}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: t.bgHover,
+            border: `1px solid ${t.border}`,
+            borderRadius: '8px',
+            color: t.text,
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>+</span> Create New Template
+        </button>
+      </div>
 
       <div style={{ position: 'relative', marginBottom: '16px' }}>
         <input
@@ -233,20 +499,32 @@ const TemplateStep = ({ selectedTemplate, onSelect, templates, isLoading, theme:
 
       {!isLoading && filteredTemplates.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
-          {search ? 'No templates match your search' : 'No templates available'}
+          {search ? 'No templates match your search' : 'No templates available. Create one to get started!'}
         </div>
       )}
     </div>
   );
 };
 
-// Recipients filter step
+// Recipients filter step with advanced filters
 const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, theme: t }) => {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const statuses = [
     { value: 'customer', label: 'Customers' },
     { value: 'prospect', label: 'Prospects' },
     { value: 'prior_customer', label: 'Prior Customers' },
     { value: 'lead', label: 'Leads' }
+  ];
+
+  const policyTypes = [
+    { value: 'Auto', label: 'Auto' },
+    { value: 'Home', label: 'Home' },
+    { value: 'Renters', label: 'Renters' },
+    { value: 'Life', label: 'Life' },
+    { value: 'Umbrella', label: 'Umbrella' },
+    { value: 'Commercial', label: 'Commercial' },
+    { value: 'Health', label: 'Health' }
   ];
 
   const toggleStatus = (status) => {
@@ -257,12 +535,29 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
     setFilterConfig({ ...filterConfig, statuses: newStatuses });
   };
 
+  const togglePolicyType = (policyType) => {
+    const currentTypes = filterConfig.policyTypes || [];
+    const newTypes = currentTypes.includes(policyType)
+      ? currentTypes.filter(p => p !== policyType)
+      : [...currentTypes, policyType];
+    setFilterConfig({ ...filterConfig, policyTypes: newTypes });
+  };
+
+  const activeFiltersCount = [
+    (filterConfig.statuses || []).length > 0,
+    (filterConfig.policyTypes || []).length > 0,
+    filterConfig.hasPolicy,
+    filterConfig.hasExpiringPolicy,
+    filterConfig.search
+  ].filter(Boolean).length;
+
   return (
     <div>
       <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
         Filter Recipients
       </h3>
 
+      {/* Account Status Filter */}
       <div style={{
         padding: '20px',
         backgroundColor: t.bgCard,
@@ -301,6 +596,177 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         </p>
       </div>
 
+      {/* Advanced Filters Toggle */}
+      <button
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        style={{
+          width: '100%',
+          padding: '12px 20px',
+          backgroundColor: t.bgCard,
+          border: `1px solid ${t.border}`,
+          borderRadius: '12px',
+          color: t.text,
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: '500',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px'
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Advanced Filters
+          {activeFiltersCount > 0 && (
+            <span style={{
+              padding: '2px 8px',
+              backgroundColor: t.primary,
+              color: '#fff',
+              borderRadius: '10px',
+              fontSize: '11px'
+            }}>
+              {activeFiltersCount} active
+            </span>
+          )}
+        </span>
+        <span style={{ transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+          ▼
+        </span>
+      </button>
+
+      {/* Advanced Filters Content */}
+      {showAdvanced && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
+          {/* Policy Type Filter */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`
+          }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
+              Policy Type
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {policyTypes.map(policy => (
+                <button
+                  key={policy.value}
+                  onClick={() => togglePolicyType(policy.value)}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: (filterConfig.policyTypes || []).includes(policy.value) ? t.primary : t.bgHover,
+                    color: (filterConfig.policyTypes || []).includes(policy.value) ? '#fff' : t.text,
+                    border: `1px solid ${(filterConfig.policyTypes || []).includes(policy.value) ? t.primary : t.border}`,
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {policy.label}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: '12px', color: t.textMuted, marginTop: '8px' }}>
+              {(filterConfig.policyTypes || []).length === 0
+                ? 'All policy types included'
+                : `Only accounts with ${(filterConfig.policyTypes || []).join(', ')} policies`}
+            </p>
+          </div>
+
+          {/* Policy Status Filters */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`
+          }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
+              Policy Conditions
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={filterConfig.hasPolicy || false}
+                  onChange={(e) => setFilterConfig({ ...filterConfig, hasPolicy: e.target.checked })}
+                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
+                />
+                <span style={{ fontSize: '13px', color: t.text }}>Has at least one policy</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={filterConfig.hasExpiringPolicy || false}
+                  onChange={(e) => setFilterConfig({ ...filterConfig, hasExpiringPolicy: e.target.checked })}
+                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
+                />
+                <span style={{ fontSize: '13px', color: t.text }}>Has policy expiring in next 30 days</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={filterConfig.hasNoPolicy || false}
+                  onChange={(e) => setFilterConfig({ ...filterConfig, hasNoPolicy: e.target.checked })}
+                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
+                />
+                <span style={{ fontSize: '13px', color: t.text }}>Has no policies (prospects only)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Expiration Date Range */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`
+          }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
+              Policy Expiration Date Range
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: t.textMuted, display: 'block', marginBottom: '4px' }}>From</label>
+                <input
+                  type="date"
+                  value={filterConfig.expirationFrom || ''}
+                  onChange={(e) => setFilterConfig({ ...filterConfig, expirationFrom: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '6px',
+                    color: t.text,
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: t.textMuted, display: 'block', marginBottom: '4px' }}>To</label>
+                <input
+                  type="date"
+                  value={filterConfig.expirationTo || ''}
+                  onChange={(e) => setFilterConfig({ ...filterConfig, expirationTo: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '6px',
+                    color: t.text,
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Filter */}
       <div style={{
         padding: '20px',
         backgroundColor: t.bgCard,
@@ -328,6 +794,7 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         />
       </div>
 
+      {/* Recipient Count */}
       <div style={{
         padding: '20px',
         backgroundColor: `${t.primary}10`,
@@ -506,9 +973,20 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
 const MassEmailPage = ({ t }) => {
   const { userId } = useParams();
   const [showWizard, setShowWizard] = useState(false);
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [step, setStep] = useState(0);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [filterConfig, setFilterConfig] = useState({ statuses: [], search: '', notOptedOut: true });
+  const [filterConfig, setFilterConfig] = useState({
+    statuses: [],
+    search: '',
+    notOptedOut: true,
+    policyTypes: [],
+    hasPolicy: false,
+    hasExpiringPolicy: false,
+    hasNoPolicy: false,
+    expirationFrom: '',
+    expirationTo: ''
+  });
   const [subject, setSubject] = useState('');
   const [name, setName] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -516,7 +994,7 @@ const MassEmailPage = ({ t }) => {
   const [success, setSuccess] = useState(null);
 
   // Fetch data
-  const { data: templates, isLoading: loadingTemplates } = useTemplates();
+  const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useTemplates();
   const { data: batches, isLoading: loadingBatches, refetch: refetchBatches } = useMassEmailBatchesWithStats();
   const { data: recipientCount, isLoading: loadingCount } = useMassEmailRecipientCount(
     step >= 1 ? filterConfig : null
@@ -527,12 +1005,27 @@ const MassEmailPage = ({ t }) => {
   );
 
   const { createBatch, scheduleBatch } = useMassEmailMutations();
+  const { createTemplate } = useTemplateMutations();
 
   const steps = ['Select Template', 'Filter Recipients', 'Review & Send'];
 
   const handleTemplateSelect = (template) => {
     setSelectedTemplate(template);
     setSubject(template.subject || '');
+  };
+
+  const handleCreateTemplate = async (templateData) => {
+    const newTemplate = await createTemplate.mutateAsync(templateData);
+    await refetchTemplates();
+    return newTemplate;
+  };
+
+  const handleTemplateEditorClose = (savedTemplate) => {
+    setShowTemplateEditor(false);
+    if (savedTemplate) {
+      setSelectedTemplate(savedTemplate);
+      setSubject(savedTemplate.subject || '');
+    }
   };
 
   const handleNext = () => {
@@ -580,7 +1073,17 @@ const MassEmailPage = ({ t }) => {
   const resetWizard = () => {
     setStep(0);
     setSelectedTemplate(null);
-    setFilterConfig({ statuses: [], search: '', notOptedOut: true });
+    setFilterConfig({
+      statuses: [],
+      search: '',
+      notOptedOut: true,
+      policyTypes: [],
+      hasPolicy: false,
+      hasExpiringPolicy: false,
+      hasNoPolicy: false,
+      expirationFrom: '',
+      expirationTo: ''
+    });
     setSubject('');
     setName('');
   };
@@ -679,6 +1182,7 @@ const MassEmailPage = ({ t }) => {
               <TemplateStep
                 selectedTemplate={selectedTemplate}
                 onSelect={handleTemplateSelect}
+                onCreateNew={() => setShowTemplateEditor(true)}
                 templates={templates}
                 isLoading={loadingTemplates}
                 theme={t}
@@ -840,6 +1344,16 @@ const MassEmailPage = ({ t }) => {
             )}
           </div>
         </>
+      )}
+
+      {/* Template Editor Modal */}
+      {showTemplateEditor && (
+        <TemplateEditorModal
+          template={null}
+          onSave={handleCreateTemplate}
+          onClose={handleTemplateEditorClose}
+          theme={t}
+        />
       )}
     </div>
   );
