@@ -114,13 +114,13 @@ const PolicyCard = ({ policy, theme: t }) => {
         </div>
         <div>
           <div style={{ color: t.textMuted, fontSize: '11px', marginBottom: '2px' }}>Expiration</div>
-          <div style={{ 
-            color: daysUntilExpiry !== null && daysUntilExpiry <= 30 ? t.warning : t.text 
+          <div style={{
+            color: daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30 ? t.warning : t.text
           }}>
             {policy.expiration_date ? (
               <>
                 {new Date(policy.expiration_date).toLocaleDateString()}
-                {daysUntilExpiry !== null && daysUntilExpiry <= 30 && (
+                {daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30 && (
                   <span style={{ fontSize: '11px', marginLeft: '6px' }}>
                     ({daysUntilExpiry}d left)
                   </span>
