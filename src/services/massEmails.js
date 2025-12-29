@@ -488,10 +488,78 @@ export const massEmailsService = {
 
   /**
    * Get location breakdown of recipients (counts by state and top cities)
+   * This uses a simplified query without location/geocoding filters for speed
    */
   async getRecipientLocationBreakdown(ownerId, filterConfig) {
-    // Get the actual filtered recipients
-    const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+    const {
+      rules = [],
+      notOptedOut = true,
+      search = ''
+    } = filterConfig || {};
+
+    // Filter out location rules since we don't want to geocode for breakdown
+    const nonLocationRules = rules.filter(r => r.field !== 'location');
+    const simplifiedConfig = { ...filterConfig, rules: nonLocationRules };
+
+    // Check if we have any slow filters (policy filters)
+    const policyTypeRules = nonLocationRules.filter(r => r.field === 'policy_type' && r.value);
+    const policyCountRules = nonLocationRules.filter(r => r.field === 'policy_count' && r.value);
+    const policyExpirationRules = nonLocationRules.filter(r => r.field === 'policy_expiration' && r.value);
+    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
+
+    let recipients;
+
+    if (needsPolicyFilter) {
+      // Use getRecipients for policy filtering but without location rules
+      recipients = await this.getRecipients(ownerId, simplifiedConfig, { limit: 10000 });
+    } else {
+      // Fast path: direct query without policy/location filtering
+      let query = supabase
+        .from('accounts')
+        .select('billing_city, billing_state')
+        .eq('owner_id', ownerId);
+
+      // Apply account status filters
+      const accountStatusRules = nonLocationRules.filter(r => r.field === 'account_status' && r.value);
+      if (accountStatusRules.length > 0) {
+        const statusRule = accountStatusRules[0];
+        if (statusRule.operator === 'is') {
+          query = query.eq('account_status', statusRule.value);
+        } else if (statusRule.operator === 'is_not') {
+          query = query.neq('account_status', statusRule.value);
+        } else if (statusRule.operator === 'is_any') {
+          const values = statusRule.value.split(',').filter(v => v);
+          if (values.length > 0) {
+            query = query.in('account_status', values);
+          }
+        }
+      }
+
+      // Apply state filters
+      const stateRules = nonLocationRules.filter(r => r.field === 'state' && r.value);
+      if (stateRules.length > 0) {
+        const stateRule = stateRules[0];
+        if (stateRule.operator === 'is') {
+          query = query.ilike('billing_state', stateRule.value);
+        } else if (stateRule.operator === 'is_not') {
+          query = query.not('billing_state', 'ilike', stateRule.value);
+        } else if (stateRule.operator === 'is_any') {
+          const values = stateRule.value.split(',').filter(v => v);
+          if (values.length > 0) {
+            query = query.in('billing_state', values);
+          }
+        }
+      }
+
+      // Not opted out
+      if (notOptedOut) {
+        query = query.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
+      }
+
+      const { data: accounts, error } = await query;
+      if (error) throw error;
+      recipients = accounts || [];
+    }
 
     // Count by state
     const stateCounts = {};
