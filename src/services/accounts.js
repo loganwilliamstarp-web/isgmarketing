@@ -253,45 +253,37 @@ export const accountsService = {
       return { ...account, policies: [] };
     }
 
-    // If we have policies, fetch carrier and producer names
+    // If we have policies, fetch carrier names
     if (policies && policies.length > 0) {
+      // Debug: log policy carrier_id values
+      console.log('Policies carrier_id values:', policies.map(p => ({ id: p.policy_unique_id, carrier_id: p.carrier_id })));
+
       const carrierIds = [...new Set(policies.map(p => p.carrier_id).filter(Boolean))];
-      const producerIds = [...new Set(policies.map(p => p.producer_id).filter(Boolean))];
+      console.log('Unique carrier IDs to fetch:', carrierIds);
 
-      // Fetch carriers and producers in parallel
-      const [carriersResult, producersResult] = await Promise.all([
-        carrierIds.length > 0
-          ? supabase.from('carriers').select('carrier_unique_id, name').in('carrier_unique_id', carrierIds)
-          : { data: [] },
-        producerIds.length > 0
-          ? supabase.from('producers').select('producer_unique_id, name').in('producer_unique_id', producerIds)
-          : { data: [] }
-      ]);
+      if (carrierIds.length > 0) {
+        const { data: carriers, error: carrierError } = await supabase
+          .from('carriers')
+          .select('carrier_unique_id, name')
+          .in('carrier_unique_id', carrierIds);
 
-      // Build lookup maps
-      const carrierMap = {};
-      if (carriersResult.data) {
-        carriersResult.data.forEach(c => {
-          carrierMap[c.carrier_unique_id] = c.name;
-        });
-      }
+        console.log('Carriers fetch result:', { carriers, error: carrierError });
 
-      const producerMap = {};
-      if (producersResult.data) {
-        producersResult.data.forEach(p => {
-          producerMap[p.producer_unique_id] = p.name;
-        });
-      }
+        if (carriers && carriers.length > 0) {
+          const carrierMap = {};
+          carriers.forEach(c => {
+            carrierMap[c.carrier_unique_id] = c.name;
+          });
+          console.log('Carrier map:', carrierMap);
 
-      // Attach carrier and producer names to each policy
-      policies.forEach(p => {
-        if (p.carrier_id && carrierMap[p.carrier_id]) {
-          p.carrier = { name: carrierMap[p.carrier_id] };
+          // Attach carrier name to each policy
+          policies.forEach(p => {
+            if (p.carrier_id && carrierMap[p.carrier_id]) {
+              p.carrier = { name: carrierMap[p.carrier_id] };
+            }
+          });
         }
-        if (p.producer_id && producerMap[p.producer_id]) {
-          p.producer = { name: producerMap[p.producer_id] };
-        }
-      });
+      }
     }
 
     return {
