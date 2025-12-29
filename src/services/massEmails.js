@@ -98,21 +98,21 @@ export const massEmailsService = {
   },
 
   /**
-   * Get recipients based on filter config with advanced filtering
+   * Get recipients based on filter config with dynamic rules
    */
   async getRecipients(ownerId, filterConfig, options = {}) {
     const { limit = 100, offset = 0 } = options;
     const {
-      statuses = [],
+      rules = [],
       notOptedOut = true,
-      search = '',
-      policyTypes = [],
-      hasPolicy = false,
-      hasExpiringPolicy = false,
-      hasNoPolicy = false,
-      expirationFrom = '',
-      expirationTo = ''
+      search = ''
     } = filterConfig || {};
+
+    // Parse rules to extract account-level and policy-level filters
+    const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
+    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
+    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
+    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
 
     // Get accounts first
     let query = supabase
@@ -120,9 +120,19 @@ export const massEmailsService = {
       .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email')
       .eq('owner_id', ownerId);
 
-    // Filter by statuses
-    if (statuses.length > 0) {
-      query = query.in('account_status', statuses);
+    // Apply account status filters at query level
+    if (accountStatusRules.length > 0) {
+      const statusRule = accountStatusRules[0]; // Use first rule
+      if (statusRule.operator === 'is') {
+        query = query.eq('account_status', statusRule.value);
+      } else if (statusRule.operator === 'is_not') {
+        query = query.neq('account_status', statusRule.value);
+      } else if (statusRule.operator === 'is_any') {
+        const values = statusRule.value.split(',').filter(v => v);
+        if (values.length > 0) {
+          query = query.in('account_status', values);
+        }
+      }
     }
 
     // Not opted out
@@ -147,19 +157,18 @@ export const massEmailsService = {
       return email && email.includes('@');
     });
 
-    // If we have policy-related filters, we need to fetch policies
-    const needsPolicyFilter = policyTypes.length > 0 || hasPolicy || hasExpiringPolicy || hasNoPolicy || expirationFrom || expirationTo;
+    // Check if we need policy filtering
+    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
 
     if (needsPolicyFilter && recipients.length > 0) {
       const accountIds = recipients.map(a => a.account_unique_id);
 
       // Fetch policies for these accounts
-      let policyQuery = supabase
+      const { data: policies, error: policyError } = await supabase
         .from('policies')
         .select('account_id, policy_lob, expiration_date, policy_status')
         .in('account_id', accountIds);
 
-      const { data: policies, error: policyError } = await policyQuery;
       if (policyError) throw policyError;
 
       // Group policies by account
@@ -171,51 +180,61 @@ export const massEmailsService = {
         policyMap[p.account_id].push(p);
       });
 
-      // Calculate date thresholds
-      const today = new Date().toISOString().split('T')[0];
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
-
       // Apply policy filters
       recipients = recipients.filter(account => {
         const accountPolicies = policyMap[account.account_unique_id] || [];
 
-        // Has no policy filter
-        if (hasNoPolicy) {
-          return accountPolicies.length === 0;
+        // Policy count rules
+        for (const rule of policyCountRules) {
+          const count = accountPolicies.length;
+          const targetCount = parseInt(rule.value, 10);
+          if (rule.operator === 'equals' && count !== targetCount) return false;
+          if (rule.operator === 'greater_than' && count <= targetCount) return false;
+          if (rule.operator === 'less_than' && count >= targetCount) return false;
+          if (rule.operator === 'at_least' && count < targetCount) return false;
         }
 
-        // Has at least one policy filter
-        if (hasPolicy && accountPolicies.length === 0) {
-          return false;
-        }
-
-        // Policy type filter
-        if (policyTypes.length > 0) {
-          const hasMatchingPolicy = accountPolicies.some(p =>
-            policyTypes.some(type => p.policy_lob?.toLowerCase().includes(type.toLowerCase()))
+        // Policy type rules
+        for (const rule of policyTypeRules) {
+          const values = rule.operator === 'is_any' ? rule.value.split(',') : [rule.value];
+          const hasMatch = accountPolicies.some(p =>
+            values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
           );
-          if (!hasMatchingPolicy) return false;
+
+          if (rule.operator === 'is' && !hasMatch) return false;
+          if (rule.operator === 'is_any' && !hasMatch) return false;
+          if (rule.operator === 'is_not' && hasMatch) return false;
         }
 
-        // Has expiring policy filter (next 30 days)
-        if (hasExpiringPolicy) {
-          const hasExpiring = accountPolicies.some(p =>
-            p.expiration_date && p.expiration_date >= today && p.expiration_date <= thirtyDaysStr
-          );
-          if (!hasExpiring) return false;
-        }
+        // Policy expiration rules
+        const today = new Date().toISOString().split('T')[0];
+        for (const rule of policyExpirationRules) {
+          if (rule.operator === 'in_next_days') {
+            const days = parseInt(rule.value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
 
-        // Custom expiration date range
-        if (expirationFrom || expirationTo) {
-          const hasMatchingExpiration = accountPolicies.some(p => {
-            if (!p.expiration_date) return false;
-            if (expirationFrom && p.expiration_date < expirationFrom) return false;
-            if (expirationTo && p.expiration_date > expirationTo) return false;
-            return true;
-          });
-          if (!hasMatchingExpiration) return false;
+            const hasExpiring = accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= today && p.expiration_date <= futureDateStr
+            );
+            if (!hasExpiring) return false;
+          } else if (rule.operator === 'before') {
+            const hasMatch = accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date < rule.value
+            );
+            if (!hasMatch) return false;
+          } else if (rule.operator === 'after') {
+            const hasMatch = accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date > rule.value
+            );
+            if (!hasMatch) return false;
+          } else if (rule.operator === 'between') {
+            const hasMatch = accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= rule.value && p.expiration_date <= (rule.value2 || rule.value)
+            );
+            if (!hasMatch) return false;
+          }
         }
 
         return true;
@@ -226,27 +245,23 @@ export const massEmailsService = {
   },
 
   /**
-   * Count recipients based on filter config with advanced filtering
+   * Count recipients based on filter config with dynamic rules
    */
   async countRecipients(ownerId, filterConfig) {
     const {
-      statuses = [],
+      rules = [],
       notOptedOut = true,
-      search = '',
-      policyTypes = [],
-      hasPolicy = false,
-      hasExpiringPolicy = false,
-      hasNoPolicy = false,
-      expirationFrom = '',
-      expirationTo = ''
+      search = ''
     } = filterConfig || {};
 
-    // Check if we need policy filtering
-    const needsPolicyFilter = policyTypes.length > 0 || hasPolicy || hasExpiringPolicy || hasNoPolicy || expirationFrom || expirationTo;
+    // Check if we need policy filtering (requires client-side filtering)
+    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
+    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
+    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
+    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
 
-    // If we need policy filtering, we have to fetch and filter client-side
+    // If we need policy filtering, fetch and filter client-side
     if (needsPolicyFilter) {
-      // Fetch all matching accounts (up to a reasonable limit for counting)
       const recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
       return recipients.length;
     }
@@ -257,9 +272,20 @@ export const massEmailsService = {
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', ownerId);
 
-    // Filter by statuses
-    if (statuses.length > 0) {
-      query = query.in('account_status', statuses);
+    // Apply account status filters
+    const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
+    if (accountStatusRules.length > 0) {
+      const statusRule = accountStatusRules[0];
+      if (statusRule.operator === 'is') {
+        query = query.eq('account_status', statusRule.value);
+      } else if (statusRule.operator === 'is_not') {
+        query = query.neq('account_status', statusRule.value);
+      } else if (statusRule.operator === 'is_any') {
+        const values = statusRule.value.split(',').filter(v => v);
+        if (values.length > 0) {
+          query = query.in('account_status', values);
+        }
+      }
     }
 
     // Not opted out

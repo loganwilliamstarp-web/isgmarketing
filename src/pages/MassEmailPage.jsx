@@ -506,18 +506,15 @@ const TemplateStep = ({ selectedTemplate, onSelect, onCreateNew, templates, isLo
   );
 };
 
-// Recipients filter step with advanced filters
-const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, theme: t }) => {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const statuses = [
-    { value: 'customer', label: 'Customers' },
-    { value: 'prospect', label: 'Prospects' },
-    { value: 'prior_customer', label: 'Prior Customers' },
-    { value: 'lead', label: 'Leads' }
-  ];
-
-  const policyTypes = [
+// Filter rule definitions
+const FILTER_FIELDS = [
+  { value: 'account_status', label: 'Account Status', type: 'select', options: [
+    { value: 'customer', label: 'Customer' },
+    { value: 'prospect', label: 'Prospect' },
+    { value: 'prior_customer', label: 'Prior Customer' },
+    { value: 'lead', label: 'Lead' }
+  ]},
+  { value: 'policy_type', label: 'Policy Type', type: 'select', options: [
     { value: 'Auto', label: 'Auto' },
     { value: 'Home', label: 'Home' },
     { value: 'Renters', label: 'Renters' },
@@ -525,261 +522,358 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
     { value: 'Umbrella', label: 'Umbrella' },
     { value: 'Commercial', label: 'Commercial' },
     { value: 'Health', label: 'Health' }
-  ];
+  ]},
+  { value: 'policy_count', label: 'Number of Policies', type: 'number' },
+  { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
+];
 
-  const toggleStatus = (status) => {
-    const currentStatuses = filterConfig.statuses || [];
-    const newStatuses = currentStatuses.includes(status)
-      ? currentStatuses.filter(s => s !== status)
-      : [...currentStatuses, status];
-    setFilterConfig({ ...filterConfig, statuses: newStatuses });
+const OPERATORS = {
+  select: [
+    { value: 'is', label: 'is' },
+    { value: 'is_not', label: 'is not' },
+    { value: 'is_any', label: 'is any of' },
+  ],
+  number: [
+    { value: 'equals', label: 'equals' },
+    { value: 'greater_than', label: 'greater than' },
+    { value: 'less_than', label: 'less than' },
+    { value: 'at_least', label: 'at least' },
+  ],
+  date: [
+    { value: 'before', label: 'is before' },
+    { value: 'after', label: 'is after' },
+    { value: 'between', label: 'is between' },
+    { value: 'in_next_days', label: 'is in the next' },
+  ],
+};
+
+// Single filter rule component
+const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
+  const field = FILTER_FIELDS.find(f => f.value === rule.field);
+  const operators = field ? OPERATORS[field.type] : [];
+
+  const selectStyle = {
+    padding: '8px 12px',
+    backgroundColor: t.bgInput,
+    border: `1px solid ${t.border}`,
+    borderRadius: '6px',
+    color: t.text,
+    fontSize: '13px',
+    minWidth: '140px'
   };
 
-  const togglePolicyType = (policyType) => {
-    const currentTypes = filterConfig.policyTypes || [];
-    const newTypes = currentTypes.includes(policyType)
-      ? currentTypes.filter(p => p !== policyType)
-      : [...currentTypes, policyType];
-    setFilterConfig({ ...filterConfig, policyTypes: newTypes });
+  const inputStyle = {
+    padding: '8px 12px',
+    backgroundColor: t.bgInput,
+    border: `1px solid ${t.border}`,
+    borderRadius: '6px',
+    color: t.text,
+    fontSize: '13px',
+    width: '120px'
   };
-
-  const activeFiltersCount = [
-    (filterConfig.statuses || []).length > 0,
-    (filterConfig.policyTypes || []).length > 0,
-    filterConfig.hasPolicy,
-    filterConfig.hasExpiringPolicy,
-    filterConfig.search
-  ].filter(Boolean).length;
 
   return (
-    <div>
-      <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
-        Filter Recipients
-      </h3>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '12px',
+      backgroundColor: t.bgCard,
+      borderRadius: '8px',
+      border: `1px solid ${t.border}`,
+      flexWrap: 'wrap'
+    }}>
+      {index > 0 && (
+        <span style={{
+          fontSize: '12px',
+          color: t.primary,
+          fontWeight: '600',
+          padding: '4px 8px',
+          backgroundColor: `${t.primary}15`,
+          borderRadius: '4px'
+        }}>
+          AND
+        </span>
+      )}
 
-      {/* Account Status Filter */}
-      <div style={{
-        padding: '20px',
-        backgroundColor: t.bgCard,
-        borderRadius: '12px',
-        border: `1px solid ${t.border}`,
-        marginBottom: '16px'
-      }}>
-        <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
-          Account Status
-        </label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {statuses.map(status => (
-            <button
-              key={status.value}
-              onClick={() => toggleStatus(status.value)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: (filterConfig.statuses || []).includes(status.value) ? t.primary : t.bgHover,
-                color: (filterConfig.statuses || []).includes(status.value) ? '#fff' : t.text,
-                border: `1px solid ${(filterConfig.statuses || []).includes(status.value) ? t.primary : t.border}`,
-                borderRadius: '20px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '500',
-                transition: 'all 0.15s'
-              }}
-            >
-              {status.label}
-            </button>
-          ))}
-        </div>
-        <p style={{ fontSize: '12px', color: t.textMuted, marginTop: '8px' }}>
-          {(filterConfig.statuses || []).length === 0
-            ? 'All account types will be included'
-            : `Only ${(filterConfig.statuses || []).join(', ')} accounts will be included`}
-        </p>
-      </div>
-
-      {/* Advanced Filters Toggle */}
-      <button
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        style={{
-          width: '100%',
-          padding: '12px 20px',
-          backgroundColor: t.bgCard,
-          border: `1px solid ${t.border}`,
-          borderRadius: '12px',
-          color: t.text,
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: '500',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px'
-        }}
+      {/* Field selector */}
+      <select
+        value={rule.field || ''}
+        onChange={(e) => onUpdate(index, { ...rule, field: e.target.value, operator: '', value: '' })}
+        style={selectStyle}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          Advanced Filters
-          {activeFiltersCount > 0 && (
-            <span style={{
-              padding: '2px 8px',
-              backgroundColor: t.primary,
-              color: '#fff',
-              borderRadius: '10px',
-              fontSize: '11px'
-            }}>
-              {activeFiltersCount} active
-            </span>
-          )}
-        </span>
-        <span style={{ transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-          ▼
-        </span>
-      </button>
+        <option value="">Select field...</option>
+        {FILTER_FIELDS.map(f => (
+          <option key={f.value} value={f.value}>{f.label}</option>
+        ))}
+      </select>
 
-      {/* Advanced Filters Content */}
-      {showAdvanced && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
-          {/* Policy Type Filter */}
-          <div style={{
-            padding: '20px',
-            backgroundColor: t.bgCard,
-            borderRadius: '12px',
-            border: `1px solid ${t.border}`
-          }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
-              Policy Type
-            </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {policyTypes.map(policy => (
+      {/* Operator selector */}
+      {rule.field && (
+        <select
+          value={rule.operator || ''}
+          onChange={(e) => onUpdate(index, { ...rule, operator: e.target.value })}
+          style={selectStyle}
+        >
+          <option value="">Select condition...</option>
+          {operators.map(op => (
+            <option key={op.value} value={op.value}>{op.label}</option>
+          ))}
+        </select>
+      )}
+
+      {/* Value input - varies by field type */}
+      {rule.field && rule.operator && (
+        <>
+          {field?.type === 'select' && rule.operator !== 'is_any' && (
+            <select
+              value={rule.value || ''}
+              onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+              style={selectStyle}
+            >
+              <option value="">Select value...</option>
+              {field.options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          )}
+
+          {field?.type === 'select' && rule.operator === 'is_any' && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {field.options.map(opt => (
                 <button
-                  key={policy.value}
-                  onClick={() => togglePolicyType(policy.value)}
+                  key={opt.value}
+                  onClick={() => {
+                    const currentValues = rule.value ? rule.value.split(',') : [];
+                    const newValues = currentValues.includes(opt.value)
+                      ? currentValues.filter(v => v !== opt.value)
+                      : [...currentValues, opt.value];
+                    onUpdate(index, { ...rule, value: newValues.join(',') });
+                  }}
                   style={{
-                    padding: '6px 12px',
-                    backgroundColor: (filterConfig.policyTypes || []).includes(policy.value) ? t.primary : t.bgHover,
-                    color: (filterConfig.policyTypes || []).includes(policy.value) ? '#fff' : t.text,
-                    border: `1px solid ${(filterConfig.policyTypes || []).includes(policy.value) ? t.primary : t.border}`,
-                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    backgroundColor: (rule.value || '').split(',').includes(opt.value) ? t.primary : t.bgHover,
+                    color: (rule.value || '').split(',').includes(opt.value) ? '#fff' : t.text,
+                    border: `1px solid ${(rule.value || '').split(',').includes(opt.value) ? t.primary : t.border}`,
+                    borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    transition: 'all 0.15s'
+                    fontSize: '11px'
                   }}
                 >
-                  {policy.label}
+                  {opt.label}
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: '12px', color: t.textMuted, marginTop: '8px' }}>
-              {(filterConfig.policyTypes || []).length === 0
-                ? 'All policy types included'
-                : `Only accounts with ${(filterConfig.policyTypes || []).join(', ')} policies`}
-            </p>
-          </div>
+          )}
 
-          {/* Policy Status Filters */}
-          <div style={{
-            padding: '20px',
-            backgroundColor: t.bgCard,
-            borderRadius: '12px',
-            border: `1px solid ${t.border}`
-          }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
-              Policy Conditions
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={filterConfig.hasPolicy || false}
-                  onChange={(e) => setFilterConfig({ ...filterConfig, hasPolicy: e.target.checked })}
-                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
-                />
-                <span style={{ fontSize: '13px', color: t.text }}>Has at least one policy</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={filterConfig.hasExpiringPolicy || false}
-                  onChange={(e) => setFilterConfig({ ...filterConfig, hasExpiringPolicy: e.target.checked })}
-                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
-                />
-                <span style={{ fontSize: '13px', color: t.text }}>Has policy expiring in next 30 days</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={filterConfig.hasNoPolicy || false}
-                  onChange={(e) => setFilterConfig({ ...filterConfig, hasNoPolicy: e.target.checked })}
-                  style={{ width: '16px', height: '16px', accentColor: t.primary }}
-                />
-                <span style={{ fontSize: '13px', color: t.text }}>Has no policies (prospects only)</span>
-              </label>
-            </div>
-          </div>
+          {field?.type === 'number' && (
+            <input
+              type="number"
+              value={rule.value || ''}
+              onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+              placeholder="0"
+              style={inputStyle}
+            />
+          )}
 
-          {/* Expiration Date Range */}
+          {field?.type === 'date' && rule.operator === 'in_next_days' && (
+            <>
+              <input
+                type="number"
+                value={rule.value || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+                placeholder="30"
+                style={{ ...inputStyle, width: '70px' }}
+              />
+              <span style={{ fontSize: '13px', color: t.textSecondary }}>days</span>
+            </>
+          )}
+
+          {field?.type === 'date' && rule.operator === 'between' && (
+            <>
+              <input
+                type="date"
+                value={rule.value || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+                style={inputStyle}
+              />
+              <span style={{ fontSize: '13px', color: t.textSecondary }}>and</span>
+              <input
+                type="date"
+                value={rule.value2 || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value2: e.target.value })}
+                style={inputStyle}
+              />
+            </>
+          )}
+
+          {field?.type === 'date' && (rule.operator === 'before' || rule.operator === 'after') && (
+            <input
+              type="date"
+              value={rule.value || ''}
+              onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+              style={inputStyle}
+            />
+          )}
+        </>
+      )}
+
+      {/* Remove button */}
+      <button
+        onClick={() => onRemove(index)}
+        style={{
+          marginLeft: 'auto',
+          padding: '6px 10px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          color: t.textMuted,
+          cursor: 'pointer',
+          fontSize: '16px',
+          borderRadius: '4px'
+        }}
+        title="Remove filter"
+      >
+        ×
+      </button>
+    </div>
+  );
+};
+
+// Recipients filter step with dynamic filter builder
+const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, theme: t }) => {
+  const rules = filterConfig.rules || [];
+
+  const addRule = () => {
+    setFilterConfig({
+      ...filterConfig,
+      rules: [...rules, { field: '', operator: '', value: '' }]
+    });
+  };
+
+  const updateRule = (index, updatedRule) => {
+    const newRules = [...rules];
+    newRules[index] = updatedRule;
+    setFilterConfig({ ...filterConfig, rules: newRules });
+  };
+
+  const removeRule = (index) => {
+    const newRules = rules.filter((_, i) => i !== index);
+    setFilterConfig({ ...filterConfig, rules: newRules });
+  };
+
+  const clearAllFilters = () => {
+    setFilterConfig({ ...filterConfig, rules: [], search: '' });
+  };
+
+  // Count complete (valid) filters
+  const completeFiltersCount = rules.filter(r => r.field && r.operator && r.value).length;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
+          Filter Recipients
+        </h3>
+        {(rules.length > 0 || filterConfig.search) && (
+          <button
+            onClick={clearAllFilters}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: 'transparent',
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: t.textSecondary,
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* Filter Rules */}
+      <div style={{
+        padding: '16px',
+        backgroundColor: t.bgHover,
+        borderRadius: '12px',
+        marginBottom: '16px'
+      }}>
+        {rules.length === 0 ? (
           <div style={{
+            textAlign: 'center',
             padding: '20px',
-            backgroundColor: t.bgCard,
-            borderRadius: '12px',
-            border: `1px solid ${t.border}`
+            color: t.textMuted,
+            fontSize: '14px'
           }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
-              Policy Expiration Date Range
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '11px', color: t.textMuted, display: 'block', marginBottom: '4px' }}>From</label>
-                <input
-                  type="date"
-                  value={filterConfig.expirationFrom || ''}
-                  onChange={(e) => setFilterConfig({ ...filterConfig, expirationFrom: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    backgroundColor: t.bgInput,
-                    border: `1px solid ${t.border}`,
-                    borderRadius: '6px',
-                    color: t.text,
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '11px', color: t.textMuted, display: 'block', marginBottom: '4px' }}>To</label>
-                <input
-                  type="date"
-                  value={filterConfig.expirationTo || ''}
-                  onChange={(e) => setFilterConfig({ ...filterConfig, expirationTo: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    backgroundColor: t.bgInput,
-                    border: `1px solid ${t.border}`,
-                    borderRadius: '6px',
-                    color: t.text,
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-            </div>
+            No filters applied. All accounts with valid emails will be included.
           </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+            {rules.map((rule, index) => (
+              <FilterRule
+                key={index}
+                rule={rule}
+                index={index}
+                onUpdate={updateRule}
+                onRemove={removeRule}
+                theme={t}
+              />
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={addRule}
+          style={{
+            width: '100%',
+            padding: '10px',
+            backgroundColor: t.bgCard,
+            border: `1px dashed ${t.border}`,
+            borderRadius: '8px',
+            color: t.primary,
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>+</span> Add Filter
+        </button>
+      </div>
+
+      {/* Quick filter summary */}
+      {completeFiltersCount > 0 && (
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: `${t.primary}10`,
+          borderRadius: '8px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          color: t.text
+        }}>
+          <strong>{completeFiltersCount}</strong> filter{completeFiltersCount !== 1 ? 's' : ''} applied
+          <span style={{ color: t.textSecondary }}> — results update automatically</span>
         </div>
       )}
 
       {/* Search Filter */}
       <div style={{
-        padding: '20px',
+        padding: '16px',
         backgroundColor: t.bgCard,
         borderRadius: '12px',
         border: `1px solid ${t.border}`,
         marginBottom: '16px'
       }}>
-        <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
+        <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '8px' }}>
           Search by Name or Email
         </label>
         <input
           type="text"
-          placeholder="Search accounts..."
+          placeholder="Type to search..."
           value={filterConfig.search || ''}
           onChange={(e) => setFilterConfig({ ...filterConfig, search: e.target.value })}
           style={{
@@ -806,7 +900,7 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
       }}>
         <div>
           <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
-            Estimated Recipients
+            Matching Recipients
           </div>
           <div style={{ fontSize: '12px', color: t.textSecondary }}>
             Accounts with valid emails who haven't opted out
@@ -977,15 +1071,9 @@ const MassEmailPage = ({ t }) => {
   const [step, setStep] = useState(0);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [filterConfig, setFilterConfig] = useState({
-    statuses: [],
+    rules: [],
     search: '',
-    notOptedOut: true,
-    policyTypes: [],
-    hasPolicy: false,
-    hasExpiringPolicy: false,
-    hasNoPolicy: false,
-    expirationFrom: '',
-    expirationTo: ''
+    notOptedOut: true
   });
   const [subject, setSubject] = useState('');
   const [name, setName] = useState('');
@@ -1074,15 +1162,9 @@ const MassEmailPage = ({ t }) => {
     setStep(0);
     setSelectedTemplate(null);
     setFilterConfig({
-      statuses: [],
+      rules: [],
       search: '',
-      notOptedOut: true,
-      policyTypes: [],
-      hasPolicy: false,
-      hasExpiringPolicy: false,
-      hasNoPolicy: false,
-      expirationFrom: '',
-      expirationTo: ''
+      notOptedOut: true
     });
     setSubject('');
     setName('');
