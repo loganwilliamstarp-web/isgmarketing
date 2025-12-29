@@ -1183,7 +1183,7 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
     );
   }
 
-  if (!breakdown || breakdown.total === 0) {
+  if (!breakdown || breakdown.byCity.length === 0) {
     return null;
   }
 
@@ -1210,7 +1210,7 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
         }}
       >
         <span style={{ fontSize: '13px', fontWeight: '500' }}>
-          📊 View Recipients by Location
+          📊 View Recipients by City
         </span>
         <span style={{ fontSize: '12px', color: t.textSecondary }}>
           {showBreakdown ? '▲' : '▼'}
@@ -1219,88 +1219,33 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
 
       {showBreakdown && (
         <div style={{ padding: '0 16px 16px' }}>
-          {/* By State */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: t.textSecondary,
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
-            }}>
-              By State
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {breakdown.byState.map(({ state, count }) => (
-                <div
-                  key={state}
-                  style={{
-                    padding: '6px 10px',
-                    backgroundColor: t.bgHover,
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span style={{ fontWeight: '500', color: t.text }}>{state}</span>
-                  <span style={{
-                    backgroundColor: t.primary,
-                    color: '#fff',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    fontSize: '11px',
-                    fontWeight: '600'
-                  }}>
-                    {count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* By City */}
-          <div>
-            <div style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: t.textSecondary,
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
-            }}>
-              Top Cities
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {breakdown.byCity.slice(0, 8).map(({ city, count }) => (
-                <div
-                  key={city}
-                  style={{
-                    padding: '6px 10px',
-                    backgroundColor: t.bgHover,
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span style={{ color: t.text }}>{city}</span>
-                  <span style={{
-                    backgroundColor: `${t.primary}30`,
-                    color: t.primary,
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    fontSize: '11px',
-                    fontWeight: '600'
-                  }}>
-                    {count}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {breakdown.byCity.map(({ city, count }) => (
+              <div
+                key={city}
+                style={{
+                  padding: '6px 10px',
+                  backgroundColor: t.bgHover,
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span style={{ color: t.text }}>{city}</span>
+                <span style={{
+                  backgroundColor: t.primary,
+                  color: '#fff',
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  fontSize: '11px',
+                  fontWeight: '600'
+                }}>
+                  {count}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1309,7 +1254,7 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
 };
 
 // Recipients filter step with dynamic filter builder
-const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, locationBreakdown, isLoadingBreakdown, theme: t }) => {
+const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, isFetching, locationBreakdown, isLoadingBreakdown, theme: t }) => {
   const rules = filterConfig.rules || [];
 
   const addRule = () => {
@@ -1472,11 +1417,19 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
             Matching Recipients
           </div>
           <div style={{ fontSize: '12px', color: t.textSecondary }}>
-            Accounts with valid emails who haven't opted out
+            {isFetching && recipientCount !== undefined
+              ? 'Updating count...'
+              : 'Accounts with valid emails who haven\'t opted out'}
           </div>
         </div>
-        <div style={{ fontSize: '28px', fontWeight: '700', color: t.primary }}>
-          {isLoading ? '...' : (recipientCount || 0).toLocaleString()}
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '700',
+          color: t.primary,
+          opacity: isFetching ? 0.6 : 1,
+          transition: 'opacity 0.2s'
+        }}>
+          {isLoading ? '...' : (recipientCount ?? 0).toLocaleString()}
         </div>
       </div>
 
@@ -1660,7 +1613,7 @@ const MassEmailPage = ({ t }) => {
   // Fetch data
   const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useTemplates();
   const { data: batches, isLoading: loadingBatches, refetch: refetchBatches } = useMassEmailBatchesWithStats();
-  const { data: recipientCount, isLoading: loadingCount } = useMassEmailRecipientCount(
+  const { data: recipientCount, isLoading: loadingCount, isFetching: fetchingCount } = useMassEmailRecipientCount(
     step >= 1 ? filterConfig : null
   );
   const { data: locationBreakdown, isLoading: loadingBreakdown } = useMassEmailLocationBreakdown(
@@ -1855,6 +1808,7 @@ const MassEmailPage = ({ t }) => {
                 setFilterConfig={setFilterConfig}
                 recipientCount={recipientCount}
                 isLoading={loadingCount}
+                isFetching={fetchingCount}
                 locationBreakdown={locationBreakdown}
                 isLoadingBreakdown={loadingBreakdown}
                 theme={t}
