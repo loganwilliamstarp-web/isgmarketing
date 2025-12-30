@@ -292,15 +292,9 @@ export const massEmailsService = {
       });
     }
 
-    // Check if we need email log data for last_email_sent filter
-    const needsEmailLogFilter = filterGroups.some(group => {
-      const groupRules = group.rules || [];
-      return groupRules.some(r => r.field === 'last_email_sent' && r.value);
-    });
-
-    // Fetch last email sent dates if needed
+    // Always fetch last email sent dates for display and filtering
     let lastEmailMap = {};
-    if (needsEmailLogFilter && allAccounts.length > 0) {
+    if (allAccounts.length > 0) {
       const accountIds = allAccounts.map(a => a.account_unique_id);
       // Get the most recent email sent to each account
       const { data: emailLogs, error: emailError } = await supabase
@@ -655,7 +649,8 @@ export const massEmailsService = {
         matchingAccountIds.add(account.account_unique_id);
         matchingAccounts.push({
           ...account,
-          _matchedGroups: matchedGroupIndices
+          _matchedGroups: matchedGroupIndices,
+          _lastEmailSent: lastEmailMap[account.account_unique_id] || null
         });
       }
     }
