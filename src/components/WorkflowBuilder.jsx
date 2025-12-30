@@ -67,11 +67,37 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const t = themeProp || defaultTheme;
 
   // Use automation nodes if they exist and have items, otherwise use defaults
-  const initialNodes = (automation?.nodes && automation.nodes.length > 0)
-    ? automation.nodes
-    : defaultNodes;
+  // Also ensure entry_criteria node has all required config properties
+  const getInitialNodes = () => {
+    if (!automation?.nodes || automation.nodes.length === 0) {
+      return defaultNodes;
+    }
+    // Ensure entry_criteria node has reentry and pacing configs
+    return automation.nodes.map(node => {
+      if (node.type === 'entry_criteria') {
+        return {
+          ...node,
+          config: {
+            ...node.config,
+            filterConfig: node.config?.filterConfig || { groups: [] },
+            reentry: node.config?.reentry || {
+              enabled: false,
+              type: 'never',
+              days: 30
+            },
+            pacing: node.config?.pacing || {
+              enabled: false,
+              spreadOverDays: 7,
+              allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
+            }
+          }
+        };
+      }
+      return node;
+    });
+  };
 
-  const [nodes, setNodes] = useState(initialNodes);
+  const [nodes, setNodes] = useState(getInitialNodes);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(null);
@@ -151,7 +177,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [nodes, filterConfig]);
+  }, [nodes, filterConfig, reentryConfig, pacingConfig]);
 
   // Check if filter config has valid filters
   const hasFilters = filterConfig?.groups?.some(g => g.rules?.some(r => r.field && r.operator));
