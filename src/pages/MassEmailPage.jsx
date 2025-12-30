@@ -899,11 +899,20 @@ const RecipientsPreviewModal = ({ recipients, filterConfig, isLoading, onClose, 
                                 color: t.success,
                                 borderRadius: '4px',
                                 fontSize: '11px',
-                                fontWeight: '600'
+                                fontWeight: '600',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'help'
                               }}
                               title={groups[groupIdx]?.rules?.filter(r => r.field && r.operator).map(r => formatRuleText(r)).join(' AND ') || `Group ${groupIdx + 1}`}
                             >
                               Group {groupIdx + 1}
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                              </svg>
                             </span>
                           ))}
                           {(!recipient._matchedGroups || recipient._matchedGroups.length === 0) && (
@@ -2029,34 +2038,6 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
           <span style={{ color: t.textSecondary }}> — results update automatically</span>
         </div>
       )}
-
-      {/* Search Filter */}
-      <div style={{
-        padding: '16px',
-        backgroundColor: t.bgCard,
-        borderRadius: '12px',
-        border: `1px solid ${t.border}`,
-        marginBottom: '16px'
-      }}>
-        <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '8px' }}>
-          Search by Name or Email
-        </label>
-        <input
-          type="text"
-          placeholder="Type to search..."
-          value={filterConfig.search || ''}
-          onChange={(e) => setFilterConfig({ ...filterConfig, search: e.target.value })}
-          style={{
-            width: '100%',
-            padding: '10px 12px',
-            backgroundColor: t.bgInput,
-            border: `1px solid ${t.border}`,
-            borderRadius: '8px',
-            color: t.text,
-            fontSize: '14px'
-          }}
-        />
-      </div>
 
       {/* Recipient Count - Clickable */}
       <button
