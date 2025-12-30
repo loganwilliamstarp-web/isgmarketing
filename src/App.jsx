@@ -1,8 +1,9 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from './lib/queryClient';
+import { userSettingsService } from './services/userSettings';
 
 // Import connected pages
 import {
@@ -77,13 +78,31 @@ const AppLayout = () => {
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
   
-  // Mock user data - would come from Supabase based on userId
+  // Fetch user data from Supabase based on userId
+  const { data: userData } = useQuery({
+    queryKey: ['currentUser', userId],
+    queryFn: () => userSettingsService.getCurrentUser(userId),
+    enabled: !!userId
+  });
+
   const [currentUser, setCurrentUser] = useState({
     id: userId,
-    name: 'Logan Johns',
-    email: 'info@isgdfw.com',
-    org: 'ISG'
+    name: '',
+    email: '',
+    org: ''
   });
+
+  // Update currentUser when userData is fetched
+  useEffect(() => {
+    if (userData) {
+      setCurrentUser({
+        id: userId,
+        name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'Unknown User',
+        email: userData.email || '',
+        org: userData.profile_name || ''
+      });
+    }
+  }, [userData, userId]);
   
   const t = isDark ? themes.dark : themes.light;
 
