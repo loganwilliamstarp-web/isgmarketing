@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useAutomation, useAutomationMutations } from '../hooks';
+import { useAutomation, useAutomationMutations, useIsAdmin } from '../hooks';
 import WorkflowBuilder from '../components/WorkflowBuilder';
 
 // Loading skeleton
@@ -14,15 +14,22 @@ const WorkflowBuilderPage = ({ t }) => {
   const location = useLocation();
   
   const isNew = !automationId || automationId === 'new';
-  
+
   // Get template info from navigation state (if using a template)
   const templateInfo = location.state?.templateName || location.state?.templateId;
-  
+
+  // Check if user is admin
+  const { data: isAdmin = false, isLoading: isAdminLoading } = useIsAdmin();
+
   // Load existing automation if editing
   const { data: automation, isLoading, error } = useAutomation(isNew ? null : automationId);
-  
+
+  // Check if this is a default automation that non-admins can't edit
+  const isDefaultAutomation = automation?.is_default === true;
+  const canEdit = isNew || !isDefaultAutomation || isAdmin;
+
   // Mutations
-  const { createAutomation, updateAutomation, activateAutomation, pauseAutomation } = useAutomationMutations();
+  const { createAutomation, updateAutomation, activateAutomation, pauseAutomation, duplicateAutomation } = useAutomationMutations();
   
   // Handle status toggle - saves immediately to database
   const handleStatusToggle = async () => {
@@ -75,20 +82,38 @@ const WorkflowBuilderPage = ({ t }) => {
   
   // Handle save
   const handleSave = async (data) => {
+    // Non-admins can't save changes to default automations
+    if (!canEdit) {
+      alert('You cannot edit default automations. Use "Clone & Edit" to create your own copy.');
+      return;
+    }
+
     try {
       if (isNew) {
         const newAutomation = await createAutomation.mutateAsync(data);
         // Navigate to the edit page for the new automation
         navigate(`/${userId}/automations/${newAutomation.id}`, { replace: true });
       } else {
-        await updateAutomation.mutateAsync({ 
-          automationId, 
-          updates: data 
+        await updateAutomation.mutateAsync({
+          automationId,
+          updates: data
         });
       }
     } catch (err) {
       console.error('Failed to save automation:', err);
       alert('Failed to save automation. Please try again.');
+    }
+  };
+
+  // Handle clone for non-admins viewing default automations
+  const handleClone = async () => {
+    try {
+      const clonedAutomation = await duplicateAutomation.mutateAsync(automationId);
+      // Navigate to the cloned automation
+      navigate(`/${userId}/automations/${clonedAutomation.id}`, { replace: true });
+    } catch (err) {
+      console.error('Failed to clone automation:', err);
+      alert('Failed to clone automation. Please try again.');
     }
   };
   
@@ -111,8 +136,8 @@ const WorkflowBuilderPage = ({ t }) => {
     }
   }, [automation?.updated_at]);
 
-  // Loading state - wait for query AND state sync
-  if (!isNew && (isLoading || !isDataSynced)) {
+  // Loading state - wait for query AND state sync AND admin check
+  if (!isNew && (isLoading || isAdminLoading || !isDataSynced)) {
     return (
       <div style={{
         display: 'flex',
@@ -195,18 +220,45 @@ const WorkflowBuilderPage = ({ t }) => {
           >
             ←
           </button>
-          <h1 style={{ 
-            fontSize: '16px', 
-            fontWeight: '600', 
+          <h1 style={{
+            fontSize: '16px',
+            fontWeight: '600',
             color: t?.text || '#fafafa',
-            margin: 0 
+            margin: 0
           }}>
-            {isNew ? 'Create Automation' : `Edit: ${automation?.name || 'Automation'}`}
+            {isNew ? 'Create Automation' : canEdit ? `Edit: ${automation?.name || 'Automation'}` : `View: ${automation?.name || 'Automation'}`}
           </h1>
+          {/* Default badge for default automations */}
+          {isDefaultAutomation && (
+            <span style={{
+              padding: '4px 8px',
+              backgroundColor: `${t?.primary || '#3b82f6'}20`,
+              color: t?.primary || '#3b82f6',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: '600',
+              textTransform: 'uppercase'
+            }}>
+              Default
+            </span>
+          )}
+          {/* Read-only indicator for non-admins viewing defaults */}
+          {!canEdit && (
+            <span style={{
+              padding: '4px 8px',
+              backgroundColor: `${t?.warning || '#f59e0b'}20`,
+              color: t?.warning || '#f59e0b',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: '600'
+            }}>
+              Read Only
+            </span>
+          )}
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Status Toggle */}
+          {/* Status Toggle - always available for users to control on/off */}
           {!isNew && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13px', color: t?.textSecondary || '#a1a1aa' }}>
@@ -220,8 +272,8 @@ const WorkflowBuilderPage = ({ t }) => {
                   height: '24px',
                   borderRadius: '12px',
                   border: 'none',
-                  backgroundColor: automationData.status === 'active' 
-                    ? (t?.success || '#22c55e') 
+                  backgroundColor: automationData.status === 'active'
+                    ? (t?.success || '#22c55e')
                     : (t?.bgHover || '#27272a'),
                   cursor: 'pointer',
                   position: 'relative',
@@ -244,26 +296,50 @@ const WorkflowBuilderPage = ({ t }) => {
               </button>
             </div>
           )}
-          
-          <button
-            onClick={() => handleSave(automationData)}
-            disabled={createAutomation.isPending || updateAutomation.isPending}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: t?.primary || '#3b82f6',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#fff',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '500',
-              opacity: (createAutomation.isPending || updateAutomation.isPending) ? 0.7 : 1
-            }}
-          >
-            {(createAutomation.isPending || updateAutomation.isPending) 
-              ? 'Saving...' 
-              : isNew ? 'Create' : 'Save Changes'}
-          </button>
+
+          {/* Clone button for non-admins viewing default automations */}
+          {!canEdit && (
+            <button
+              onClick={handleClone}
+              disabled={duplicateAutomation.isPending}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: t?.bgHover || '#27272a',
+                border: `1px solid ${t?.border || '#3f3f46'}`,
+                borderRadius: '6px',
+                color: t?.text || '#fafafa',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '500',
+                opacity: duplicateAutomation.isPending ? 0.7 : 1
+              }}
+            >
+              {duplicateAutomation.isPending ? 'Cloning...' : 'Clone & Edit'}
+            </button>
+          )}
+
+          {/* Save button - only for admins or non-default automations */}
+          {canEdit && (
+            <button
+              onClick={() => handleSave(automationData)}
+              disabled={createAutomation.isPending || updateAutomation.isPending}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: t?.primary || '#3b82f6',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '500',
+                opacity: (createAutomation.isPending || updateAutomation.isPending) ? 0.7 : 1
+              }}
+            >
+              {(createAutomation.isPending || updateAutomation.isPending)
+                ? 'Saving...'
+                : isNew ? 'Create' : 'Save Changes'}
+            </button>
+          )}
         </div>
       </div>
       
