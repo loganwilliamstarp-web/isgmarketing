@@ -14,7 +14,16 @@
       "Bash(npx vite:*)",
       "Bash(node --check:*)",
       "Bash(npm install:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then grep -q \"VITE_GOOGLE_MAPS_API_KEY\" .env)",
+      "Bash(else echo \".env file not found\")",
+      "Bash(fi)",
+      "Bash(if [ -f .env.local ])",
+      "Bash(then grep -q \"VITE_GOOGLE_MAPS_API_KEY\" .env.local)",
+      "Bash(else echo \".env.local file not found\")",
+      "Bash(find:*)",
+      "Bash(git show:*)"
     ]
   }
 }
