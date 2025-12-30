@@ -95,6 +95,25 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
   });
 
+  // Sync state from automation prop when it changes (e.g., after loading from database)
+  useEffect(() => {
+    if (automation?.nodes && automation.nodes.length > 0) {
+      setNodes(automation.nodes);
+      const entryNode = automation.nodes.find(n => n.type === 'entry_criteria');
+      if (entryNode?.config) {
+        if (entryNode.config.filterConfig) {
+          setFilterConfig(entryNode.config.filterConfig);
+        }
+        if (entryNode.config.reentry) {
+          setReentryConfig(entryNode.config.reentry);
+        }
+        if (entryNode.config.pacing) {
+          setPacingConfig(entryNode.config.pacing);
+        }
+      }
+    }
+  }, [automation?.nodes]);
+
   // Update the entry criteria node when filter config changes
   const updateFilterConfig = (newConfig) => {
     setFilterConfig(newConfig);
