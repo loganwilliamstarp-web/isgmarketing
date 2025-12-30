@@ -428,13 +428,15 @@ export const massEmailsService = {
         }
 
         case 'policy_expiration': {
+          // Only check active policies for expiration dates
+          const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase().trim() === 'active');
           const today = new Date().toISOString().split('T')[0];
           if (operator === 'in_next_days') {
             const days = parseInt(value, 10);
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date >= today && p.expiration_date <= futureDateStr
             );
           }
@@ -443,7 +445,7 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
             );
           }
@@ -452,7 +454,7 @@ export const massEmailsService = {
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date > futureDateStr
             );
           }
@@ -461,7 +463,7 @@ export const massEmailsService = {
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date >= today && p.expiration_date < futureDateStr
             );
           }
@@ -470,7 +472,7 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date < pastDateStr
             );
           }
@@ -479,18 +481,18 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
             );
           }
           if (operator === 'before') {
-            return accountPolicies.some(p => p.expiration_date && p.expiration_date < value);
+            return activePolicies.some(p => p.expiration_date && p.expiration_date < value);
           }
           if (operator === 'after') {
-            return accountPolicies.some(p => p.expiration_date && p.expiration_date > value);
+            return activePolicies.some(p => p.expiration_date && p.expiration_date > value);
           }
           if (operator === 'between') {
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.expiration_date && p.expiration_date >= value && p.expiration_date <= (value2 || value)
             );
           }
@@ -498,13 +500,15 @@ export const massEmailsService = {
         }
 
         case 'policy_effective': {
+          // Only check active policies for effective dates
+          const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase().trim() === 'active');
           const today = new Date().toISOString().split('T')[0];
           if (operator === 'in_next_days') {
             const days = parseInt(value, 10);
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date >= today && p.effective_date <= futureDateStr
             );
           }
@@ -513,7 +517,7 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date >= pastDateStr && p.effective_date <= today
             );
           }
@@ -522,7 +526,7 @@ export const massEmailsService = {
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date > futureDateStr
             );
           }
@@ -531,7 +535,7 @@ export const massEmailsService = {
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date >= today && p.effective_date < futureDateStr
             );
           }
@@ -540,7 +544,7 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date < pastDateStr
             );
           }
@@ -549,18 +553,18 @@ export const massEmailsService = {
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date >= pastDateStr && p.effective_date <= today
             );
           }
           if (operator === 'before') {
-            return accountPolicies.some(p => p.effective_date && p.effective_date < value);
+            return activePolicies.some(p => p.effective_date && p.effective_date < value);
           }
           if (operator === 'after') {
-            return accountPolicies.some(p => p.effective_date && p.effective_date > value);
+            return activePolicies.some(p => p.effective_date && p.effective_date > value);
           }
           if (operator === 'between') {
-            return accountPolicies.some(p =>
+            return activePolicies.some(p =>
               p.effective_date && p.effective_date >= value && p.effective_date <= (value2 || value)
             );
           }
