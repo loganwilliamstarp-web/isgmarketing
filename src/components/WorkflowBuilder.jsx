@@ -77,21 +77,9 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Mock data for preview enrollees - in production this would come from an API
-  const [previewEnrollees] = useState([
-    { id: 1, name: 'John Smith', email: 'john@example.com', entryDate: '2024-01-15', status: 'active' },
-    { id: 2, name: 'Sarah Johnson', email: 'sarah@example.com', entryDate: '2024-01-14', status: 'active' },
-    { id: 3, name: 'Mike Brown', email: 'mike@example.com', entryDate: '2024-01-13', status: 'completed' },
-    { id: 4, name: 'Emily Davis', email: 'emily@example.com', entryDate: '2024-01-12', status: 'active' },
-    { id: 5, name: 'Chris Wilson', email: 'chris@example.com', entryDate: '2024-01-11', status: 'active' },
-  ]);
-
-  // Mock stats for nodes - in production this would come from automation.stats
-  const nodeStats = {
-    'entry-criteria': { entered: 1250, pending: 45 },
-    'trigger': { processed: 1205 },
-    'node-1': { sent: 1180, opened: 892, clicked: 234 },
-  };
+  // Get enrollees and stats from automation data
+  const enrollees = automation?.enrollees || [];
+  const nodeStats = automation?.nodeStats || {};
 
   // Get entry criteria node's config
   const entryCriteriaNode = nodes.find(n => n.type === 'entry_criteria');
@@ -1060,15 +1048,15 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               backgroundColor: t.bgHover
             }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>{previewEnrollees.length}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Would Enter</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>{enrollees.length}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Total Enrolled</div>
               </div>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>{previewEnrollees.filter(e => e.status === 'active').length}</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>{enrollees.filter(e => e.status === 'active').length}</div>
                 <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Currently Active</div>
               </div>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.textSecondary }}>{previewEnrollees.filter(e => e.status === 'completed').length}</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.textSecondary }}>{enrollees.filter(e => e.status === 'completed').length}</div>
                 <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Completed</div>
               </div>
             </div>
@@ -1085,17 +1073,17 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {previewEnrollees.map((enrollee) => (
+                  {enrollees.map((enrollee) => (
                     <tr key={enrollee.id} style={{ borderBottom: `1px solid ${t.border}` }}>
                       <td style={{ padding: '12px 20px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{enrollee.name}</div>
+                        <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{enrollee.name || enrollee.account_name}</div>
                         <div style={{ fontSize: '12px', color: t.textMuted }}>{enrollee.email}</div>
                       </td>
                       <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
-                        {new Date(enrollee.entryDate).toLocaleDateString()}
+                        {enrollee.entry_date ? new Date(enrollee.entry_date).toLocaleDateString() : '—'}
                       </td>
                       <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
-                        Send Email
+                        {enrollee.current_step || '—'}
                       </td>
                       <td style={{ padding: '12px 20px' }}>
                         <span style={{
@@ -1114,10 +1102,10 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                 </tbody>
               </table>
 
-              {previewEnrollees.length === 0 && (
+              {enrollees.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
                   <div style={{ fontSize: '32px', marginBottom: '12px' }}>👥</div>
-                  <div style={{ fontSize: '14px' }}>No contacts match your entry criteria</div>
+                  <div style={{ fontSize: '14px' }}>No enrollees yet</div>
                 </div>
               )}
             </div>
@@ -1133,7 +1121,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               backgroundColor: t.bgHover
             }}>
               <span style={{ fontSize: '12px', color: t.textMuted }}>
-                Showing {previewEnrollees.length} contacts
+                Showing {enrollees.length} contact{enrollees.length !== 1 ? 's' : ''}
               </span>
               <button onClick={() => setShowPreviewModal(false)} style={{
                 padding: '8px 16px',
