@@ -28,6 +28,7 @@ export const FILTER_FIELDS = [
   ]},
   { value: 'policy_status', label: 'Policy Status', type: 'select', options: [
     { value: 'active', label: 'Active' },
+    { value: 'pending active', label: 'Pending Active' },
     { value: 'cancelled', label: 'Cancelled' },
     { value: 'expired', label: 'Expired' }
   ]},
