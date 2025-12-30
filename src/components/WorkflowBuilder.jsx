@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FilterBuilder, { formatRuleText } from './FilterBuilder';
+import { useMassEmailRecipients, useMassEmailRecipientCount } from '../hooks';
 
 // Default dark theme (fallback)
 const defaultTheme = {
@@ -77,8 +78,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Get enrollees and stats from automation data
-  const enrollees = automation?.enrollees || [];
+  // Get stats from automation data (for workflow node tracking)
   const nodeStats = automation?.nodeStats || {};
 
   // Get entry criteria node's config
@@ -124,6 +124,32 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         : node
     ));
   };
+
+  // Sync nodes back to parent whenever they change
+  useEffect(() => {
+    if (onUpdate) {
+      onUpdate(prev => ({
+        ...prev,
+        nodes: nodes,
+        // Also sync filter_config at the top level for backwards compatibility
+        filter_config: filterConfig
+      }));
+    }
+  }, [nodes, filterConfig]);
+
+  // Check if filter config has valid filters
+  const hasFilters = filterConfig?.groups?.some(g => g.rules?.some(r => r.field && r.operator));
+
+  // Fetch potential enrollees based on filter criteria (only when preview modal is open)
+  const { data: potentialEnrollees, isLoading: loadingEnrollees } = useMassEmailRecipients(
+    showPreviewModal && hasFilters ? filterConfig : null,
+    { limit: 500 }
+  );
+
+  // Get count of potential enrollees
+  const { data: enrolleeCount, isLoading: loadingCount } = useMassEmailRecipientCount(
+    hasFilters ? filterConfig : null
+  );
 
   const nodeTypes = {
     entry_criteria: { icon: '🎯', color: '#8b5cf6', label: 'Entry Criteria' },
@@ -338,7 +364,18 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                   gap: '6px'
                 }}
               >
-                <span>👥</span> Preview
+                <span>👥</span> Preview {hasFilters && enrolleeCount !== undefined && !loadingCount && (
+                  <span style={{
+                    backgroundColor: t.primary,
+                    color: '#fff',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontSize: '10px',
+                    fontWeight: '600'
+                  }}>
+                    {enrolleeCount}
+                  </span>
+                )}
               </button>
             </div>
           )}
@@ -1001,7 +1038,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         </>
       )}
 
-      {/* Preview Enrollees Modal */}
+      {/* Preview Potential Enrollees Modal */}
       {showPreviewModal && (
         <>
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 200 }} onClick={() => setShowPreviewModal(false)} />
@@ -1031,9 +1068,9 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               flexShrink: 0
             }}>
               <div>
-                <h2 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>Preview Enrollees</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>Preview Potential Enrollees</h2>
                 <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0' }}>
-                  Contacts matching your entry criteria (last 30 days)
+                  Contacts matching your entry criteria who would enter this automation
                 </p>
               </div>
               <button onClick={() => setShowPreviewModal(false)} style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}>×</button>
@@ -1048,64 +1085,87 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               backgroundColor: t.bgHover
             }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>{enrollees.length}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Total Enrolled</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>
+                  {loadingEnrollees ? '...' : (potentialEnrollees?.length || 0)}
+                </div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Matching Contacts</div>
               </div>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>{enrollees.filter(e => e.status === 'active').length}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Currently Active</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>
+                  {filterConfig?.groups?.length || 0}
+                </div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Filter Groups</div>
               </div>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: t.textSecondary }}>{enrollees.filter(e => e.status === 'completed').length}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Completed</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.textSecondary }}>
+                  {filterConfig?.groups?.reduce((sum, g) => sum + (g.rules?.filter(r => r.field && r.operator).length || 0), 0) || 0}
+                </div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Active Filters</div>
               </div>
             </div>
 
-            {/* Enrollees Table */}
+            {/* Potential Enrollees Table */}
             <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: t.bgHover }}>
-                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Contact</th>
-                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Entry Date</th>
-                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Current Step</th>
-                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {enrollees.map((enrollee) => (
-                    <tr key={enrollee.id} style={{ borderBottom: `1px solid ${t.border}` }}>
-                      <td style={{ padding: '12px 20px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{enrollee.name || enrollee.account_name}</div>
-                        <div style={{ fontSize: '12px', color: t.textMuted }}>{enrollee.email}</div>
-                      </td>
-                      <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
-                        {enrollee.entry_date ? new Date(enrollee.entry_date).toLocaleDateString() : '—'}
-                      </td>
-                      <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
-                        {enrollee.current_step || '—'}
-                      </td>
-                      <td style={{ padding: '12px 20px' }}>
-                        <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          backgroundColor: enrollee.status === 'active' ? `${t.success}20` : `${t.textMuted}20`,
-                          color: enrollee.status === 'active' ? t.success : t.textMuted
-                        }}>
-                          {enrollee.status === 'active' ? 'Active' : 'Completed'}
-                        </span>
-                      </td>
+              {loadingEnrollees ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
+                  <div style={{ fontSize: '14px' }}>Loading potential enrollees...</div>
+                </div>
+              ) : !hasFilters ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
+                  <div style={{ fontSize: '14px' }}>Add filters to see who would enter this automation</div>
+                </div>
+              ) : potentialEnrollees && potentialEnrollees.length > 0 ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: t.bgHover }}>
+                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Contact</th>
+                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Account Type</th>
+                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Location</th>
+                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Matched Groups</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {enrollees.length === 0 && (
+                  </thead>
+                  <tbody>
+                    {potentialEnrollees.map((contact) => (
+                      <tr key={contact.id} style={{ borderBottom: `1px solid ${t.border}` }}>
+                        <td style={{ padding: '12px 20px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{contact.name || contact.account_name}</div>
+                          <div style={{ fontSize: '12px', color: t.textMuted }}>{contact.email}</div>
+                        </td>
+                        <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
+                          {contact.account_type || '—'}
+                        </td>
+                        <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
+                          {contact.city && contact.state ? `${contact.city}, ${contact.state}` : contact.state || '—'}
+                        </td>
+                        <td style={{ padding: '12px 20px' }}>
+                          {contact.matchedGroups && contact.matchedGroups.length > 0 ? (
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              {contact.matchedGroups.map((groupIndex) => (
+                                <span key={groupIndex} style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '10px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  backgroundColor: `${t.primary}20`,
+                                  color: t.primary
+                                }}>
+                                  Group {groupIndex + 1}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: t.textMuted }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
                   <div style={{ fontSize: '32px', marginBottom: '12px' }}>👥</div>
-                  <div style={{ fontSize: '14px' }}>No enrollees yet</div>
+                  <div style={{ fontSize: '14px' }}>No contacts match your current filters</div>
                 </div>
               )}
             </div>
@@ -1121,7 +1181,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               backgroundColor: t.bgHover
             }}>
               <span style={{ fontSize: '12px', color: t.textMuted }}>
-                Showing {enrollees.length} contact{enrollees.length !== 1 ? 's' : ''}
+                {loadingEnrollees ? 'Loading...' : `Showing ${potentialEnrollees?.length || 0} potential enrollee${(potentialEnrollees?.length || 0) !== 1 ? 's' : ''}`}
               </span>
               <button onClick={() => setShowPreviewModal(false)} style={{
                 padding: '8px 16px',
