@@ -844,9 +844,11 @@ const RecipientsPreviewModal = ({ recipients, filterConfig, isLoading, onClose, 
                   <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
                     Status
                   </th>
-                  <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
-                    Location
-                  </th>
+                  {hasFilters && groups.length > 0 && (
+                    <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
+                      Matched Groups
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -885,9 +887,33 @@ const RecipientsPreviewModal = ({ recipients, filterConfig, isLoading, onClose, 
                         {recipient.account_status || 'N/A'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 8px', fontSize: '13px', color: t.textSecondary }}>
-                      {[recipient.billing_city, recipient.billing_state].filter(Boolean).join(', ') || 'N/A'}
-                    </td>
+                    {hasFilters && groups.length > 0 && (
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {(recipient._matchedGroups || []).map(groupIdx => (
+                            <span
+                              key={groupIdx}
+                              style={{
+                                padding: '2px 8px',
+                                backgroundColor: `${t.success}20`,
+                                color: t.success,
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '600'
+                              }}
+                              title={groups[groupIdx]?.rules?.filter(r => r.field && r.operator).map(r => formatRuleText(r)).join(' AND ') || `Group ${groupIdx + 1}`}
+                            >
+                              Group {groupIdx + 1}
+                            </span>
+                          ))}
+                          {(!recipient._matchedGroups || recipient._matchedGroups.length === 0) && (
+                            <span style={{ fontSize: '11px', color: t.textMuted }}>
+                              {groups.length === 0 ? 'No filters' : 'All'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
