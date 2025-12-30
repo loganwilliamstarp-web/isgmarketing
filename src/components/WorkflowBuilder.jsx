@@ -62,7 +62,7 @@ const defaultNodes = [
   }
 ];
 
-const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
+const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit = true }) => {
   // Use provided theme or default
   const t = themeProp || defaultTheme;
 
@@ -1070,25 +1070,39 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
               gap: '8px',
               flexShrink: 0
             }}>
-              <button onClick={() => setShowFilterPanel(false)} style={{
-                padding: '10px 20px',
-                backgroundColor: t.bgHover,
-                border: `1px solid ${t.borderLight}`,
-                borderRadius: '8px',
-                color: t.textSecondary,
-                cursor: 'pointer',
-                fontSize: '13px'
-              }}>Cancel</button>
-              <button onClick={() => setShowFilterPanel(false)} style={{
-                padding: '10px 20px',
-                backgroundColor: t.primary,
-                border: 'none',
-                borderRadius: '8px',
-                color: '#fff',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '500'
-              }}>Save Criteria</button>
+              {canEdit ? (
+                <>
+                  <button onClick={() => setShowFilterPanel(false)} style={{
+                    padding: '10px 20px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.borderLight}`,
+                    borderRadius: '8px',
+                    color: t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}>Cancel</button>
+                  <button onClick={() => setShowFilterPanel(false)} style={{
+                    padding: '10px 20px',
+                    backgroundColor: t.primary,
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '500'
+                  }}>Save Criteria</button>
+                </>
+              ) : (
+                <button onClick={() => setShowFilterPanel(false)} style={{
+                  padding: '10px 20px',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
+                  borderRadius: '8px',
+                  color: t.textSecondary,
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}>Close</button>
+              )}
             </div>
           </div>
         </>
