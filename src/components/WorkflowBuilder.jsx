@@ -196,7 +196,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
 
   // Helper to format node stats
   const getNodeStatsDisplay = (nodeId, nodeType) => {
-    const stats = nodeStats[nodeId] || node?.stats || {};
+    const stats = nodeStats[nodeId] || {};
     if (nodeType === 'entry_criteria') {
       return stats.entered ? `${stats.entered.toLocaleString()} entered` : null;
     }
