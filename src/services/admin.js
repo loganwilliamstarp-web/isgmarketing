@@ -105,22 +105,53 @@ export const adminService = {
 
   /**
    * Update a master automation and sync to all users
+   * If the master automation doesn't exist, create it first
    */
   async updateMasterAutomation(defaultKey, updates) {
-    // First update the master automation
-    const { data, error } = await supabase
+    // First check if master automation exists
+    const { data: existing } = await supabase
       .from('master_automations')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .select('id')
       .eq('default_key', defaultKey)
-      .select()
       .single();
+
+    let data;
+    let error;
+
+    if (existing) {
+      // Update existing master automation
+      const result = await supabase
+        .from('master_automations')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('default_key', defaultKey)
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    } else {
+      // Create new master automation from the updates
+      const result = await supabase
+        .from('master_automations')
+        .insert({
+          default_key: defaultKey,
+          ...updates,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) throw error;
 
-    // Explicitly sync to all users (in case trigger doesn't fire)
+    // Explicitly sync to all users
     await supabase.rpc('sync_master_automation_to_users', { p_default_key: defaultKey });
 
     return data;
