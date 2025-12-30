@@ -95,42 +95,8 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
   });
 
-  // Track if we're updating internally to prevent circular updates
-  const isInternalUpdate = useRef(false);
-  const lastAutomationNodesRef = useRef(automation?.nodes);
-
-  // Sync state from automation prop when it changes (e.g., after loading from database)
-  // Only run when the prop actually changes from an external source
-  useEffect(() => {
-    // Skip if this is triggered by our own internal update
-    if (isInternalUpdate.current) {
-      isInternalUpdate.current = false;
-      return;
-    }
-
-    // Skip if the nodes reference is the same (no actual change from parent)
-    if (automation?.nodes === lastAutomationNodesRef.current) {
-      return;
-    }
-
-    lastAutomationNodesRef.current = automation?.nodes;
-
-    if (automation?.nodes && automation.nodes.length > 0) {
-      setNodes(automation.nodes);
-      const entryNode = automation.nodes.find(n => n.type === 'entry_criteria');
-      if (entryNode?.config) {
-        if (entryNode.config.filterConfig) {
-          setFilterConfig(entryNode.config.filterConfig);
-        }
-        if (entryNode.config.reentry) {
-          setReentryConfig(entryNode.config.reentry);
-        }
-        if (entryNode.config.pacing) {
-          setPacingConfig(entryNode.config.pacing);
-        }
-      }
-    }
-  }, [automation?.nodes]);
+  // No need for sync effects - parent guarantees data is ready before mounting
+  // The initial state is set correctly from the automation prop above
 
   // Update the entry criteria node when filter config changes
   const updateFilterConfig = (newConfig) => {
@@ -162,18 +128,29 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     ));
   };
 
-  // Sync nodes back to parent whenever they change
+  // Sync nodes back to parent whenever they change (debounced to prevent rapid updates)
+  const syncTimeoutRef = useRef(null);
   useEffect(() => {
     if (onUpdate) {
-      // Mark this as an internal update so we don't re-sync from parent
-      isInternalUpdate.current = true;
-      onUpdate(prev => ({
-        ...prev,
-        nodes: nodes,
-        // Also sync filter_config at the top level for backwards compatibility
-        filter_config: filterConfig
-      }));
+      // Clear any pending sync
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      // Debounce the sync to parent to prevent rapid re-renders during typing
+      syncTimeoutRef.current = setTimeout(() => {
+        onUpdate(prev => ({
+          ...prev,
+          nodes: nodes,
+          // Also sync filter_config at the top level for backwards compatibility
+          filter_config: filterConfig
+        }));
+      }, 100);
     }
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
   }, [nodes, filterConfig]);
 
   // Check if filter config has valid filters

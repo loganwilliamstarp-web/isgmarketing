@@ -97,13 +97,17 @@ const WorkflowBuilderPage = ({ t }) => {
     navigate(`/${userId}/automations`);
   };
   
-  // Loading state
-  if (!isNew && isLoading) {
+  // Check if automationData has been populated from the query
+  // We need to wait for both the query AND the useEffect to run
+  const isDataSynced = isNew || (automation && automationData.name === automation.name);
+
+  // Loading state - wait for query AND state sync
+  if (!isNew && (isLoading || !isDataSynced)) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
         justifyContent: 'center',
         height: 'calc(100vh - 100px)',
         gap: '16px'
@@ -253,9 +257,10 @@ const WorkflowBuilderPage = ({ t }) => {
         </div>
       </div>
       
-      {/* Workflow Builder */}
+      {/* Workflow Builder - key includes data hash to force remount when data loads */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <WorkflowBuilder 
+        <WorkflowBuilder
+          key={`${automationId || 'new'}-${automation?.id || 'loading'}`}
           t={t}
           automation={automationData}
           onUpdate={setAutomationData}
