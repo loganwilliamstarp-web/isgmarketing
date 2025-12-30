@@ -1184,14 +1184,27 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                           {contact._matchedGroups && contact._matchedGroups.length > 0 ? (
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                               {contact._matchedGroups.map((groupIndex) => (
-                                <span key={groupIndex} style={{
-                                  padding: '2px 8px',
-                                  borderRadius: '10px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  backgroundColor: `${t.primary}20`,
-                                  color: t.primary
-                                }}>
+                                <span
+                                  key={groupIndex}
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    backgroundColor: `${t.primary}20`,
+                                    color: t.primary,
+                                    cursor: 'default',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = t.primary;
+                                    e.target.style.color = '#fff';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = `${t.primary}20`;
+                                    e.target.style.color = t.primary;
+                                  }}
+                                >
                                   Group {groupIndex + 1}
                                 </span>
                               ))}
