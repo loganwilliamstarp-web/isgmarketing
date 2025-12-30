@@ -351,6 +351,7 @@ const WorkflowBuilderPage = ({ t }) => {
           automation={automationData}
           onUpdate={setAutomationData}
           onSave={handleSave}
+          canEdit={canEdit}
         />
       </div>
     </div>
