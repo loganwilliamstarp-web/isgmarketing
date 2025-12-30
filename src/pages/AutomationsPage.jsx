@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  useAutomationsWithStats, 
-  useActiveAutomations,
-  useAutomationMutations 
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  useAutomationsWithStats,
+  useAutomationMutations
 } from '../hooks';
 
 // Loading skeleton
@@ -19,136 +18,6 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
   />
 );
 
-// Pre-built automation templates
-const AUTOMATION_TEMPLATES = [
-  { 
-    id: 'welcome',
-    name: 'Welcome Series', 
-    desc: 'Send a series of welcome emails to new clients over their first 30 days', 
-    icon: '📧', 
-    category: 'Onboarding',
-    defaultNodes: [
-      { type: 'trigger', config: { frequency: 'daily', time: '09:00' } },
-      { type: 'send_email', config: { templateKey: 'welcome_email' } },
-      { type: 'delay', config: { days: 3 } },
-      { type: 'send_email', config: { templateKey: 'getting_started' } },
-    ]
-  },
-  { 
-    id: 'renewal',
-    name: 'Renewal Reminder', 
-    desc: 'Automated reminders for upcoming policy renewals with customizable timing', 
-    icon: '📅', 
-    category: 'Retention',
-    defaultNodes: [
-      { type: 'trigger', config: { frequency: 'daily', time: '09:00' } },
-      { type: 'send_email', config: { templateKey: 'renewal_30_day' } },
-      { type: 'delay', config: { days: 14 } },
-      { type: 'condition', config: { type: 'email_opened' } },
-    ]
-  },
-  { 
-    id: 'engagement',
-    name: 'Engagement Campaign', 
-    desc: 'Re-engage inactive clients with targeted email sequences', 
-    icon: '📈', 
-    category: 'Engagement',
-    defaultNodes: [
-      { type: 'trigger', config: { frequency: 'weekly', time: '10:00' } },
-      { type: 'send_email', config: { templateKey: 'reengagement' } },
-    ]
-  },
-  { 
-    id: 'policy_update',
-    name: 'Policy Update Alert', 
-    desc: 'Notify clients about important policy changes and updates', 
-    icon: '🔔', 
-    category: 'Communication',
-    defaultNodes: [
-      { type: 'trigger', config: { frequency: 'immediate' } },
-      { type: 'send_email', config: { templateKey: 'policy_update' } },
-    ]
-  },
-];
-
-// Status badge component
-const StatusBadge = ({ status, theme: t }) => {
-  const colors = {
-    active: { bg: `${t.success}20`, text: t.success },
-    paused: { bg: `${t.warning}20`, text: t.warning },
-    draft: { bg: `${t.textMuted}20`, text: t.textMuted },
-    archived: { bg: `${t.danger}20`, text: t.danger },
-  };
-  const c = colors[status] || colors.draft;
-  
-  return (
-    <span style={{
-      padding: '4px 10px',
-      backgroundColor: c.bg,
-      color: c.text,
-      borderRadius: '20px',
-      fontSize: '12px',
-      fontWeight: '500',
-      textTransform: 'capitalize'
-    }}>
-      {status}
-    </span>
-  );
-};
-
-// Template card component
-const TemplateCard = ({ template, onUse, theme: t }) => (
-  <div style={{
-    padding: '20px',
-    backgroundColor: t.bgCard,
-    borderRadius: '12px',
-    border: `1px solid ${t.border}`
-  }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-      <div style={{
-        width: '40px',
-        height: '40px',
-        backgroundColor: t.bgHover,
-        borderRadius: '10px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '20px'
-      }}>
-        {template.icon}
-      </div>
-      <span style={{
-        padding: '4px 10px',
-        backgroundColor: t.bgHover,
-        borderRadius: '20px',
-        fontSize: '11px',
-        color: t.textSecondary
-      }}>{template.category}</span>
-    </div>
-    <h4 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '6px' }}>
-      {template.name}
-    </h4>
-    <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '16px', lineHeight: '1.5' }}>
-      {template.desc}
-    </p>
-    <button 
-      onClick={() => onUse(template)}
-      style={{
-        width: '100%',
-        padding: '10px',
-        backgroundColor: t.primary,
-        border: 'none',
-        borderRadius: '8px',
-        color: '#fff',
-        cursor: 'pointer',
-        fontSize: '13px',
-        fontWeight: '500'
-      }}
-    >
-      Use Template
-    </button>
-  </div>
-);
 
 // Automation row component
 const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
@@ -266,7 +135,7 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
 const AutomationsPage = ({ t }) => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('my');
+  const [tab, setTab] = useState('automations');
   
   // Fetch automations with stats
   const { 
@@ -276,25 +145,14 @@ const AutomationsPage = ({ t }) => {
   } = useAutomationsWithStats();
   
   // Mutations
-  const { 
-    activateAutomation, 
-    pauseAutomation,
-    createAutomation 
+  const {
+    activateAutomation,
+    pauseAutomation
   } = useAutomationMutations();
 
   // Navigation handlers
   const handleCreateNew = () => {
     navigate(`/${userId}/automations/new`);
-  };
-
-  const handleUseTemplate = async (template) => {
-    navigate(`/${userId}/automations/new`, { 
-      state: { 
-        templateId: template.id,
-        templateName: template.name,
-        defaultNodes: template.defaultNodes
-      } 
-    });
   };
 
   const handleEditAutomation = (automationId) => {
@@ -313,7 +171,11 @@ const AutomationsPage = ({ t }) => {
     }
   };
 
-  // Separate automations by status
+  // Separate automations by type (default vs user-created)
+  const defaultAutomations = automations?.filter(a => a.is_default === true) || [];
+  const userAutomations = automations?.filter(a => a.is_default !== true) || [];
+
+  // Separate automations by status (for stats)
   const activeAutomations = automations?.filter(a => a.status === 'active') || [];
   const pausedAutomations = automations?.filter(a => a.status === 'paused') || [];
   const draftAutomations = automations?.filter(a => a.status === 'draft') || [];
@@ -410,6 +272,22 @@ const AutomationsPage = ({ t }) => {
         width: 'fit-content'
       }}>
         <button
+          onClick={() => setTab('automations')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: tab === 'automations' ? t.bgCard : 'transparent',
+            border: 'none',
+            borderRadius: '8px',
+            color: tab === 'automations' ? t.text : t.textSecondary,
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            boxShadow: tab === 'automations' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+          }}
+        >
+          Automations {defaultAutomations.length > 0 && `(${defaultAutomations.length})`}
+        </button>
+        <button
           onClick={() => setTab('my')}
           style={{
             padding: '10px 20px',
@@ -423,47 +301,12 @@ const AutomationsPage = ({ t }) => {
             boxShadow: tab === 'my' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
           }}
         >
-          My Automations {automations && `(${automations.length})`}
-        </button>
-        <button
-          onClick={() => setTab('templates')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: tab === 'templates' ? t.bgCard : 'transparent',
-            border: 'none',
-            borderRadius: '8px',
-            color: tab === 'templates' ? t.text : t.textSecondary,
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: '500',
-            boxShadow: tab === 'templates' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-          }}
-        >
-          Templates
+          My Automations {userAutomations.length > 0 && `(${userAutomations.length})`}
         </button>
       </div>
 
-      {/* Templates Tab */}
-      {tab === 'templates' && (
-        <>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
-            Pre-built Templates
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            {AUTOMATION_TEMPLATES.map((template) => (
-              <TemplateCard 
-                key={template.id}
-                template={template}
-                onUse={handleUseTemplate}
-                theme={t}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* My Automations Tab */}
-      {tab === 'my' && (
+      {/* Automations Tab - Default automations */}
+      {tab === 'automations' && (
         <>
           {isLoading ? (
             <div style={{
@@ -482,7 +325,7 @@ const AutomationsPage = ({ t }) => {
                 </div>
               ))}
             </div>
-          ) : automations?.length > 0 ? (
+          ) : defaultAutomations.length > 0 ? (
             <div style={{
               backgroundColor: t.bgCard,
               borderRadius: '12px',
@@ -516,7 +359,7 @@ const AutomationsPage = ({ t }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {automations.map((automation) => (
+                  {defaultAutomations.map((automation) => (
                     <AutomationRow
                       key={automation.id}
                       automation={automation}
@@ -538,42 +381,112 @@ const AutomationsPage = ({ t }) => {
             }}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
               <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
-                No automations yet
+                No default automations
               </h3>
               <p style={{ fontSize: '14px', color: t.textSecondary, marginBottom: '24px' }}>
-                Create your first automation to start sending targeted emails automatically.
+                Default automations will appear here when available.
               </p>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                <button
-                  onClick={() => setTab('templates')}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: t.bgHover,
-                    border: `1px solid ${t.border}`,
-                    borderRadius: '8px',
-                    color: t.text,
-                    cursor: 'pointer',
-                    fontSize: '14px'
-                  }}
-                >
-                  Browse Templates
-                </button>
-                <button
-                  onClick={handleCreateNew}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: t.primary,
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Create Custom
-                </button>
-              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* My Automations Tab - User-created/cloned automations */}
+      {tab === 'my' && (
+        <>
+          {isLoading ? (
+            <div style={{
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`,
+              padding: '20px'
+            }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} style={{ display: 'flex', gap: '16px', padding: '16px 0', borderTop: i > 0 ? `1px solid ${t.border}` : 'none' }}>
+                  <Skeleton width="36px" height="36px" />
+                  <div style={{ flex: 1 }}>
+                    <Skeleton width="200px" height="16px" />
+                    <div style={{ marginTop: '8px' }}><Skeleton width="120px" height="12px" /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : userAutomations.length > 0 ? (
+            <div style={{
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`,
+              overflow: 'hidden'
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: t.bgHover }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Automation
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Status
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Sent
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Open Rate
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Click Rate
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Enrolled
+                    </th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userAutomations.map((automation) => (
+                    <AutomationRow
+                      key={automation.id}
+                      automation={automation}
+                      onEdit={handleEditAutomation}
+                      onToggle={handleToggleAutomation}
+                      theme={t}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{
+              padding: '60px 20px',
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`,
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
+                No custom automations yet
+              </h3>
+              <p style={{ fontSize: '14px', color: t.textSecondary, marginBottom: '24px' }}>
+                Create your own automation or clone an existing one to get started.
+              </p>
+              <button
+                onClick={handleCreateNew}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: t.primary,
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Create Custom
+              </button>
             </div>
           )}
         </>
