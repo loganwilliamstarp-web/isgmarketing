@@ -300,9 +300,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
         <div
           onClick={() => {
             setSelectedNode(node.id);
-            if (isEntryCriteria) {
-              setShowFilterPanel(true);
-            }
           }}
           style={{
             width: '320px',
