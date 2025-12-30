@@ -511,16 +511,25 @@ export const massEmailsService = {
     };
 
     // Apply filter groups with OR logic between groups
+    // Track which groups each account matches
     const matchingAccountIds = new Set();
     const matchingAccounts = [];
 
     for (const account of allAccounts) {
-      // Check if account matches ANY group (OR logic)
-      const matchesAnyGroup = filterGroups.some(group => matchesGroup(account, group));
+      // Find all matching group indices
+      const matchedGroupIndices = [];
+      filterGroups.forEach((group, idx) => {
+        if (matchesGroup(account, group)) {
+          matchedGroupIndices.push(idx);
+        }
+      });
 
-      if (matchesAnyGroup && !matchingAccountIds.has(account.account_unique_id)) {
+      if (matchedGroupIndices.length > 0 && !matchingAccountIds.has(account.account_unique_id)) {
         matchingAccountIds.add(account.account_unique_id);
-        matchingAccounts.push(account);
+        matchingAccounts.push({
+          ...account,
+          _matchedGroups: matchedGroupIndices
+        });
       }
     }
 
