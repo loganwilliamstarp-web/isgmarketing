@@ -103,6 +103,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [showAddMenu, setShowAddMenu] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [hoveredGroupTooltip, setHoveredGroupTooltip] = useState(null); // { contactId, groupIndex, x, y }
 
   // Get stats from automation data (for workflow node tracking)
   const nodeStats = automation?.nodeStats || {};
@@ -1180,7 +1181,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
                           {contact._lastEmailSent ? new Date(contact._lastEmailSent).toLocaleDateString() : 'Never'}
                         </td>
-                        <td style={{ padding: '12px 20px' }}>
+                        <td style={{ padding: '12px 20px', position: 'relative' }}>
                           {contact._matchedGroups && contact._matchedGroups.length > 0 ? (
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                               {contact._matchedGroups.map((groupIndex) => (
@@ -1191,18 +1192,27 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                                     borderRadius: '10px',
                                     fontSize: '11px',
                                     fontWeight: '600',
-                                    backgroundColor: `${t.primary}20`,
-                                    color: t.primary,
+                                    backgroundColor: hoveredGroupTooltip?.contactId === contact.id && hoveredGroupTooltip?.groupIndex === groupIndex
+                                      ? t.primary
+                                      : `${t.primary}20`,
+                                    color: hoveredGroupTooltip?.contactId === contact.id && hoveredGroupTooltip?.groupIndex === groupIndex
+                                      ? '#fff'
+                                      : t.primary,
                                     cursor: 'default',
-                                    transition: 'all 0.15s ease'
+                                    transition: 'all 0.15s ease',
+                                    position: 'relative'
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.target.style.backgroundColor = t.primary;
-                                    e.target.style.color = '#fff';
+                                    const rect = e.target.getBoundingClientRect();
+                                    setHoveredGroupTooltip({
+                                      contactId: contact.id,
+                                      groupIndex,
+                                      x: rect.left,
+                                      y: rect.bottom + 8
+                                    });
                                   }}
-                                  onMouseLeave={(e) => {
-                                    e.target.style.backgroundColor = `${t.primary}20`;
-                                    e.target.style.color = t.primary;
+                                  onMouseLeave={() => {
+                                    setHoveredGroupTooltip(null);
                                   }}
                                 >
                                   Group {groupIndex + 1}
@@ -1221,6 +1231,39 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                 <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
                   <div style={{ fontSize: '32px', marginBottom: '12px' }}>👥</div>
                   <div style={{ fontSize: '14px' }}>No contacts match your current filters</div>
+                </div>
+              )}
+
+              {/* Group filter tooltip */}
+              {hoveredGroupTooltip && filterConfig?.groups?.[hoveredGroupTooltip.groupIndex] && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    left: hoveredGroupTooltip.x,
+                    top: hoveredGroupTooltip.y,
+                    backgroundColor: t.bgCard,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    zIndex: 10000,
+                    maxWidth: '300px',
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: t.textMuted, marginBottom: '8px', textTransform: 'uppercase' }}>
+                    Group {hoveredGroupTooltip.groupIndex + 1} Criteria
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {filterConfig.groups[hoveredGroupTooltip.groupIndex].rules
+                      ?.filter(r => r.field && r.operator)
+                      .map((rule, idx) => (
+                        <div key={idx} style={{ fontSize: '12px', color: t.text }}>
+                          {formatRuleText(rule)}
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
               )}
             </div>
