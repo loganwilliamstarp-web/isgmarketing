@@ -84,6 +84,10 @@ export const OPERATORS = {
     { value: 'between', label: 'is between' },
     { value: 'in_next_days', label: 'is in the next' },
     { value: 'in_last_days', label: 'was in the last' },
+    { value: 'more_than_days_future', label: 'is more than X days from now' },
+    { value: 'less_than_days_future', label: 'is less than X days from now' },
+    { value: 'more_than_days_ago', label: 'was more than X days ago' },
+    { value: 'less_than_days_ago', label: 'was less than X days ago' },
   ],
   text: [
     { value: 'contains', label: 'contains' },
@@ -161,6 +165,19 @@ export const formatRuleText = (rule) => {
   }
   if (rule.operator === 'in_next_days' || rule.operator === 'in_last_days') {
     return `${fieldLabel} ${operatorLabel} ${rule.value} days`;
+  }
+  // New date operators with days
+  if (rule.operator === 'more_than_days_future') {
+    return `${fieldLabel} is more than ${rule.value} days from now`;
+  }
+  if (rule.operator === 'less_than_days_future') {
+    return `${fieldLabel} is less than ${rule.value} days from now`;
+  }
+  if (rule.operator === 'more_than_days_ago') {
+    return `${fieldLabel} was more than ${rule.value} days ago`;
+  }
+  if (rule.operator === 'less_than_days_ago') {
+    return `${fieldLabel} was less than ${rule.value} days ago`;
   }
 
   return `${fieldLabel} ${operatorLabel} ${valueLabel}`;
@@ -366,6 +383,20 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
               onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
               style={inputStyle}
             />
+          )}
+
+          {field?.type === 'date' && ['more_than_days_future', 'less_than_days_future', 'more_than_days_ago', 'less_than_days_ago'].includes(rule.operator) && (
+            <>
+              <input
+                type="number"
+                value={rule.value || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+                placeholder="30"
+                min="1"
+                style={{ ...inputStyle, width: '70px' }}
+              />
+              <span style={{ fontSize: '13px', color: t.textSecondary }}>days</span>
+            </>
           )}
 
           {field?.type === 'text' && !['is_empty', 'is_not_empty'].includes(rule.operator) && (

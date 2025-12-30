@@ -436,6 +436,42 @@ export const massEmailsService = {
               p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
             );
           }
+          if (operator === 'more_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date > futureDateStr
+            );
+          }
+          if (operator === 'less_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= today && p.expiration_date < futureDateStr
+            );
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date < pastDateStr
+            );
+          }
+          if (operator === 'less_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
+            );
+          }
           if (operator === 'before') {
             return accountPolicies.some(p => p.expiration_date && p.expiration_date < value);
           }
@@ -462,6 +498,42 @@ export const massEmailsService = {
             );
           }
           if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date >= pastDateStr && p.effective_date <= today
+            );
+          }
+          if (operator === 'more_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date > futureDateStr
+            );
+          }
+          if (operator === 'less_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date >= today && p.effective_date < futureDateStr
+            );
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date < pastDateStr
+            );
+          }
+          if (operator === 'less_than_days_ago') {
             const days = parseInt(value, 10);
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
@@ -558,7 +630,11 @@ export const massEmailsService = {
           if (!lastEmailDate) {
             if (operator === 'before') return true; // Never emailed = older than any date
             if (operator === 'in_last_days') return false; // Never emailed in last X days
+            if (operator === 'less_than_days_ago') return false; // Never emailed
+            if (operator === 'more_than_days_ago') return true; // Never emailed = very long ago
             if (operator === 'in_next_days') return false; // Makes no sense for past dates
+            if (operator === 'more_than_days_future') return false;
+            if (operator === 'less_than_days_future') return false;
             if (operator === 'after') return false; // Never emailed
             if (operator === 'between') return false;
             return true;
@@ -567,6 +643,20 @@ export const massEmailsService = {
           const emailDateStr = lastEmailDate.split('T')[0];
 
           if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return emailDateStr >= pastDateStr && emailDateStr <= today;
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return emailDateStr < pastDateStr;
+          }
+          if (operator === 'less_than_days_ago') {
             const days = parseInt(value, 10);
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
@@ -592,11 +682,25 @@ export const massEmailsService = {
           const createdDateStr = createdAt.split('T')[0];
           const today = new Date().toISOString().split('T')[0];
 
-          if (operator === 'in_next_days') {
-            // For account created, "in next days" doesn't make sense - treat as no match
+          if (operator === 'in_next_days' || operator === 'more_than_days_future' || operator === 'less_than_days_future') {
+            // For account created, future date operators don't make sense - treat as no match
             return false;
           }
           if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return createdDateStr >= pastDateStr && createdDateStr <= today;
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return createdDateStr < pastDateStr;
+          }
+          if (operator === 'less_than_days_ago') {
             const days = parseInt(value, 10);
             const pastDate = new Date();
             pastDate.setDate(pastDate.getDate() - days);
