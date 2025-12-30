@@ -104,17 +104,25 @@ export const adminService = {
   },
 
   /**
-   * Update a master automation (triggers sync to all users)
+   * Update a master automation and sync to all users
    */
   async updateMasterAutomation(defaultKey, updates) {
+    // First update the master automation
     const { data, error } = await supabase
       .from('master_automations')
-      .update(updates)
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
       .eq('default_key', defaultKey)
       .select()
       .single();
 
     if (error) throw error;
+
+    // Explicitly sync to all users (in case trigger doesn't fire)
+    await supabase.rpc('sync_master_automation_to_users', { p_default_key: defaultKey });
+
     return data;
   },
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useAutomation, useAutomationMutations, useIsAdmin } from '../hooks';
+import { useAutomation, useAutomationMutations, useIsAdmin, useMasterAutomationMutations } from '../hooks';
 import WorkflowBuilder from '../components/WorkflowBuilder';
 
 // Loading skeleton
@@ -30,6 +30,7 @@ const WorkflowBuilderPage = ({ t }) => {
 
   // Mutations
   const { createAutomation, updateAutomation, activateAutomation, pauseAutomation, duplicateAutomation } = useAutomationMutations();
+  const { updateMasterAutomation } = useMasterAutomationMutations();
   
   // Handle status toggle - saves immediately to database
   const handleStatusToggle = async () => {
@@ -93,7 +94,25 @@ const WorkflowBuilderPage = ({ t }) => {
         const newAutomation = await createAutomation.mutateAsync(data);
         // Navigate to the edit page for the new automation
         navigate(`/${userId}/automations/${newAutomation.id}`, { replace: true });
+      } else if (isAdmin && isDefaultAutomation && automation?.default_key) {
+        // Admin editing a default automation - save to master_automations table
+        // This will trigger sync to all users via database trigger
+        await updateMasterAutomation.mutateAsync({
+          defaultKey: automation.default_key,
+          updates: {
+            name: data.name,
+            description: data.description,
+            category: data.category,
+            send_time: data.send_time,
+            timezone: data.timezone,
+            frequency: data.frequency,
+            filter_config: data.filter_config,
+            nodes: data.nodes
+            // Note: status is NOT synced - each user controls their own on/off
+          }
+        });
       } else {
+        // Regular user editing their own automation
         await updateAutomation.mutateAsync({
           automationId,
           updates: data
@@ -322,7 +341,7 @@ const WorkflowBuilderPage = ({ t }) => {
           {canEdit && (
             <button
               onClick={() => handleSave(automationData)}
-              disabled={createAutomation.isPending || updateAutomation.isPending}
+              disabled={createAutomation.isPending || updateAutomation.isPending || updateMasterAutomation.isPending}
               style={{
                 padding: '8px 16px',
                 backgroundColor: t?.primary || '#3b82f6',
@@ -332,10 +351,10 @@ const WorkflowBuilderPage = ({ t }) => {
                 cursor: 'pointer',
                 fontSize: '13px',
                 fontWeight: '500',
-                opacity: (createAutomation.isPending || updateAutomation.isPending) ? 0.7 : 1
+                opacity: (createAutomation.isPending || updateAutomation.isPending || updateMasterAutomation.isPending) ? 0.7 : 1
               }}
             >
-              {(createAutomation.isPending || updateAutomation.isPending)
+              {(createAutomation.isPending || updateAutomation.isPending || updateMasterAutomation.isPending)
                 ? 'Saving...'
                 : isNew ? 'Create' : 'Save Changes'}
             </button>
