@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import FilterBuilder, { formatRuleText } from './FilterBuilder';
-import { useMassEmailRecipients, useMassEmailRecipientCount } from '../hooks';
+import { useMassEmailRecipients, useMassEmailRecipientCount, useTemplates } from '../hooks';
 
 // Default dark theme (fallback)
 const defaultTheme = {
@@ -104,6 +104,9 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [hoveredGroupTooltip, setHoveredGroupTooltip] = useState(null); // { contactId, groupIndex, x, y }
+
+  // Fetch email templates for send_email node
+  const { data: templates = [], isLoading: templatesLoading } = useTemplates();
 
   // Get stats from automation data (for workflow node tracking)
   const nodeStats = automation?.nodeStats || {};
@@ -910,7 +913,18 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Email Template</label>
                     <select
-                      defaultValue={selectedNodeData.config?.template || ''}
+                      value={selectedNodeData.config?.template || ''}
+                      onChange={(e) => {
+                        const selectedTemplate = templates.find(t => t.id === e.target.value);
+                        updateNode(selectedNode, {
+                          config: {
+                            ...selectedNodeData.config,
+                            template: e.target.value,
+                            templateName: selectedTemplate?.name || ''
+                          },
+                          subtitle: selectedTemplate?.name || 'Select template...'
+                        });
+                      }}
                       style={{
                         width: '100%',
                         padding: '10px 12px',
@@ -921,12 +935,14 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                         fontSize: '14px'
                       }}
                     >
-                      <option value="">Select template...</option>
-                      <option>Welcome Email</option>
-                      <option>Cross-Sell Introduction</option>
-                      <option>Renewal Reminder</option>
-                      <option>Follow-Up</option>
-                      <option>Re-engagement</option>
+                      <option value="">
+                        {templatesLoading ? 'Loading templates...' : 'Select template...'}
+                      </option>
+                      {templates.map(template => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )}
