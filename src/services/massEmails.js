@@ -366,22 +366,27 @@ export const massEmailsService = {
             const values = value.split(',').map(v => v.toLowerCase());
             return values.includes(status);
           }
+          if (operator === 'is_not_any') {
+            const values = value.split(',').map(v => v.toLowerCase());
+            return !values.includes(status);
+          }
           return true;
         }
 
         case 'policy_type': {
-          const values = operator === 'is_any' ? value.split(',') : [value];
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
           const hasMatch = accountPolicies.some(p =>
             values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
           );
           if (operator === 'is') return hasMatch;
           if (operator === 'is_any') return hasMatch;
           if (operator === 'is_not') return !hasMatch;
+          if (operator === 'is_not_any') return !hasMatch;
           return true;
         }
 
         case 'active_policy_type': {
-          const values = operator === 'is_any' ? value.split(',') : [value];
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
           const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase() === 'active');
           const hasMatch = activePolicies.some(p =>
             values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
@@ -389,17 +394,19 @@ export const massEmailsService = {
           if (operator === 'is') return hasMatch;
           if (operator === 'is_any') return hasMatch;
           if (operator === 'is_not') return !hasMatch;
+          if (operator === 'is_not_any') return !hasMatch;
           return true;
         }
 
         case 'policy_status': {
-          const values = operator === 'is_any' ? value.split(',') : [value];
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
           const hasMatch = accountPolicies.some(p =>
             values.some(v => p.policy_status?.toLowerCase() === v.toLowerCase())
           );
           if (operator === 'is') return hasMatch;
           if (operator === 'is_any') return hasMatch;
           if (operator === 'is_not') return !hasMatch;
+          if (operator === 'is_not_any') return !hasMatch;
           return true;
         }
 
@@ -563,6 +570,10 @@ export const massEmailsService = {
           if (operator === 'is_any') {
             const values = value.split(',').map(v => v.toUpperCase());
             return values.includes(accountState);
+          }
+          if (operator === 'is_not_any') {
+            const values = value.split(',').map(v => v.toUpperCase());
+            return !values.includes(accountState);
           }
           return true;
         }
