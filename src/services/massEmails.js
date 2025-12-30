@@ -743,6 +743,163 @@ export const massEmailsService = {
       }
     };
 
+    // Helper function to check if a single policy matches a policy-related rule
+    const policyMatchesRule = (policy, rule) => {
+      const { field, operator, value, value2 } = rule;
+      const today = new Date().toISOString().split('T')[0];
+
+      switch (field) {
+        case 'active_policy_type': {
+          // Check if policy is active AND matches the LOB type
+          const status = policy.policy_status?.toLowerCase().trim();
+          if (status !== 'active') return false;
+
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+          const lobMatch = values.some(v => policy.policy_lob?.toLowerCase().includes(v.toLowerCase()));
+
+          if (operator === 'is' || operator === 'is_any') return lobMatch;
+          if (operator === 'is_not' || operator === 'is_not_any') return !lobMatch;
+          return true;
+        }
+
+        case 'policy_type': {
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+          const lobMatch = values.some(v => policy.policy_lob?.toLowerCase().includes(v.toLowerCase()));
+
+          if (operator === 'is' || operator === 'is_any') return lobMatch;
+          if (operator === 'is_not' || operator === 'is_not_any') return !lobMatch;
+          return true;
+        }
+
+        case 'policy_status': {
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+          const statusMatch = values.some(v => policy.policy_status?.toLowerCase() === v.toLowerCase());
+
+          if (operator === 'is' || operator === 'is_any') return statusMatch;
+          if (operator === 'is_not' || operator === 'is_not_any') return !statusMatch;
+          return true;
+        }
+
+        case 'policy_expiration': {
+          // Only check active policies for expiration
+          const status = policy.policy_status?.toLowerCase().trim();
+          if (status !== 'active') return false;
+
+          const expDate = policy.expiration_date;
+          if (!expDate) return false;
+
+          if (operator === 'in_next_days') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return expDate >= today && expDate <= futureDateStr;
+          }
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return expDate >= pastDateStr && expDate <= today;
+          }
+          if (operator === 'more_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return expDate > futureDateStr;
+          }
+          if (operator === 'less_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return expDate >= today && expDate < futureDateStr;
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return expDate < pastDateStr;
+          }
+          if (operator === 'less_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return expDate >= pastDateStr && expDate <= today;
+          }
+          if (operator === 'before') return expDate < value;
+          if (operator === 'after') return expDate > value;
+          if (operator === 'between') return expDate >= value && expDate <= (value2 || value);
+          return true;
+        }
+
+        case 'policy_effective': {
+          // Only check active policies for effective date
+          const status = policy.policy_status?.toLowerCase().trim();
+          if (status !== 'active') return false;
+
+          const effDate = policy.effective_date;
+          if (!effDate) return false;
+
+          if (operator === 'in_next_days') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return effDate >= today && effDate <= futureDateStr;
+          }
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return effDate >= pastDateStr && effDate <= today;
+          }
+          if (operator === 'more_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return effDate > futureDateStr;
+          }
+          if (operator === 'less_than_days_future') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return effDate >= today && effDate < futureDateStr;
+          }
+          if (operator === 'more_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return effDate < pastDateStr;
+          }
+          if (operator === 'less_than_days_ago') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return effDate >= pastDateStr && effDate <= today;
+          }
+          if (operator === 'before') return effDate < value;
+          if (operator === 'after') return effDate > value;
+          if (operator === 'between') return effDate >= value && effDate <= (value2 || value);
+          return true;
+        }
+
+        default:
+          return true;
+      }
+    };
+
+    // List of policy-related fields that should be correlated (checked on same policy)
+    const CORRELATED_POLICY_FIELDS = ['active_policy_type', 'policy_type', 'policy_status', 'policy_expiration', 'policy_effective'];
+
     // Helper function to check if an account matches all rules in a group (AND logic)
     const matchesGroup = (account, group) => {
       const groupRules = group.rules || [];
@@ -750,8 +907,24 @@ export const massEmailsService = {
 
       const accountPolicies = policyMap[account.account_unique_id] || [];
 
-      // All rules must match (AND logic)
-      return groupRules.every(rule => matchesRule(account, rule, accountPolicies));
+      // Separate policy-correlated rules from other rules
+      const policyRules = groupRules.filter(r => CORRELATED_POLICY_FIELDS.includes(r.field) && r.operator && r.value);
+      const otherRules = groupRules.filter(r => !CORRELATED_POLICY_FIELDS.includes(r.field) || !r.operator || !r.value);
+
+      // Check non-policy rules normally (they must all pass)
+      const otherRulesPass = otherRules.every(rule => matchesRule(account, rule, accountPolicies));
+      if (!otherRulesPass) return false;
+
+      // If no policy rules, we're done
+      if (policyRules.length === 0) return true;
+
+      // For policy rules, find at least one policy that matches ALL policy rules in this group
+      // This ensures correlated evaluation - the same policy must satisfy all conditions
+      const hasMatchingPolicy = accountPolicies.some(policy =>
+        policyRules.every(rule => policyMatchesRule(policy, rule))
+      );
+
+      return hasMatchingPolicy;
     };
 
     // Apply filter groups with OR logic between groups
