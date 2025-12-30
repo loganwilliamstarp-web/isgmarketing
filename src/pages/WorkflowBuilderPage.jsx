@@ -97,9 +97,19 @@ const WorkflowBuilderPage = ({ t }) => {
     navigate(`/${userId}/automations`);
   };
   
+  // Track the automation's updated_at to detect when fresh data loads
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+
   // Check if automationData has been populated from the query
-  // We need to wait for both the query AND the useEffect to run
-  const isDataSynced = isNew || (automation && automationData.name === automation.name);
+  // Compare updated_at to ensure we have the latest data
+  const isDataSynced = isNew || (automation && lastSyncedAt === automation.updated_at);
+
+  // Update lastSyncedAt when we sync data
+  useEffect(() => {
+    if (automation?.updated_at) {
+      setLastSyncedAt(automation.updated_at);
+    }
+  }, [automation?.updated_at]);
 
   // Loading state - wait for query AND state sync
   if (!isNew && (isLoading || !isDataSynced)) {
@@ -257,10 +267,10 @@ const WorkflowBuilderPage = ({ t }) => {
         </div>
       </div>
       
-      {/* Workflow Builder - key includes data hash to force remount when data loads */}
+      {/* Workflow Builder - key uses updated_at to force remount when data reloads */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <WorkflowBuilder
-          key={`${automationId || 'new'}-${automation?.id || 'loading'}`}
+          key={`${automationId || 'new'}-${automation?.updated_at || 'new'}`}
           t={t}
           automation={automationData}
           onUpdate={setAutomationData}
