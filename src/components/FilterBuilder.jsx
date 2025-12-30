@@ -32,6 +32,10 @@ export const FILTER_FIELDS = [
     { value: 'expired', label: 'Expired' }
   ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
+  { value: 'policy_term', label: 'Policy Term', type: 'select', options: [
+    { value: '6', label: '6 Months' },
+    { value: '12', label: '12 Months' }
+  ]},
   { value: 'policy_effective', label: 'Policy Effective Date', type: 'date' },
   { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
   { value: 'state', label: 'State', type: 'select', options: [
@@ -398,7 +402,7 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
 };
 
 // Filter group component - contains rules with AND logic
-export const FilterGroup = ({ group, groupIndex, onRemoveGroup, onAddRule, onUpdateRule, onRemoveRule, theme: t }) => {
+export const FilterGroup = ({ group, groupIndex, onRemoveGroup, onDuplicateGroup, onAddRule, onUpdateRule, onRemoveRule, theme: t }) => {
   const rules = group.rules || [];
 
   return (
@@ -425,21 +429,47 @@ export const FilterGroup = ({ group, groupIndex, onRemoveGroup, onAddRule, onUpd
         }}>
           Group {groupIndex + 1}
         </span>
-        <button
-          onClick={() => onRemoveGroup(groupIndex)}
-          style={{
-            padding: '4px 8px',
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: t.textMuted,
-            cursor: 'pointer',
-            fontSize: '12px',
-            borderRadius: '4px'
-          }}
-          title="Remove group"
-        >
-          Remove Group
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {onDuplicateGroup && (
+            <button
+              onClick={() => onDuplicateGroup(groupIndex)}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: 'transparent',
+                border: `1px solid ${t.border}`,
+                color: t.textSecondary,
+                cursor: 'pointer',
+                fontSize: '12px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title="Duplicate group"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Duplicate
+            </button>
+          )}
+          <button
+            onClick={() => onRemoveGroup(groupIndex)}
+            style={{
+              padding: '4px 8px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: t.textMuted,
+              cursor: 'pointer',
+              fontSize: '12px',
+              borderRadius: '4px'
+            }}
+            title="Remove group"
+          >
+            Remove
+          </button>
+        </div>
       </div>
 
       {/* Rules within group (AND logic) */}
@@ -616,6 +646,18 @@ const FilterBuilder = ({
     setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
   };
 
+  const duplicateGroup = (groupIndex) => {
+    const groupToCopy = groups[groupIndex];
+    // Deep copy the group's rules
+    const copiedGroup = {
+      rules: (groupToCopy.rules || []).map(rule => ({ ...rule }))
+    };
+    const newGroups = [...groups];
+    // Insert the copy right after the original
+    newGroups.splice(groupIndex + 1, 0, copiedGroup);
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
+  };
+
   const addRuleToGroup = (groupIndex) => {
     const newGroups = [...groups];
     newGroups[groupIndex] = {
@@ -748,6 +790,7 @@ const FilterBuilder = ({
                   group={group}
                   groupIndex={groupIndex}
                   onRemoveGroup={removeGroup}
+                  onDuplicateGroup={duplicateGroup}
                   onAddRule={addRuleToGroup}
                   onUpdateRule={updateRuleInGroup}
                   onRemoveRule={removeRuleFromGroup}
