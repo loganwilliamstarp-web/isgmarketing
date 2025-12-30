@@ -387,7 +387,11 @@ export const massEmailsService = {
 
         case 'active_policy_type': {
           const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
-          const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase() === 'active');
+          // Only match policies with status exactly "Active" (not "Pending Active" or similar)
+          const activePolicies = accountPolicies.filter(p => {
+            const status = p.policy_status?.toLowerCase().trim();
+            return status === 'active';
+          });
           const hasMatch = activePolicies.some(p =>
             values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
           );
