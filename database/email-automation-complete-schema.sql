@@ -100,7 +100,7 @@ CREATE TABLE automation_enrollments (
   account_id TEXT NOT NULL REFERENCES accounts(account_unique_id) ON DELETE CASCADE,
   
   -- Status
-  status VARCHAR(50) DEFAULT 'Active',  -- Active, Completed, Exited, Paused
+  status VARCHAR(50) DEFAULT 'paused',  -- active, paused, draft, archived
   
   -- Flow Position
   current_node_id VARCHAR(100),
@@ -1337,7 +1337,7 @@ BEGIN
     p_user_id, TRUE, 'welcome_personal',
     'Welcome Email - Personal Lines',
     'Send welcome email to new personal lines customers 15 days after becoming a customer',
-    'Onboarding', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Onboarding', 'paused', '10:00', 'America/Chicago', 'Daily',
     1, 0,  -- Can only enroll 1 time
     '{
       "groups": [{
@@ -1360,7 +1360,7 @@ BEGIN
     p_user_id, TRUE, 'welcome_commercial',
     'Welcome Email - Commercial Lines',
     'Send welcome email to new commercial customers 7 days after becoming a customer',
-    'Onboarding', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Onboarding', 'paused', '10:00', 'America/Chicago', 'Daily',
     1, 0,  -- Can only enroll 1 time
     '{
       "groups": [{
@@ -1383,7 +1383,7 @@ BEGIN
     p_user_id, TRUE, 'renewal_personal_no_cross',
     'Renewal Email - Personal Lines - No Cross Sale',
     'Renewal reminder for personal lines customers who have both auto AND home/renters (no cross-sell opportunity)',
-    'Retention', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Retention', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 90,  -- Re-enroll after 90 days
     '{
       "groups": [{
@@ -1414,7 +1414,7 @@ BEGIN
     p_user_id, TRUE, 'renewal_personal_cross',
     'Renewal Email - Personal Lines - Cross Sale',
     'Renewal reminder for personal lines customers who have only ONE of auto/home/renters (cross-sell opportunity)',
-    'Retention', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Retention', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 90,
     '{
       "groups": [{
@@ -1444,7 +1444,7 @@ BEGIN
     p_user_id, TRUE, 'renewal_commercial',
     'Renewal Email - Commercial Lines',
     'Renewal reminder for commercial lines customers 30 days before expiration',
-    'Retention', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Retention', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 90,
     '{
       "groups": [{
@@ -1473,7 +1473,7 @@ BEGIN
     p_user_id, TRUE, 'renewed_personal',
     'Policy Renewed - Personal Lines',
     'Send confirmation email when personal lines policy renews',
-    'Retention', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Retention', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 90,
     '{
       "groups": [{
@@ -1498,7 +1498,7 @@ BEGIN
     p_user_id, TRUE, 'renewed_commercial',
     'Policy Renewed - Commercial Lines',
     'Send confirmation email when commercial policy renews',
-    'Retention', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Retention', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 90,
     '{
       "groups": [{
@@ -1523,7 +1523,7 @@ BEGIN
     p_user_id, TRUE, 'midterm_cross_personal',
     'Midterm Cross Sale - Personal Lines',
     'Cross-sell opportunity for customers with only one policy type, triggered mid-term',
-    'Cross-Sell', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Cross-Sell', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 45,
     '{
       "groups": [
@@ -1568,7 +1568,7 @@ BEGIN
     p_user_id, TRUE, 'prospect_all',
     'Prospect Email - All Lines',
     'Re-engage prospects who never became customers',
-    'Win-Back', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Win-Back', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 365, TRUE,  -- Re-enroll every 365 days, distribute evenly
     '{
       "groups": [{
@@ -1590,7 +1590,7 @@ BEGIN
     p_user_id, TRUE, 'prior_customer_all',
     'Prior Customer Email - All Lines',
     'Win-back campaign for prior customers',
-    'Win-Back', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Win-Back', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 365, TRUE,
     '{
       "groups": [{
@@ -1612,7 +1612,7 @@ BEGIN
     p_user_id, TRUE, 'periodic_review',
     'Periodic Review Touch',
     'Annual check-in for customers who haven''t provided feedback',
-    'Engagement', 'Active', '10:00', 'America/Chicago', 'Daily',
+    'Engagement', 'paused', '10:00', 'America/Chicago', 'Daily',
     NULL, 365, TRUE,
     '{
       "groups": [{
