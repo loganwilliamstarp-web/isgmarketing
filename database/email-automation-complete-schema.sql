@@ -1268,27 +1268,33 @@ BEGIN
     '{
       "groups": [
         {
-          "logic": "AND",
-          "conditions": [
-            {"field": "policy_term_months", "operator": "equals", "value": 6},
-            {"field": "policy_status", "operator": "equals", "value": "Active"},
-            {"field": "policy_expiration_date", "operator": "equals_days_from_now", "value": 90},
-            {"field": "policy_class", "operator": "equals", "value": "Personal"},
-            {"field": "has_only_one_of", "operator": "in", "value": ["Personal Auto", "Homeowners", "Renters"]}
+          "rules": [
+            {"field": "active_policy_type", "operator": "is", "value": "Home"},
+            {"field": "active_policy_type", "operator": "is_not", "value": "Auto"},
+            {"field": "policy_term", "operator": "is", "value": "12"},
+            {"field": "policy_expiration", "operator": "more_than_days_future", "value": "170"},
+            {"field": "policy_expiration", "operator": "less_than_days_future", "value": "190"}
           ]
         },
         {
-          "logic": "AND",
-          "conditions": [
-            {"field": "policy_term_months", "operator": "equals", "value": 12},
-            {"field": "policy_status", "operator": "equals", "value": "Active"},
-            {"field": "policy_expiration_date", "operator": "equals_days_from_now", "value": 180},
-            {"field": "policy_class", "operator": "equals", "value": "Personal"},
-            {"field": "has_only_one_of", "operator": "in", "value": ["Personal Auto", "Homeowners", "Renters"]}
+          "rules": [
+            {"field": "active_policy_type", "operator": "is", "value": "Auto"},
+            {"field": "active_policy_type", "operator": "is_not_any", "value": "Home,Renters"},
+            {"field": "policy_term", "operator": "is", "value": "12"},
+            {"field": "policy_expiration", "operator": "more_than_days_future", "value": "170"},
+            {"field": "policy_expiration", "operator": "less_than_days_future", "value": "180"}
+          ]
+        },
+        {
+          "rules": [
+            {"field": "active_policy_type", "operator": "is", "value": "Auto"},
+            {"field": "active_policy_type", "operator": "is_not_any", "value": "Home,Renters"},
+            {"field": "policy_term", "operator": "is", "value": "6"},
+            {"field": "policy_expiration", "operator": "more_than_days_future", "value": "80"},
+            {"field": "policy_expiration", "operator": "less_than_days_future", "value": "90"}
           ]
         }
-      ],
-      "groupLogic": "OR"
+      ]
     }'::jsonb,
     '[
       {"id": "trigger", "type": "trigger", "title": "Mid-Term Cross-Sell Opportunity"},
