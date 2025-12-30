@@ -207,74 +207,76 @@ export const massEmailsService = {
 
   /**
    * Get recipients based on filter config with dynamic rules
+   * Supports both legacy format (rules array) and new format (groups array with OR logic)
+   * @param {string|string[]} ownerId - Single owner ID or array of owner IDs
    */
   async getRecipients(ownerId, filterConfig, options = {}) {
     const { limit = 100, offset = 0 } = options;
     const {
       rules = [],
+      groups = [],
       notOptedOut = true,
       search = ''
     } = filterConfig || {};
 
-    // Parse rules to extract account-level and policy-level filters
-    const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
-    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
-    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
-    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
-    const locationRules = rules.filter(r => r.field === 'location' && r.value);
-    const stateRules = rules.filter(r => r.field === 'state' && r.value);
-    const cityRules = rules.filter(r => r.field === 'city' && r.value);
+    // Convert to groups format for consistent processing
+    // If groups exist, use them; otherwise convert legacy rules to single group
+    let filterGroups = groups.length > 0 ? groups : (rules.length > 0 ? [{ rules }] : []);
 
-    // Get accounts first - include location fields for filtering
+    // Support multiple owner IDs
+    const ownerIds = Array.isArray(ownerId) ? ownerId : [ownerId];
+
+    // Get all accounts first (we'll filter client-side for group OR logic)
     let query = supabase
       .from('accounts')
       .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street')
-      .eq('owner_id', ownerId);
+      .in('owner_id', ownerIds);
 
-    // Apply account status filters at query level
-    if (accountStatusRules.length > 0) {
-      const statusRule = accountStatusRules[0]; // Use first rule
-      if (statusRule.operator === 'is') {
-        query = query.eq('account_status', statusRule.value);
-      } else if (statusRule.operator === 'is_not') {
-        query = query.neq('account_status', statusRule.value);
-      } else if (statusRule.operator === 'is_any') {
-        const values = statusRule.value.split(',').filter(v => v);
-        if (values.length > 0) {
-          query = query.in('account_status', values);
-        }
-      }
-    }
-
-    // Not opted out
+    // Not opted out (applies globally)
     if (notOptedOut) {
       query = query.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
     }
 
-    // Search filter
+    // Search filter (applies globally)
     if (search) {
       query = query.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    // Apply pagination
-    query = query.order('name').range(offset, offset + limit - 1);
+    // For groups, we need to fetch more accounts to filter client-side
+    // Apply pagination only if no groups (simple case)
+    if (filterGroups.length === 0) {
+      query = query.order('name').range(offset, offset + limit - 1);
+    } else {
+      // Fetch more for group filtering, then paginate at the end
+      query = query.order('name').limit(10000);
+    }
 
     const { data: accounts, error } = await query;
     if (error) throw error;
 
     // Filter to only include accounts with valid emails
-    let recipients = accounts.filter(account => {
+    let allAccounts = accounts.filter(account => {
       const email = account.person_email || account.email;
       return email && email.includes('@');
     });
 
-    // Check if we need policy filtering
-    const needsPolicyFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 || policyExpirationRules.length > 0;
+    // If no filter groups, return all accounts
+    if (filterGroups.length === 0) {
+      return allAccounts;
+    }
 
-    if (needsPolicyFilter && recipients.length > 0) {
-      const accountIds = recipients.map(a => a.account_unique_id);
+    // Check if we need policy data for any group
+    const needsPolicyFilter = filterGroups.some(group => {
+      const groupRules = group.rules || [];
+      return groupRules.some(r =>
+        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration'].includes(r.field) && r.value
+      );
+    });
 
-      // Fetch policies for these accounts
+    // Fetch policies once if needed
+    let policyMap = {};
+    if (needsPolicyFilter && allAccounts.length > 0) {
+      const accountIds = allAccounts.map(a => a.account_unique_id);
       const { data: policies, error: policyError } = await supabase
         .from('policies')
         .select('account_id, policy_lob, expiration_date, policy_status')
@@ -282,183 +284,283 @@ export const massEmailsService = {
 
       if (policyError) throw policyError;
 
-      // Group policies by account
-      const policyMap = {};
       policies.forEach(p => {
         if (!policyMap[p.account_id]) {
           policyMap[p.account_id] = [];
         }
         policyMap[p.account_id].push(p);
       });
+    }
 
-      // Apply policy filters
-      recipients = recipients.filter(account => {
-        const accountPolicies = policyMap[account.account_unique_id] || [];
+    // Check if we need location geocoding for any group
+    const needsLocationFilter = filterGroups.some(group => {
+      const groupRules = group.rules || [];
+      return groupRules.some(r => r.field === 'location' && r.value);
+    });
 
-        // Policy count rules
-        for (const rule of policyCountRules) {
-          const count = accountPolicies.length;
-          const targetCount = parseInt(rule.value, 10);
-          if (rule.operator === 'equals' && count !== targetCount) return false;
-          if (rule.operator === 'greater_than' && count <= targetCount) return false;
-          if (rule.operator === 'less_than' && count >= targetCount) return false;
-          if (rule.operator === 'at_least' && count < targetCount) return false;
+    // Pre-geocode all locations if needed
+    let geocodeResults = {};
+    if (needsLocationFilter && allAccounts.length > 0) {
+      const locationMap = {};
+      allAccounts.forEach(account => {
+        const zip = (account.billing_postal_code || '').trim();
+        const city = (account.billing_city || '').trim();
+        const state = (account.billing_state || '').trim();
+        let locationKey = '';
+        if (zip && state) {
+          locationKey = `${zip}, ${state}, USA`;
+        } else if (city && state) {
+          locationKey = `${city}, ${state}, USA`;
+        } else if (zip) {
+          locationKey = `${zip}, USA`;
+        }
+        if (locationKey) {
+          locationMap[account.account_unique_id] = locationKey;
+        }
+      });
+      const uniqueLocations = [...new Set(Object.values(locationMap))];
+      geocodeResults = await batchGeocode(uniqueLocations);
+      // Attach location keys to accounts for later use
+      allAccounts.forEach(account => {
+        account._locationKey = locationMap[account.account_unique_id];
+      });
+    }
+
+    // Helper function to check if an account matches a single rule
+    const matchesRule = (account, rule, accountPolicies) => {
+      const { field, operator, value, value2, radius } = rule;
+      if (!field || !operator) return true; // Incomplete rules are ignored
+
+      // Handle empty checks that don't need a value
+      const needsValue = !['is_empty', 'is_not_empty'].includes(operator);
+      if (needsValue && !value) return true;
+
+      switch (field) {
+        case 'account_status': {
+          const status = (account.account_status || '').toLowerCase();
+          if (operator === 'is') return status === value.toLowerCase();
+          if (operator === 'is_not') return status !== value.toLowerCase();
+          if (operator === 'is_any') {
+            const values = value.split(',').map(v => v.toLowerCase());
+            return values.includes(status);
+          }
+          return true;
         }
 
-        // Policy type rules
-        for (const rule of policyTypeRules) {
-          const values = rule.operator === 'is_any' ? rule.value.split(',') : [rule.value];
+        case 'policy_type': {
+          const values = operator === 'is_any' ? value.split(',') : [value];
           const hasMatch = accountPolicies.some(p =>
             values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
           );
-
-          if (rule.operator === 'is' && !hasMatch) return false;
-          if (rule.operator === 'is_any' && !hasMatch) return false;
-          if (rule.operator === 'is_not' && hasMatch) return false;
+          if (operator === 'is') return hasMatch;
+          if (operator === 'is_any') return hasMatch;
+          if (operator === 'is_not') return !hasMatch;
+          return true;
         }
 
-        // Policy expiration rules
-        const today = new Date().toISOString().split('T')[0];
-        for (const rule of policyExpirationRules) {
-          if (rule.operator === 'in_next_days') {
-            const days = parseInt(rule.value, 10);
+        case 'active_policy_type': {
+          const values = operator === 'is_any' ? value.split(',') : [value];
+          const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase() === 'active');
+          const hasMatch = activePolicies.some(p =>
+            values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
+          );
+          if (operator === 'is') return hasMatch;
+          if (operator === 'is_any') return hasMatch;
+          if (operator === 'is_not') return !hasMatch;
+          return true;
+        }
+
+        case 'policy_status': {
+          const values = operator === 'is_any' ? value.split(',') : [value];
+          const hasMatch = accountPolicies.some(p =>
+            values.some(v => p.policy_status?.toLowerCase() === v.toLowerCase())
+          );
+          if (operator === 'is') return hasMatch;
+          if (operator === 'is_any') return hasMatch;
+          if (operator === 'is_not') return !hasMatch;
+          return true;
+        }
+
+        case 'policy_count': {
+          const count = accountPolicies.length;
+          const targetCount = parseInt(value, 10);
+          const targetCount2 = value2 ? parseInt(value2, 10) : targetCount;
+          if (operator === 'equals') return count === targetCount;
+          if (operator === 'greater_than') return count > targetCount;
+          if (operator === 'less_than') return count < targetCount;
+          if (operator === 'at_least') return count >= targetCount;
+          if (operator === 'at_most') return count <= targetCount;
+          if (operator === 'between') return count >= targetCount && count <= targetCount2;
+          return true;
+        }
+
+        case 'policy_expiration': {
+          const today = new Date().toISOString().split('T')[0];
+          if (operator === 'in_next_days') {
+            const days = parseInt(value, 10);
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + days);
             const futureDateStr = futureDate.toISOString().split('T')[0];
-
-            const hasExpiring = accountPolicies.some(p =>
+            return accountPolicies.some(p =>
               p.expiration_date && p.expiration_date >= today && p.expiration_date <= futureDateStr
             );
-            if (!hasExpiring) return false;
-          } else if (rule.operator === 'before') {
-            const hasMatch = accountPolicies.some(p =>
-              p.expiration_date && p.expiration_date < rule.value
-            );
-            if (!hasMatch) return false;
-          } else if (rule.operator === 'after') {
-            const hasMatch = accountPolicies.some(p =>
-              p.expiration_date && p.expiration_date > rule.value
-            );
-            if (!hasMatch) return false;
-          } else if (rule.operator === 'between') {
-            const hasMatch = accountPolicies.some(p =>
-              p.expiration_date && p.expiration_date >= rule.value && p.expiration_date <= (rule.value2 || rule.value)
-            );
-            if (!hasMatch) return false;
           }
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
+            );
+          }
+          if (operator === 'before') {
+            return accountPolicies.some(p => p.expiration_date && p.expiration_date < value);
+          }
+          if (operator === 'after') {
+            return accountPolicies.some(p => p.expiration_date && p.expiration_date > value);
+          }
+          if (operator === 'between') {
+            return accountPolicies.some(p =>
+              p.expiration_date && p.expiration_date >= value && p.expiration_date <= (value2 || value)
+            );
+          }
+          return true;
         }
 
-        return true;
-      });
-    }
-
-    // Apply state filter
-    if (stateRules.length > 0 && recipients.length > 0) {
-      recipients = recipients.filter(account => {
-        for (const rule of stateRules) {
+        case 'state': {
           const accountState = (account.billing_state || '').toUpperCase();
-          if (rule.operator === 'is') {
-            if (accountState !== rule.value.toUpperCase()) return false;
-          } else if (rule.operator === 'is_not') {
-            if (accountState === rule.value.toUpperCase()) return false;
-          } else if (rule.operator === 'is_any') {
-            const values = rule.value.split(',').map(v => v.toUpperCase());
-            if (!values.includes(accountState)) return false;
+          if (operator === 'is') return accountState === value.toUpperCase();
+          if (operator === 'is_not') return accountState !== value.toUpperCase();
+          if (operator === 'is_any') {
+            const values = value.split(',').map(v => v.toUpperCase());
+            return values.includes(accountState);
           }
+          return true;
         }
-        return true;
-      });
-    }
 
-    // Apply city filter
-    if (cityRules.length > 0 && recipients.length > 0) {
-      recipients = recipients.filter(account => {
-        for (const rule of cityRules) {
+        case 'city': {
           const accountCity = (account.billing_city || '').toLowerCase();
-          const ruleValue = (rule.value || '').toLowerCase();
-          if (rule.operator === 'contains') {
-            if (!accountCity.includes(ruleValue)) return false;
-          } else if (rule.operator === 'equals') {
-            if (accountCity !== ruleValue) return false;
-          } else if (rule.operator === 'starts_with') {
-            if (!accountCity.startsWith(ruleValue)) return false;
-          }
+          const ruleValue = (value || '').toLowerCase();
+          if (operator === 'contains') return accountCity.includes(ruleValue);
+          if (operator === 'not_contains') return !accountCity.includes(ruleValue);
+          if (operator === 'equals') return accountCity === ruleValue;
+          if (operator === 'not_equals') return accountCity !== ruleValue;
+          if (operator === 'starts_with') return accountCity.startsWith(ruleValue);
+          if (operator === 'ends_with') return accountCity.endsWith(ruleValue);
+          if (operator === 'is_empty') return accountCity.trim() === '';
+          if (operator === 'is_not_empty') return accountCity.trim() !== '';
+          return true;
         }
-        return true;
-      });
-    }
 
-    // Apply location/radius filter
-    if (locationRules.length > 0 && recipients.length > 0) {
-      for (const rule of locationRules) {
-        const [centerLat, centerLng] = rule.value.split(',').map(parseFloat);
-        const radiusMiles = parseInt(rule.radius || '25', 10);
+        case 'zip_code': {
+          const accountZip = (account.billing_postal_code || '').toLowerCase().trim();
+          const ruleValue = (value || '').toLowerCase().trim();
+          if (operator === 'contains') return accountZip.includes(ruleValue);
+          if (operator === 'not_contains') return !accountZip.includes(ruleValue);
+          if (operator === 'equals') return accountZip === ruleValue;
+          if (operator === 'not_equals') return accountZip !== ruleValue;
+          if (operator === 'starts_with') return accountZip.startsWith(ruleValue);
+          if (operator === 'ends_with') return accountZip.endsWith(ruleValue);
+          if (operator === 'is_empty') return accountZip === '';
+          if (operator === 'is_not_empty') return accountZip !== '';
+          return true;
+        }
 
-        // Build unique location strings for batch geocoding
-        const locationMap = {};
-        recipients.forEach(account => {
-          const zip = (account.billing_postal_code || '').trim();
-          const city = (account.billing_city || '').trim();
-          const state = (account.billing_state || '').trim();
+        case 'email_domain': {
+          const email = (account.person_email || account.email || '').toLowerCase();
+          const domain = email.includes('@') ? email.split('@')[1] : '';
+          const ruleValue = (value || '').toLowerCase().trim();
+          if (operator === 'contains') return domain.includes(ruleValue);
+          if (operator === 'not_contains') return !domain.includes(ruleValue);
+          if (operator === 'equals') return domain === ruleValue;
+          if (operator === 'not_equals') return domain !== ruleValue;
+          if (operator === 'starts_with') return domain.startsWith(ruleValue);
+          if (operator === 'ends_with') return domain.endsWith(ruleValue);
+          if (operator === 'is_empty') return domain === '';
+          if (operator === 'is_not_empty') return domain !== '';
+          return true;
+        }
 
-          // Build location key with state for accuracy
-          let locationKey = '';
-          if (zip && state) {
-            locationKey = `${zip}, ${state}, USA`;
-          } else if (city && state) {
-            locationKey = `${city}, ${state}, USA`;
-          } else if (zip) {
-            locationKey = `${zip}, USA`;
-          }
-
-          if (locationKey) {
-            locationMap[account.account_unique_id] = locationKey;
-          }
-        });
-
-        // Get unique locations and batch geocode them
-        const uniqueLocations = [...new Set(Object.values(locationMap))];
-
-        // Batch geocode all unique locations (processes in parallel)
-        const geocodeResults = await batchGeocode(uniqueLocations);
-
-        // Filter recipients by distance
-        recipients = recipients.filter(account => {
-          const locationKey = locationMap[account.account_unique_id];
+        case 'location': {
+          if (operator !== 'within_radius' || !value) return true;
+          const [centerLat, centerLng] = value.split(',').map(parseFloat);
+          const radiusMiles = parseInt(radius || '25', 10);
+          const locationKey = account._locationKey;
           if (!locationKey) return false;
-
           const coords = geocodeResults[locationKey];
           if (!coords) return false;
-
           const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
           return distance <= radiusMiles;
-        });
+        }
+
+        default:
+          return true;
+      }
+    };
+
+    // Helper function to check if an account matches all rules in a group (AND logic)
+    const matchesGroup = (account, group) => {
+      const groupRules = group.rules || [];
+      if (groupRules.length === 0) return true;
+
+      const accountPolicies = policyMap[account.account_unique_id] || [];
+
+      // All rules must match (AND logic)
+      return groupRules.every(rule => matchesRule(account, rule, accountPolicies));
+    };
+
+    // Apply filter groups with OR logic between groups
+    const matchingAccountIds = new Set();
+    const matchingAccounts = [];
+
+    for (const account of allAccounts) {
+      // Check if account matches ANY group (OR logic)
+      const matchesAnyGroup = filterGroups.some(group => matchesGroup(account, group));
+
+      if (matchesAnyGroup && !matchingAccountIds.has(account.account_unique_id)) {
+        matchingAccountIds.add(account.account_unique_id);
+        matchingAccounts.push(account);
       }
     }
 
-    return recipients;
+    // Apply pagination
+    const paginatedResults = matchingAccounts.slice(offset, offset + limit);
+
+    return paginatedResults;
   },
 
   /**
    * Get recipient count and location breakdown in a single call
    * This avoids duplicate geocoding when both are needed
+   * @param {string|string[]} ownerId - Single owner ID or array of owner IDs
    */
   async getRecipientStats(ownerId, filterConfig) {
     const {
       rules = [],
+      groups = [],
       notOptedOut = true,
       search = ''
     } = filterConfig || {};
 
-    // Check if we need client-side filtering (policy or location filters)
-    const policyTypeRules = rules.filter(r => r.field === 'policy_type' && r.value);
-    const policyCountRules = rules.filter(r => r.field === 'policy_count' && r.value);
-    const policyExpirationRules = rules.filter(r => r.field === 'policy_expiration' && r.value);
-    const locationRules = rules.filter(r => r.field === 'location' && r.value);
-    const cityRules = rules.filter(r => r.field === 'city' && r.value);
+    // Convert to groups format for consistent processing
+    const filterGroups = groups.length > 0 ? groups : (rules.length > 0 ? [{ rules }] : []);
 
-    const needsClientSideFilter = policyTypeRules.length > 0 || policyCountRules.length > 0 ||
-      policyExpirationRules.length > 0 || locationRules.length > 0 || cityRules.length > 0;
+    // Check if we have any filter groups or complex filters that need client-side processing
+    const hasFilterGroups = filterGroups.length > 0;
+    const hasMultipleGroups = filterGroups.length > 1;
+
+    // Check if any group has complex filters
+    const hasComplexFilters = filterGroups.some(group => {
+      const groupRules = group.rules || [];
+      return groupRules.some(r =>
+        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration',
+          'location', 'city', 'zip_code', 'email_domain'].includes(r.field) &&
+        (r.value || ['is_empty', 'is_not_empty'].includes(r.operator))
+      );
+    });
+
+    const needsClientSideFilter = hasMultipleGroups || hasComplexFilters;
 
     let recipients;
     let count;
@@ -468,77 +570,10 @@ export const massEmailsService = {
       recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
       count = recipients.length;
     } else {
-      // Fast path: use count query and separate location query
-      let countQuery = supabase
-        .from('accounts')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', ownerId);
-
-      let locationQuery = supabase
-        .from('accounts')
-        .select('billing_city, billing_state')
-        .eq('owner_id', ownerId);
-
-      // Apply account status filters
-      const accountStatusRules = rules.filter(r => r.field === 'account_status' && r.value);
-      if (accountStatusRules.length > 0) {
-        const statusRule = accountStatusRules[0];
-        if (statusRule.operator === 'is') {
-          countQuery = countQuery.eq('account_status', statusRule.value);
-          locationQuery = locationQuery.eq('account_status', statusRule.value);
-        } else if (statusRule.operator === 'is_not') {
-          countQuery = countQuery.neq('account_status', statusRule.value);
-          locationQuery = locationQuery.neq('account_status', statusRule.value);
-        } else if (statusRule.operator === 'is_any') {
-          const values = statusRule.value.split(',').filter(v => v);
-          if (values.length > 0) {
-            countQuery = countQuery.in('account_status', values);
-            locationQuery = locationQuery.in('account_status', values);
-          }
-        }
-      }
-
-      // Apply state filters at query level
-      const stateRules = rules.filter(r => r.field === 'state' && r.value);
-      if (stateRules.length > 0) {
-        const stateRule = stateRules[0];
-        if (stateRule.operator === 'is') {
-          countQuery = countQuery.ilike('billing_state', stateRule.value);
-          locationQuery = locationQuery.ilike('billing_state', stateRule.value);
-        } else if (stateRule.operator === 'is_not') {
-          countQuery = countQuery.not('billing_state', 'ilike', stateRule.value);
-          locationQuery = locationQuery.not('billing_state', 'ilike', stateRule.value);
-        } else if (stateRule.operator === 'is_any') {
-          const values = stateRule.value.split(',').filter(v => v);
-          if (values.length > 0) {
-            countQuery = countQuery.in('billing_state', values);
-            locationQuery = locationQuery.in('billing_state', values);
-          }
-        }
-      }
-
-      // Not opted out
-      if (notOptedOut) {
-        countQuery = countQuery.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
-        locationQuery = locationQuery.or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false');
-      }
-
-      // Search filter
-      if (search) {
-        countQuery = countQuery.or(`name.ilike.%${search}%,person_email.ilike.%${search}%,email.ilike.%${search}%`);
-      }
-
-      // Run both queries in parallel
-      const [countResult, locationResult] = await Promise.all([
-        countQuery,
-        locationQuery
-      ]);
-
-      if (countResult.error) throw countResult.error;
-      if (locationResult.error) throw locationResult.error;
-
-      count = countResult.count || 0;
-      recipients = locationResult.data || [];
+      // Fast path for no filters or single group with only account_status/state filters
+      // Use getRecipients which now handles both formats
+      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+      count = recipients.length;
     }
 
     // Build location breakdown from recipients

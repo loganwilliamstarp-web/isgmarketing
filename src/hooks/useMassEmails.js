@@ -1,12 +1,32 @@
 // src/hooks/useMassEmails.js
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { massEmailsService } from '../services/massEmails';
+import { userSettingsService } from '../services/userSettings';
 import { useParams } from 'react-router-dom';
 
 const useOwnerId = () => {
   const { userId } = useParams();
   return userId;
 };
+
+/**
+ * Get all user IDs with the same role as the current user
+ */
+export function useRoleUserIds(includeRoleAccounts = false) {
+  const ownerId = useOwnerId();
+
+  return useQuery({
+    queryKey: ['roleUserIds', ownerId, includeRoleAccounts],
+    queryFn: async () => {
+      if (!includeRoleAccounts) {
+        return [ownerId];
+      }
+      return userSettingsService.getUserIdsByRole(ownerId);
+    },
+    enabled: !!ownerId,
+    staleTime: 60000 // Cache for 1 minute
+  });
+}
 
 /**
  * Get all mass email batches
@@ -63,9 +83,12 @@ export function useMassEmailRecipients(filterConfig, options = {}) {
 /**
  * Get recipient stats (count and breakdown) in a single query
  * This avoids duplicate geocoding when both are needed
+ * @param {Object} filterConfig - Filter configuration
+ * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
  */
-export function useMassEmailRecipientStats(filterConfig) {
+export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = false) {
   const ownerId = useOwnerId();
+  const { data: ownerIds } = useRoleUserIds(includeRoleAccounts);
 
   // Create a stable filter key that only includes filter-relevant data
   // This prevents unnecessary refetches when locationData object changes
@@ -77,14 +100,24 @@ export function useMassEmailRecipientStats(filterConfig) {
       value2: r.value2,
       radius: r.radius
     })),
+    groups: filterConfig.groups?.map(g => ({
+      rules: g.rules?.map(r => ({
+        field: r.field,
+        operator: r.operator,
+        value: r.value,
+        value2: r.value2,
+        radius: r.radius
+      }))
+    })),
     search: filterConfig.search,
-    notOptedOut: filterConfig.notOptedOut
+    notOptedOut: filterConfig.notOptedOut,
+    includeRoleAccounts
   } : null;
 
   return useQuery({
-    queryKey: ['massEmailRecipientStats', ownerId, stableFilterConfig],
-    queryFn: () => massEmailsService.getRecipientStats(ownerId, filterConfig),
-    enabled: !!ownerId && !!filterConfig,
+    queryKey: ['massEmailRecipientStats', ownerId, stableFilterConfig, ownerIds],
+    queryFn: () => massEmailsService.getRecipientStats(ownerIds || [ownerId], filterConfig),
+    enabled: !!ownerId && !!filterConfig && !!ownerIds,
     staleTime: 30000, // Keep data fresh for 30 seconds
     gcTime: 60000, // Cache for 1 minute
     placeholderData: (previousData) => previousData // Show previous data while loading
@@ -94,9 +127,11 @@ export function useMassEmailRecipientStats(filterConfig) {
 /**
  * Count recipients for a filter config
  * Uses the combined stats query internally
+ * @param {Object} filterConfig - Filter configuration
+ * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
  */
-export function useMassEmailRecipientCount(filterConfig) {
-  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig);
+export function useMassEmailRecipientCount(filterConfig, includeRoleAccounts = false) {
+  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig, includeRoleAccounts);
   return {
     data: data?.count,
     isLoading,
@@ -108,9 +143,11 @@ export function useMassEmailRecipientCount(filterConfig) {
 /**
  * Get location breakdown of recipients
  * Uses the combined stats query internally
+ * @param {Object} filterConfig - Filter configuration
+ * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
  */
-export function useMassEmailLocationBreakdown(filterConfig) {
-  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig);
+export function useMassEmailLocationBreakdown(filterConfig, includeRoleAccounts = false) {
+  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig, includeRoleAccounts);
   return {
     data: data?.breakdown,
     isLoading,
