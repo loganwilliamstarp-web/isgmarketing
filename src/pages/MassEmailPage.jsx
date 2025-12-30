@@ -608,6 +608,347 @@ const OPERATORS = {
 // Radius options in miles
 const RADIUS_OPTIONS = [5, 10, 15, 25, 50, 100];
 
+// Helper to get field label
+const getFieldLabel = (fieldValue) => {
+  const field = FILTER_FIELDS.find(f => f.value === fieldValue);
+  return field?.label || fieldValue;
+};
+
+// Helper to get operator label
+const getOperatorLabel = (fieldType, operatorValue) => {
+  const operators = OPERATORS[fieldType] || [];
+  const op = operators.find(o => o.value === operatorValue);
+  return op?.label || operatorValue;
+};
+
+// Helper to format rule as readable text
+const formatRuleText = (rule) => {
+  const field = FILTER_FIELDS.find(f => f.value === rule.field);
+  if (!field) return null;
+
+  const fieldLabel = field.label;
+  const operatorLabel = getOperatorLabel(field.type, rule.operator);
+  let valueLabel = rule.value;
+
+  // For select fields, get the option label
+  if (field.type === 'select' && field.options) {
+    if (rule.operator === 'is_any') {
+      const values = (rule.value || '').split(',');
+      valueLabel = values.map(v => {
+        const opt = field.options.find(o => o.value === v);
+        return opt?.label || v;
+      }).join(', ');
+    } else {
+      const opt = field.options.find(o => o.value === rule.value);
+      valueLabel = opt?.label || rule.value;
+    }
+  }
+
+  // Handle special cases
+  if (rule.operator === 'is_empty' || rule.operator === 'is_not_empty') {
+    return `${fieldLabel} ${operatorLabel}`;
+  }
+  if (rule.operator === 'between' && rule.value2) {
+    return `${fieldLabel} ${operatorLabel} ${rule.value} and ${rule.value2}`;
+  }
+  if (rule.operator === 'in_next_days' || rule.operator === 'in_last_days') {
+    return `${fieldLabel} ${operatorLabel} ${rule.value} days`;
+  }
+  if (rule.operator === 'within_radius') {
+    return `${fieldLabel} within ${rule.radius || 25} miles of ${rule.locationDisplay || 'location'}`;
+  }
+
+  return `${fieldLabel} ${operatorLabel} ${valueLabel}`;
+};
+
+// Recipients Preview Modal
+const RecipientsPreviewModal = ({ recipients, filterConfig, isLoading, onClose, theme: t }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
+  // Get all groups/rules for display
+  const groups = filterConfig?.groups || (filterConfig?.rules?.length > 0 ? [{ rules: filterConfig.rules }] : []);
+  const hasFilters = groups.some(g => g.rules?.some(r => r.field && r.operator));
+
+  // Filter recipients by search
+  const filteredRecipients = useMemo(() => {
+    if (!recipients) return [];
+    if (!searchTerm) return recipients;
+    const term = searchTerm.toLowerCase();
+    return recipients.filter(r =>
+      (r.name || '').toLowerCase().includes(term) ||
+      (r.person_email || r.email || '').toLowerCase().includes(term) ||
+      (r.primary_contact_first_name || '').toLowerCase().includes(term) ||
+      (r.primary_contact_last_name || '').toLowerCase().includes(term)
+    );
+  }, [recipients, searchTerm]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredRecipients.length / pageSize);
+  const paginatedRecipients = filteredRecipients.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  return (
+    <>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          zIndex: 1000
+        }}
+        onClick={onClose}
+      />
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '900px',
+        maxWidth: '95vw',
+        maxHeight: '85vh',
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        border: `1px solid ${t.border}`,
+        zIndex: 1001,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: t.text }}>
+              Matching Recipients
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: t.textSecondary }}>
+              {isLoading ? 'Loading...' : `${filteredRecipients.length.toLocaleString()} accounts match your criteria`}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: t.textMuted,
+              cursor: 'pointer',
+              fontSize: '24px',
+              lineHeight: 1,
+              padding: '4px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Active Filters Summary */}
+        {hasFilters && (
+          <div style={{
+            padding: '12px 20px',
+            backgroundColor: t.bgHover,
+            borderBottom: `1px solid ${t.border}`
+          }}>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: t.textSecondary, marginBottom: '8px', textTransform: 'uppercase' }}>
+              Active Filters
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {groups.map((group, gIdx) => (
+                <React.Fragment key={gIdx}>
+                  {gIdx > 0 && (
+                    <span style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#f59e0b20',
+                      color: '#f59e0b',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: '700'
+                    }}>
+                      OR
+                    </span>
+                  )}
+                  {(group.rules || []).filter(r => r.field && r.operator).map((rule, rIdx) => (
+                    <React.Fragment key={`${gIdx}-${rIdx}`}>
+                      {rIdx > 0 && (
+                        <span style={{ fontSize: '11px', color: t.textMuted, alignSelf: 'center' }}>AND</span>
+                      )}
+                      <span style={{
+                        padding: '4px 10px',
+                        backgroundColor: `${t.primary}15`,
+                        color: t.primary,
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}>
+                        {formatRuleText(rule)}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
+        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${t.border}` }}>
+          <input
+            type="text"
+            placeholder="Search recipients..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              backgroundColor: t.bgInput,
+              border: `1px solid ${t.border}`,
+              borderRadius: '8px',
+              color: t.text,
+              fontSize: '14px'
+            }}
+          />
+        </div>
+
+        {/* Recipients List */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '0 20px' }}>
+          {isLoading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: t.textMuted }}>
+              Loading recipients...
+            </div>
+          ) : paginatedRecipients.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: t.textMuted }}>
+              {searchTerm ? 'No recipients match your search' : 'No recipients found'}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${t.border}` }}>
+                  <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
+                    Name
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
+                    Email
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
+                    Status
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 8px', fontSize: '12px', fontWeight: '600', color: t.textSecondary, textTransform: 'uppercase' }}>
+                    Location
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedRecipients.map((recipient, idx) => (
+                  <tr
+                    key={recipient.account_unique_id || idx}
+                    style={{
+                      borderBottom: `1px solid ${t.border}`,
+                      backgroundColor: idx % 2 === 0 ? 'transparent' : t.bgHover
+                    }}
+                  >
+                    <td style={{ padding: '12px 8px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
+                        {recipient.primary_contact_first_name
+                          ? `${recipient.primary_contact_first_name} ${recipient.primary_contact_last_name || ''}`.trim()
+                          : recipient.name || 'N/A'}
+                      </div>
+                      {recipient.name && recipient.primary_contact_first_name && (
+                        <div style={{ fontSize: '12px', color: t.textMuted }}>
+                          {recipient.name}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 8px', fontSize: '13px', color: t.textSecondary }}>
+                      {recipient.person_email || recipient.email || 'N/A'}
+                    </td>
+                    <td style={{ padding: '12px 8px' }}>
+                      <span style={{
+                        padding: '3px 8px',
+                        backgroundColor: t.bgHover,
+                        color: t.text,
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        textTransform: 'capitalize'
+                      }}>
+                        {recipient.account_status || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 8px', fontSize: '13px', color: t.textSecondary }}>
+                      {[recipient.billing_city, recipient.billing_state].filter(Boolean).join(', ') || 'N/A'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{
+            padding: '12px 20px',
+            borderTop: `1px solid ${t.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ fontSize: '13px', color: t.textSecondary }}>
+              Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, filteredRecipients.length)} of {filteredRecipients.length}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: currentPage === 1 ? t.bgHover : t.bgCard,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: currentPage === 1 ? t.textMuted : t.text,
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Previous
+              </button>
+              <span style={{ padding: '6px 12px', fontSize: '13px', color: t.textSecondary }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: currentPage === totalPages ? t.bgHover : t.bgCard,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: currentPage === totalPages ? t.textMuted : t.text,
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
 // Google Maps component with circle overlay
 const GoogleMapWithCircle = ({ lat, lng, radiusMiles, theme: t }) => {
   const mapRef = useRef(null);
@@ -1433,7 +1774,9 @@ const FilterGroup = ({ group, groupIndex, onUpdateGroup, onRemoveGroup, onAddRul
   );
 };
 
-const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, isFetching, locationBreakdown, isLoadingBreakdown, includeRoleAccounts, setIncludeRoleAccounts, roleUserCount, theme: t }) => {
+const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, isFetching, locationBreakdown, isLoadingBreakdown, includeRoleAccounts, setIncludeRoleAccounts, roleUserCount, previewRecipients, isLoadingPreview, theme: t }) => {
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   // Support both legacy (rules array) and new (groups array) format
   // Legacy format: { rules: [...] }
   // New format: { groups: [{ rules: [...] }, { rules: [...] }] }
@@ -1689,16 +2032,34 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         />
       </div>
 
-      {/* Recipient Count */}
-      <div style={{
-        padding: '20px',
-        backgroundColor: `${t.primary}10`,
-        borderRadius: '12px',
-        border: `1px solid ${t.primary}30`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
+      {/* Recipient Count - Clickable */}
+      <button
+        onClick={() => setShowPreviewModal(true)}
+        disabled={isLoading || recipientCount === 0}
+        style={{
+          width: '100%',
+          padding: '20px',
+          backgroundColor: `${t.primary}10`,
+          borderRadius: '12px',
+          border: `1px solid ${t.primary}30`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: isLoading || recipientCount === 0 ? 'default' : 'pointer',
+          textAlign: 'left',
+          transition: 'all 0.2s'
+        }}
+        onMouseEnter={(e) => {
+          if (!isLoading && recipientCount > 0) {
+            e.currentTarget.style.backgroundColor = `${t.primary}18`;
+            e.currentTarget.style.borderColor = `${t.primary}50`;
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = `${t.primary}10`;
+          e.currentTarget.style.borderColor = `${t.primary}30`;
+        }}
+      >
         <div>
           <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
             Matching Recipients
@@ -1706,19 +2067,35 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
           <div style={{ fontSize: '12px', color: t.textSecondary }}>
             {isFetching && recipientCount !== undefined
               ? 'Updating count...'
-              : 'Accounts with valid emails who haven\'t opted out'}
+              : recipientCount > 0
+                ? 'Click to view matching accounts'
+                : 'Accounts with valid emails who haven\'t opted out'}
           </div>
         </div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '700',
-          color: t.primary,
-          opacity: isFetching ? 0.6 : 1,
-          transition: 'opacity 0.2s'
-        }}>
-          {isLoading ? '...' : (recipientCount ?? 0).toLocaleString()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            fontSize: '28px',
+            fontWeight: '700',
+            color: t.primary,
+            opacity: isFetching ? 0.6 : 1,
+            transition: 'opacity 0.2s'
+          }}>
+            {isLoading ? '...' : (recipientCount ?? 0).toLocaleString()}
+          </div>
+          {!isLoading && recipientCount > 0 && (
+            <div style={{
+              padding: '6px 10px',
+              backgroundColor: t.primary,
+              color: '#fff',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500'
+            }}>
+              View
+            </div>
+          )}
         </div>
-      </div>
+      </button>
 
       {/* Location Breakdown */}
       <LocationBreakdown
@@ -1726,6 +2103,17 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         isLoading={isLoadingBreakdown}
         theme={t}
       />
+
+      {/* Recipients Preview Modal */}
+      {showPreviewModal && (
+        <RecipientsPreviewModal
+          recipients={previewRecipients}
+          filterConfig={filterConfig}
+          isLoading={isLoadingPreview}
+          onClose={() => setShowPreviewModal(false)}
+          theme={t}
+        />
+      )}
     </div>
   );
 };
@@ -1909,6 +2297,11 @@ const MassEmailPage = ({ t }) => {
   const { data: locationBreakdown, isLoading: loadingBreakdown } = useMassEmailLocationBreakdown(
     step >= 1 ? filterConfig : null,
     includeRoleAccounts
+  );
+  // Preview recipients for the modal (fetched on step 1 for modal preview)
+  const { data: previewRecipients, isLoading: loadingPreview } = useMassEmailRecipients(
+    step >= 1 ? filterConfig : null,
+    { limit: 500 }
   );
   const { data: recipients, isLoading: loadingRecipients } = useMassEmailRecipients(
     step === 2 ? filterConfig : null,
@@ -2106,6 +2499,8 @@ const MassEmailPage = ({ t }) => {
                 includeRoleAccounts={includeRoleAccounts}
                 setIncludeRoleAccounts={setIncludeRoleAccounts}
                 roleUserCount={roleUserIds?.length || 1}
+                previewRecipients={previewRecipients}
+                isLoadingPreview={loadingPreview}
                 theme={t}
               />
             )}
