@@ -69,6 +69,7 @@ export const OPERATORS = {
     { value: 'is', label: 'is' },
     { value: 'is_not', label: 'is not' },
     { value: 'is_any', label: 'is any of' },
+    { value: 'is_not_any', label: 'is not any of' },
   ],
   number: [
     { value: 'equals', label: 'equals' },
@@ -144,7 +145,7 @@ export const formatRuleText = (rule) => {
 
   // For select fields, get the option label
   if (field.type === 'select' && field.options) {
-    if (rule.operator === 'is_any') {
+    if (rule.operator === 'is_any' || rule.operator === 'is_not_any') {
       const values = (rule.value || '').split(',');
       valueLabel = values.map(v => {
         const opt = field.options.find(o => o.value === v);
@@ -261,7 +262,7 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
       {/* Value input - varies by field type */}
       {rule.field && rule.operator && (
         <>
-          {field?.type === 'select' && rule.operator !== 'is_any' && (
+          {field?.type === 'select' && !['is_any', 'is_not_any'].includes(rule.operator) && (
             <select
               value={rule.value || ''}
               onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
@@ -274,7 +275,7 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
             </select>
           )}
 
-          {field?.type === 'select' && rule.operator === 'is_any' && (
+          {field?.type === 'select' && ['is_any', 'is_not_any'].includes(rule.operator) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
               {field.options.map(opt => (
                 <button
