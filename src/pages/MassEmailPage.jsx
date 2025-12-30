@@ -7,7 +7,8 @@ import {
   useMassEmailRecipients,
   useMassEmailRecipientCount,
   useMassEmailLocationBreakdown,
-  useMassEmailMutations
+  useMassEmailMutations,
+  useRoleUserIds
 } from '../hooks';
 
 // Google Maps API key
@@ -527,6 +528,20 @@ const FILTER_FIELDS = [
     { value: 'Commercial', label: 'Commercial' },
     { value: 'Health', label: 'Health' }
   ]},
+  { value: 'active_policy_type', label: 'Has Active Policy', type: 'select', options: [
+    { value: 'Auto', label: 'Auto' },
+    { value: 'Home', label: 'Home' },
+    { value: 'Renters', label: 'Renters' },
+    { value: 'Life', label: 'Life' },
+    { value: 'Umbrella', label: 'Umbrella' },
+    { value: 'Commercial', label: 'Commercial' },
+    { value: 'Health', label: 'Health' }
+  ]},
+  { value: 'policy_status', label: 'Policy Status', type: 'select', options: [
+    { value: 'active', label: 'Active' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'expired', label: 'Expired' }
+  ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
   { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
   { value: 'location', label: 'Location', type: 'location' },
@@ -550,6 +565,8 @@ const FILTER_FIELDS = [
     { value: 'WI', label: 'Wisconsin' }, { value: 'WY', label: 'Wyoming' }
   ]},
   { value: 'city', label: 'City', type: 'text' },
+  { value: 'zip_code', label: 'ZIP Code', type: 'text' },
+  { value: 'email_domain', label: 'Email Domain', type: 'text' },
 ];
 
 const OPERATORS = {
@@ -563,20 +580,28 @@ const OPERATORS = {
     { value: 'greater_than', label: 'greater than' },
     { value: 'less_than', label: 'less than' },
     { value: 'at_least', label: 'at least' },
+    { value: 'at_most', label: 'at most' },
+    { value: 'between', label: 'is between' },
   ],
   date: [
     { value: 'before', label: 'is before' },
     { value: 'after', label: 'is after' },
     { value: 'between', label: 'is between' },
     { value: 'in_next_days', label: 'is in the next' },
+    { value: 'in_last_days', label: 'was in the last' },
   ],
   location: [
     { value: 'within_radius', label: 'is within' },
   ],
   text: [
     { value: 'contains', label: 'contains' },
+    { value: 'not_contains', label: 'does not contain' },
     { value: 'equals', label: 'equals' },
+    { value: 'not_equals', label: 'does not equal' },
     { value: 'starts_with', label: 'starts with' },
+    { value: 'ends_with', label: 'ends with' },
+    { value: 'is_empty', label: 'is empty' },
+    { value: 'is_not_empty', label: 'is not empty' },
   ],
 };
 
@@ -940,7 +965,7 @@ const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
             </div>
           )}
 
-          {field?.type === 'number' && (
+          {field?.type === 'number' && rule.operator !== 'between' && (
             <input
               type="number"
               value={rule.value || ''}
@@ -950,7 +975,40 @@ const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
             />
           )}
 
+          {field?.type === 'number' && rule.operator === 'between' && (
+            <>
+              <input
+                type="number"
+                value={rule.value || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+                placeholder="Min"
+                style={{ ...inputStyle, width: '80px' }}
+              />
+              <span style={{ fontSize: '13px', color: t.textSecondary }}>and</span>
+              <input
+                type="number"
+                value={rule.value2 || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value2: e.target.value })}
+                placeholder="Max"
+                style={{ ...inputStyle, width: '80px' }}
+              />
+            </>
+          )}
+
           {field?.type === 'date' && rule.operator === 'in_next_days' && (
+            <>
+              <input
+                type="number"
+                value={rule.value || ''}
+                onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+                placeholder="30"
+                style={{ ...inputStyle, width: '70px' }}
+              />
+              <span style={{ fontSize: '13px', color: t.textSecondary }}>days</span>
+            </>
+          )}
+
+          {field?.type === 'date' && rule.operator === 'in_last_days' && (
             <>
               <input
                 type="number"
@@ -990,7 +1048,7 @@ const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
             />
           )}
 
-          {field?.type === 'text' && (
+          {field?.type === 'text' && !['is_empty', 'is_not_empty'].includes(rule.operator) && (
             <input
               type="text"
               value={rule.value || ''}
@@ -1281,33 +1339,162 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
 };
 
 // Recipients filter step with dynamic filter builder
-const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, isFetching, locationBreakdown, isLoadingBreakdown, theme: t }) => {
-  const rules = filterConfig.rules || [];
+// Filter group component - contains rules with AND logic
+const FilterGroup = ({ group, groupIndex, onUpdateGroup, onRemoveGroup, onAddRule, onUpdateRule, onRemoveRule, showOrLabel, theme: t }) => {
+  const rules = group.rules || [];
 
-  const addRule = () => {
-    setFilterConfig({
-      ...filterConfig,
-      rules: [...rules, { field: '', operator: '', value: '' }]
-    });
+  return (
+    <div style={{
+      padding: '16px',
+      backgroundColor: t.bgCard,
+      borderRadius: '12px',
+      border: `2px solid ${t.border}`,
+      position: 'relative'
+    }}>
+      {/* Group header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px'
+      }}>
+        <span style={{
+          fontSize: '12px',
+          fontWeight: '600',
+          color: t.textSecondary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          Group {groupIndex + 1}
+        </span>
+        <button
+          onClick={() => onRemoveGroup(groupIndex)}
+          style={{
+            padding: '4px 8px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: t.textMuted,
+            cursor: 'pointer',
+            fontSize: '12px',
+            borderRadius: '4px'
+          }}
+          title="Remove group"
+        >
+          Remove Group
+        </button>
+      </div>
+
+      {/* Rules within group (AND logic) */}
+      {rules.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '12px',
+          color: t.textMuted,
+          fontSize: '13px'
+        }}>
+          Add filters to this group
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+          {rules.map((rule, ruleIndex) => (
+            <FilterRule
+              key={ruleIndex}
+              rule={rule}
+              index={ruleIndex}
+              onUpdate={(idx, updatedRule) => onUpdateRule(groupIndex, idx, updatedRule)}
+              onRemove={(idx) => onRemoveRule(groupIndex, idx)}
+              theme={t}
+            />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => onAddRule(groupIndex)}
+        style={{
+          width: '100%',
+          padding: '8px',
+          backgroundColor: t.bgHover,
+          border: `1px dashed ${t.border}`,
+          borderRadius: '6px',
+          color: t.primary,
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: '500',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '4px'
+        }}
+      >
+        <span>+</span> Add Filter to Group
+      </button>
+    </div>
+  );
+};
+
+const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoading, isFetching, locationBreakdown, isLoadingBreakdown, includeRoleAccounts, setIncludeRoleAccounts, roleUserCount, theme: t }) => {
+  // Support both legacy (rules array) and new (groups array) format
+  // Legacy format: { rules: [...] }
+  // New format: { groups: [{ rules: [...] }, { rules: [...] }] }
+  const groups = filterConfig.groups || (filterConfig.rules?.length > 0 ? [{ rules: filterConfig.rules }] : []);
+  const hasGroups = groups.length > 0;
+
+  // Migrate to groups format if using legacy rules
+  const updateFilterConfig = (newConfig) => {
+    // Always use groups format internally
+    const { rules, ...rest } = newConfig;
+    setFilterConfig(rest);
   };
 
-  const updateRule = (index, updatedRule) => {
-    const newRules = [...rules];
-    newRules[index] = updatedRule;
-    setFilterConfig({ ...filterConfig, rules: newRules });
+  const addGroup = () => {
+    const newGroups = [...groups, { rules: [{ field: '', operator: '', value: '' }] }];
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
   };
 
-  const removeRule = (index) => {
-    const newRules = rules.filter((_, i) => i !== index);
-    setFilterConfig({ ...filterConfig, rules: newRules });
+  const removeGroup = (groupIndex) => {
+    const newGroups = groups.filter((_, i) => i !== groupIndex);
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
+  };
+
+  const addRuleToGroup = (groupIndex) => {
+    const newGroups = [...groups];
+    newGroups[groupIndex] = {
+      ...newGroups[groupIndex],
+      rules: [...(newGroups[groupIndex].rules || []), { field: '', operator: '', value: '' }]
+    };
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
+  };
+
+  const updateRuleInGroup = (groupIndex, ruleIndex, updatedRule) => {
+    const newGroups = [...groups];
+    const newRules = [...(newGroups[groupIndex].rules || [])];
+    newRules[ruleIndex] = updatedRule;
+    newGroups[groupIndex] = { ...newGroups[groupIndex], rules: newRules };
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
+  };
+
+  const removeRuleFromGroup = (groupIndex, ruleIndex) => {
+    const newGroups = [...groups];
+    newGroups[groupIndex] = {
+      ...newGroups[groupIndex],
+      rules: newGroups[groupIndex].rules.filter((_, i) => i !== ruleIndex)
+    };
+    // Remove empty groups
+    if (newGroups[groupIndex].rules.length === 0) {
+      newGroups.splice(groupIndex, 1);
+    }
+    setFilterConfig({ ...filterConfig, groups: newGroups, rules: undefined });
   };
 
   const clearAllFilters = () => {
-    setFilterConfig({ ...filterConfig, rules: [], search: '' });
+    setFilterConfig({ ...filterConfig, groups: [], rules: undefined, search: '' });
   };
 
-  // Count complete (valid) filters
-  const completeFiltersCount = rules.filter(r => r.field && r.operator && r.value).length;
+  // Count complete (valid) filters across all groups
+  const completeFiltersCount = groups.reduce((total, group) => {
+    return total + (group.rules || []).filter(r => r.field && r.operator && (r.value || ['is_empty', 'is_not_empty'].includes(r.operator))).length;
+  }, 0);
 
   return (
     <div>
@@ -1315,7 +1502,7 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
           Filter Recipients
         </h3>
-        {(rules.length > 0 || filterConfig.search) && (
+        {(hasGroups || filterConfig.search) && (
           <button
             onClick={clearAllFilters}
             style={{
@@ -1333,14 +1520,56 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
         )}
       </div>
 
-      {/* Filter Rules */}
+      {/* Include Role Accounts Checkbox */}
+      <div style={{
+        padding: '16px',
+        backgroundColor: t.bgCard,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`,
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          flex: 1
+        }}>
+          <input
+            type="checkbox"
+            checked={includeRoleAccounts}
+            onChange={(e) => setIncludeRoleAccounts(e.target.checked)}
+            style={{
+              width: '18px',
+              height: '18px',
+              cursor: 'pointer',
+              accentColor: t.primary
+            }}
+          />
+          <div>
+            <span style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
+              Include accounts from users in my role
+            </span>
+            <p style={{ fontSize: '12px', color: t.textSecondary, margin: '2px 0 0' }}>
+              {includeRoleAccounts && roleUserCount > 1
+                ? `Includes accounts from ${roleUserCount} users with the same role`
+                : 'When enabled, includes accounts from all users with the same role as you'}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* Filter Groups */}
       <div style={{
         padding: '16px',
         backgroundColor: t.bgHover,
         borderRadius: '12px',
         marginBottom: '16px'
       }}>
-        {rules.length === 0 ? (
+        {!hasGroups ? (
           <div style={{
             textAlign: 'center',
             padding: '20px',
@@ -1350,40 +1579,70 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
             No filters applied. All accounts with valid emails will be included.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-            {rules.map((rule, index) => (
-              <FilterRule
-                key={index}
-                rule={rule}
-                index={index}
-                onUpdate={updateRule}
-                onRemove={removeRule}
-                theme={t}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
+            {groups.map((group, groupIndex) => (
+              <div key={groupIndex}>
+                {groupIndex > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '8px 0',
+                    gap: '12px'
+                  }}>
+                    <div style={{ flex: 1, height: '1px', backgroundColor: t.border }} />
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: '#f59e0b',
+                      padding: '4px 12px',
+                      backgroundColor: '#f59e0b20',
+                      borderRadius: '4px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px'
+                    }}>
+                      OR
+                    </span>
+                    <div style={{ flex: 1, height: '1px', backgroundColor: t.border }} />
+                  </div>
+                )}
+                <FilterGroup
+                  group={group}
+                  groupIndex={groupIndex}
+                  onRemoveGroup={removeGroup}
+                  onAddRule={addRuleToGroup}
+                  onUpdateRule={updateRuleInGroup}
+                  onRemoveRule={removeRuleFromGroup}
+                  showOrLabel={groupIndex > 0}
+                  theme={t}
+                />
+              </div>
             ))}
           </div>
         )}
 
-        <button
-          onClick={addRule}
-          style={{
-            width: '100%',
-            padding: '10px',
-            backgroundColor: t.bgCard,
-            border: `1px dashed ${t.border}`,
-            borderRadius: '8px',
-            color: t.primary,
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: '500',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px'
-          }}
-        >
-          <span>+</span> Add Filter
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={addGroup}
+            style={{
+              flex: 1,
+              padding: '10px',
+              backgroundColor: t.bgCard,
+              border: `1px dashed ${t.border}`,
+              borderRadius: '8px',
+              color: t.primary,
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>+</span> {hasGroups ? 'Add OR Group' : 'Add Filter Group'}
+          </button>
+        </div>
       </div>
 
       {/* Quick filter summary */}
@@ -1396,7 +1655,8 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
           fontSize: '13px',
           color: t.text
         }}>
-          <strong>{completeFiltersCount}</strong> filter{completeFiltersCount !== 1 ? 's' : ''} applied
+          <strong>{completeFiltersCount}</strong> filter{completeFiltersCount !== 1 ? 's' : ''} in <strong>{groups.length}</strong> group{groups.length !== 1 ? 's' : ''}
+          {groups.length > 1 && <span style={{ color: t.textSecondary }}> (groups combined with OR)</span>}
           <span style={{ color: t.textSecondary }}> — results update automatically</span>
         </div>
       )}
@@ -1631,6 +1891,7 @@ const MassEmailPage = ({ t }) => {
     search: '',
     notOptedOut: true
   });
+  const [includeRoleAccounts, setIncludeRoleAccounts] = useState(false);
   const [subject, setSubject] = useState('');
   const [name, setName] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -1640,11 +1901,14 @@ const MassEmailPage = ({ t }) => {
   // Fetch data
   const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useTemplates();
   const { data: batches, isLoading: loadingBatches, refetch: refetchBatches } = useMassEmailBatchesWithStats();
+  const { data: roleUserIds } = useRoleUserIds(includeRoleAccounts);
   const { data: recipientCount, isLoading: loadingCount, isFetching: fetchingCount } = useMassEmailRecipientCount(
-    step >= 1 ? filterConfig : null
+    step >= 1 ? filterConfig : null,
+    includeRoleAccounts
   );
   const { data: locationBreakdown, isLoading: loadingBreakdown } = useMassEmailLocationBreakdown(
-    step >= 1 ? filterConfig : null
+    step >= 1 ? filterConfig : null,
+    includeRoleAccounts
   );
   const { data: recipients, isLoading: loadingRecipients } = useMassEmailRecipients(
     step === 2 ? filterConfig : null,
@@ -1725,6 +1989,7 @@ const MassEmailPage = ({ t }) => {
       search: '',
       notOptedOut: true
     });
+    setIncludeRoleAccounts(false);
     setSubject('');
     setName('');
   };
@@ -1838,6 +2103,9 @@ const MassEmailPage = ({ t }) => {
                 isFetching={fetchingCount}
                 locationBreakdown={locationBreakdown}
                 isLoadingBreakdown={loadingBreakdown}
+                includeRoleAccounts={includeRoleAccounts}
+                setIncludeRoleAccounts={setIncludeRoleAccounts}
+                roleUserCount={roleUserIds?.length || 1}
                 theme={t}
               />
             )}

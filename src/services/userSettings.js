@@ -124,6 +124,41 @@ export const userSettingsService = {
   },
 
   /**
+   * Get current user's info including role
+   */
+  async getCurrentUser(userId) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
+      .eq('user_unique_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  },
+
+  /**
+   * Get all user IDs that share the same role as the given user
+   */
+  async getUserIdsByRole(userId) {
+    // First get the current user's role
+    const currentUser = await this.getCurrentUser(userId);
+    if (!currentUser?.role_name) {
+      return [userId]; // Fall back to just the current user
+    }
+
+    // Get all users with the same role
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_unique_id')
+      .eq('role_name', currentUser.role_name);
+
+    if (error) throw error;
+
+    return data?.map(u => u.user_unique_id) || [userId];
+  },
+
+  /**
    * Get signature HTML for email injection
    */
   async getSignatureHtml(userId) {
