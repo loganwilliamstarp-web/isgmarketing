@@ -31,7 +31,19 @@ const defaultNodes = [
     type: 'entry_criteria',
     title: 'Entry Criteria',
     subtitle: 'Define who enters this automation',
-    config: { filterConfig: { groups: [] } }
+    config: {
+      filterConfig: { groups: [] },
+      reentry: {
+        enabled: false,
+        type: 'never', // 'never', 'after_days'
+        days: 30
+      },
+      pacing: {
+        enabled: false,
+        spreadOverDays: 7,
+        allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri'] // Default to weekdays
+      }
+    }
   },
   {
     id: 'trigger',
@@ -64,9 +76,19 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [showAddMenu, setShowAddMenu] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
-  // Get entry criteria node's filter config
+  // Get entry criteria node's config
   const entryCriteriaNode = nodes.find(n => n.type === 'entry_criteria');
   const [filterConfig, setFilterConfig] = useState(entryCriteriaNode?.config?.filterConfig || { groups: [] });
+  const [reentryConfig, setReentryConfig] = useState(entryCriteriaNode?.config?.reentry || {
+    enabled: false,
+    type: 'never',
+    days: 30
+  });
+  const [pacingConfig, setPacingConfig] = useState(entryCriteriaNode?.config?.pacing || {
+    enabled: false,
+    spreadOverDays: 7,
+    allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
+  });
 
   // Update the entry criteria node when filter config changes
   const updateFilterConfig = (newConfig) => {
@@ -74,6 +96,26 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     setNodes(prev => prev.map(node =>
       node.type === 'entry_criteria'
         ? { ...node, config: { ...node.config, filterConfig: newConfig } }
+        : node
+    ));
+  };
+
+  // Update the entry criteria node when reentry config changes
+  const updateReentryConfig = (newConfig) => {
+    setReentryConfig(newConfig);
+    setNodes(prev => prev.map(node =>
+      node.type === 'entry_criteria'
+        ? { ...node, config: { ...node.config, reentry: newConfig } }
+        : node
+    ));
+  };
+
+  // Update the entry criteria node when pacing config changes
+  const updatePacingConfig = (newConfig) => {
+    setPacingConfig(newConfig);
+    setNodes(prev => prev.map(node =>
+      node.type === 'entry_criteria'
+        ? { ...node, config: { ...node.config, pacing: newConfig } }
         : node
     ));
   };
@@ -505,11 +547,181 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                         color: '#fff',
                         cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500'
+                        fontWeight: '500',
+                        marginBottom: '20px'
                       }}
                     >
                       Edit Entry Criteria
                     </button>
+
+                    {/* Re-entry Settings */}
+                    <div style={{
+                      padding: '16px',
+                      backgroundColor: t.bgHover,
+                      borderRadius: '8px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: t.text, marginBottom: '12px' }}>
+                        Re-entry Rules
+                      </div>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        cursor: 'pointer',
+                        marginBottom: '12px'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={reentryConfig.enabled}
+                          onChange={(e) => updateReentryConfig({ ...reentryConfig, enabled: e.target.checked })}
+                          style={{ width: '16px', height: '16px', accentColor: t.primary }}
+                        />
+                        <span style={{ fontSize: '13px', color: t.textSecondary }}>
+                          Allow contacts to re-enter
+                        </span>
+                      </label>
+
+                      {reentryConfig.enabled && (
+                        <div style={{ marginLeft: '26px' }}>
+                          <label style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: '8px',
+                            cursor: 'pointer'
+                          }}>
+                            <input
+                              type="radio"
+                              name="reentryType"
+                              checked={reentryConfig.type === 'after_days'}
+                              onChange={() => updateReentryConfig({ ...reentryConfig, type: 'after_days' })}
+                              style={{ accentColor: t.primary }}
+                            />
+                            <span style={{ fontSize: '12px', color: t.textSecondary }}>After</span>
+                            <input
+                              type="number"
+                              value={reentryConfig.days}
+                              onChange={(e) => updateReentryConfig({ ...reentryConfig, days: parseInt(e.target.value) || 1 })}
+                              min="1"
+                              style={{
+                                width: '60px',
+                                padding: '4px 8px',
+                                backgroundColor: t.bgInput,
+                                border: `1px solid ${t.border}`,
+                                borderRadius: '4px',
+                                color: t.text,
+                                fontSize: '12px'
+                              }}
+                            />
+                            <span style={{ fontSize: '12px', color: t.textSecondary }}>days</span>
+                          </label>
+                        </div>
+                      )}
+
+                      {!reentryConfig.enabled && (
+                        <p style={{ fontSize: '11px', color: t.textMuted, margin: 0 }}>
+                          Contacts can only enter this automation once
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Enrollment Pacing Settings */}
+                    <div style={{
+                      padding: '16px',
+                      backgroundColor: t.bgHover,
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: t.text, marginBottom: '12px' }}>
+                        Enrollment Pacing
+                      </div>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        cursor: 'pointer',
+                        marginBottom: '12px'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={pacingConfig.enabled}
+                          onChange={(e) => updatePacingConfig({ ...pacingConfig, enabled: e.target.checked })}
+                          style={{ width: '16px', height: '16px', accentColor: t.primary }}
+                        />
+                        <span style={{ fontSize: '13px', color: t.textSecondary }}>
+                          Spread enrollments over time
+                        </span>
+                      </label>
+
+                      {pacingConfig.enabled && (
+                        <div style={{ marginLeft: '26px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '12px', color: t.textSecondary }}>Spread over</span>
+                            <input
+                              type="number"
+                              value={pacingConfig.spreadOverDays}
+                              onChange={(e) => updatePacingConfig({ ...pacingConfig, spreadOverDays: parseInt(e.target.value) || 1 })}
+                              min="1"
+                              max="365"
+                              style={{
+                                width: '60px',
+                                padding: '4px 8px',
+                                backgroundColor: t.bgInput,
+                                border: `1px solid ${t.border}`,
+                                borderRadius: '4px',
+                                color: t.text,
+                                fontSize: '12px'
+                              }}
+                            />
+                            <span style={{ fontSize: '12px', color: t.textSecondary }}>days</span>
+                          </div>
+
+                          <div style={{ fontSize: '11px', color: t.textSecondary, marginBottom: '8px' }}>
+                            Run on these days:
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {[
+                              { value: 'sun', label: 'Sun' },
+                              { value: 'mon', label: 'Mon' },
+                              { value: 'tue', label: 'Tue' },
+                              { value: 'wed', label: 'Wed' },
+                              { value: 'thu', label: 'Thu' },
+                              { value: 'fri', label: 'Fri' },
+                              { value: 'sat', label: 'Sat' }
+                            ].map(day => (
+                              <button
+                                key={day.value}
+                                onClick={() => {
+                                  const currentDays = pacingConfig.allowedDays || [];
+                                  const newDays = currentDays.includes(day.value)
+                                    ? currentDays.filter(d => d !== day.value)
+                                    : [...currentDays, day.value];
+                                  updatePacingConfig({ ...pacingConfig, allowedDays: newDays });
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  backgroundColor: (pacingConfig.allowedDays || []).includes(day.value) ? t.primary : t.bgCard,
+                                  color: (pacingConfig.allowedDays || []).includes(day.value) ? '#fff' : t.textSecondary,
+                                  border: `1px solid ${(pacingConfig.allowedDays || []).includes(day.value) ? t.primary : t.border}`,
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '11px',
+                                  fontWeight: '500'
+                                }}
+                              >
+                                {day.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!pacingConfig.enabled && (
+                        <p style={{ fontSize: '11px', color: t.textMuted, margin: 0 }}>
+                          All matching contacts will be enrolled immediately
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 
