@@ -67,19 +67,44 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
   const t = themeProp || defaultTheme;
 
   // Use automation nodes if they exist and have items, otherwise use defaults
-  // Also ensure entry_criteria node has all required config properties
+  // Also ensure entry_criteria node exists and has all required config properties
   const getInitialNodes = () => {
     if (!automation?.nodes || automation.nodes.length === 0) {
       return defaultNodes;
     }
-    // Ensure entry_criteria node has reentry and pacing configs
-    return automation.nodes.map(node => {
+
+    // Check if entry_criteria node exists
+    const hasEntryCriteria = automation.nodes.some(n => n.type === 'entry_criteria');
+
+    // Build the entry_criteria node with filter_config from automation
+    const entryCriteriaNode = {
+      id: 'entry-criteria',
+      type: 'entry_criteria',
+      title: 'Entry Criteria',
+      subtitle: 'Define who enters this automation',
+      config: {
+        filterConfig: automation.filter_config || { groups: [] },
+        reentry: {
+          enabled: false,
+          type: 'never',
+          days: 30
+        },
+        pacing: {
+          enabled: false,
+          spreadOverDays: 7,
+          allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
+        }
+      }
+    };
+
+    // Process existing nodes and ensure entry_criteria has proper config
+    let processedNodes = automation.nodes.map(node => {
       if (node.type === 'entry_criteria') {
         return {
           ...node,
           config: {
             ...node.config,
-            filterConfig: node.config?.filterConfig || { groups: [] },
+            filterConfig: node.config?.filterConfig || automation.filter_config || { groups: [] },
             reentry: node.config?.reentry || {
               enabled: false,
               type: 'never',
@@ -95,6 +120,13 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
       }
       return node;
     });
+
+    // If no entry_criteria node exists, add it at the beginning
+    if (!hasEntryCriteria) {
+      processedNodes = [entryCriteriaNode, ...processedNodes];
+    }
+
+    return processedNodes;
   };
 
   const [nodes, setNodes] = useState(getInitialNodes);
