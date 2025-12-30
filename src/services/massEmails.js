@@ -900,6 +900,45 @@ export const massEmailsService = {
     // List of policy-related fields that should be correlated (checked on same policy)
     const CORRELATED_POLICY_FIELDS = ['active_policy_type', 'policy_type', 'policy_status', 'policy_expiration', 'policy_effective'];
 
+    // Check if a rule is a negative/exclusion rule (should be checked at account level, not correlated)
+    const isNegativeRule = (rule) => {
+      return ['is_not', 'is_not_any'].includes(rule.operator);
+    };
+
+    // Check if account passes an account-level exclusion rule
+    const passesExclusionRule = (accountPolicies, rule) => {
+      const { field, operator, value } = rule;
+      const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+
+      if (field === 'active_policy_type') {
+        // Check that the account does NOT have any active policy of the specified types
+        const activePolicies = accountPolicies.filter(p => p.policy_status?.toLowerCase().trim() === 'active');
+        const hasExcludedType = activePolicies.some(p =>
+          values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
+        );
+        return !hasExcludedType; // Pass if NO excluded type found
+      }
+
+      if (field === 'policy_type') {
+        // Check that the account does NOT have any policy of the specified types
+        const hasExcludedType = accountPolicies.some(p =>
+          values.some(v => p.policy_lob?.toLowerCase().includes(v.toLowerCase()))
+        );
+        return !hasExcludedType;
+      }
+
+      if (field === 'policy_status') {
+        // Check that the account does NOT have any policy with the specified statuses
+        const hasExcludedStatus = accountPolicies.some(p =>
+          values.some(v => p.policy_status?.toLowerCase() === v.toLowerCase())
+        );
+        return !hasExcludedStatus;
+      }
+
+      // For other policy fields with negative operators, default to true
+      return true;
+    };
+
     // Helper function to check if an account matches all rules in a group (AND logic)
     const matchesGroup = (account, group) => {
       const groupRules = group.rules || [];
@@ -907,21 +946,35 @@ export const massEmailsService = {
 
       const accountPolicies = policyMap[account.account_unique_id] || [];
 
-      // Separate policy-correlated rules from other rules
-      const policyRules = groupRules.filter(r => CORRELATED_POLICY_FIELDS.includes(r.field) && r.operator && r.value);
-      const otherRules = groupRules.filter(r => !CORRELATED_POLICY_FIELDS.includes(r.field) || !r.operator || !r.value);
+      // Separate rules into categories:
+      // 1. Policy rules with POSITIVE operators (is, is_any) - correlated, same policy must match
+      // 2. Policy rules with NEGATIVE operators (is_not, is_not_any) - account-level exclusions
+      // 3. Other non-policy rules
+      const positivePolicyRules = groupRules.filter(r =>
+        CORRELATED_POLICY_FIELDS.includes(r.field) && r.operator && r.value && !isNegativeRule(r)
+      );
+      const negativePolicyRules = groupRules.filter(r =>
+        CORRELATED_POLICY_FIELDS.includes(r.field) && r.operator && r.value && isNegativeRule(r)
+      );
+      const otherRules = groupRules.filter(r =>
+        !CORRELATED_POLICY_FIELDS.includes(r.field) || !r.operator || !r.value
+      );
 
       // Check non-policy rules normally (they must all pass)
       const otherRulesPass = otherRules.every(rule => matchesRule(account, rule, accountPolicies));
       if (!otherRulesPass) return false;
 
-      // If no policy rules, we're done
-      if (policyRules.length === 0) return true;
+      // Check negative/exclusion rules at account level (must all pass)
+      const exclusionRulesPass = negativePolicyRules.every(rule => passesExclusionRule(accountPolicies, rule));
+      if (!exclusionRulesPass) return false;
 
-      // For policy rules, find at least one policy that matches ALL policy rules in this group
-      // This ensures correlated evaluation - the same policy must satisfy all conditions
+      // If no positive policy rules, we're done
+      if (positivePolicyRules.length === 0) return true;
+
+      // For positive policy rules, find at least one policy that matches ALL positive rules
+      // This ensures correlated evaluation - the same policy must satisfy all positive conditions
       const hasMatchingPolicy = accountPolicies.some(policy =>
-        policyRules.every(rule => policyMatchesRule(policy, rule))
+        positivePolicyRules.every(rule => policyMatchesRule(policy, rule))
       );
 
       return hasMatchingPolicy;
