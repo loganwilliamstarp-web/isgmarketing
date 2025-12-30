@@ -543,6 +543,7 @@ const FILTER_FIELDS = [
     { value: 'expired', label: 'Expired' }
   ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
+  { value: 'policy_effective', label: 'Policy Effective Date', type: 'date' },
   { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
   { value: 'location', label: 'Location', type: 'location' },
   { value: 'state', label: 'State', type: 'select', options: [
@@ -567,6 +568,8 @@ const FILTER_FIELDS = [
   { value: 'city', label: 'City', type: 'text' },
   { value: 'zip_code', label: 'ZIP Code', type: 'text' },
   { value: 'email_domain', label: 'Email Domain', type: 'text' },
+  { value: 'last_email_sent', label: 'Last Email Sent', type: 'date' },
+  { value: 'account_created', label: 'Account Created', type: 'date' },
 ];
 
 const OPERATORS = {
@@ -1896,6 +1899,81 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
             Clear all
           </button>
         )}
+      </div>
+
+      {/* Quick Filters */}
+      <div style={{
+        padding: '16px',
+        backgroundColor: t.bgCard,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`,
+        marginBottom: '16px'
+      }}>
+        <div style={{ fontSize: '13px', fontWeight: '500', color: t.textSecondary, marginBottom: '10px' }}>
+          Quick Filters
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {[
+            { label: 'Renewals (30 days)', filter: { field: 'policy_expiration', operator: 'in_next_days', value: '30' } },
+            { label: 'New Customers (90 days)', filter: { field: 'account_created', operator: 'in_last_days', value: '90' } },
+            { label: 'Not Emailed (30 days)', filter: { field: 'last_email_sent', operator: 'before', value: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] } },
+            { label: 'Active Customers', filter: { field: 'account_status', operator: 'is', value: 'customer' } },
+            { label: 'Cross-Sell: Auto Only', filters: [
+              { field: 'active_policy_type', operator: 'is', value: 'Auto' },
+              { field: 'active_policy_type', operator: 'is_not', value: 'Home' }
+            ]},
+            { label: 'Cross-Sell: Home Only', filters: [
+              { field: 'active_policy_type', operator: 'is', value: 'Home' },
+              { field: 'active_policy_type', operator: 'is_not', value: 'Auto' }
+            ]},
+            { label: 'Prior Customers (90 days)', filters: [
+              { field: 'account_status', operator: 'is', value: 'prior_customer' },
+              { field: 'last_email_sent', operator: 'before', value: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }
+            ]},
+            { label: 'Prospects (90 days)', filters: [
+              { field: 'account_status', operator: 'is', value: 'prospect' },
+              { field: 'last_email_sent', operator: 'before', value: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }
+            ]},
+          ].map((quickFilter, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                if (quickFilter.filters) {
+                  // Multiple filters for a group
+                  const newGroup = { rules: quickFilter.filters };
+                  setFilterConfig({ ...filterConfig, groups: [...groups, newGroup], rules: undefined });
+                } else {
+                  // Single filter
+                  const newGroup = { rules: [quickFilter.filter] };
+                  setFilterConfig({ ...filterConfig, groups: [...groups, newGroup], rules: undefined });
+                }
+              }}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.border}`,
+                borderRadius: '16px',
+                color: t.text,
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '500',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = t.primary + '20';
+                e.target.style.borderColor = t.primary;
+                e.target.style.color = t.primary;
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = t.bgHover;
+                e.target.style.borderColor = t.border;
+                e.target.style.color = t.text;
+              }}
+            >
+              + {quickFilter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Include Role Accounts Checkbox */}

@@ -229,7 +229,7 @@ export const massEmailsService = {
     // Get all accounts first (we'll filter client-side for group OR logic)
     let query = supabase
       .from('accounts')
-      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street')
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street, created_at')
       .in('owner_id', ownerIds);
 
     // Not opted out (applies globally)
@@ -269,7 +269,7 @@ export const massEmailsService = {
     const needsPolicyFilter = filterGroups.some(group => {
       const groupRules = group.rules || [];
       return groupRules.some(r =>
-        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration'].includes(r.field) && r.value
+        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration', 'policy_effective'].includes(r.field) && r.value
       );
     });
 
@@ -279,7 +279,7 @@ export const massEmailsService = {
       const accountIds = allAccounts.map(a => a.account_unique_id);
       const { data: policies, error: policyError } = await supabase
         .from('policies')
-        .select('account_id, policy_lob, expiration_date, policy_status')
+        .select('account_id, policy_lob, expiration_date, effective_date, policy_status')
         .in('account_id', accountIds);
 
       if (policyError) throw policyError;
@@ -289,6 +289,34 @@ export const massEmailsService = {
           policyMap[p.account_id] = [];
         }
         policyMap[p.account_id].push(p);
+      });
+    }
+
+    // Check if we need email log data for last_email_sent filter
+    const needsEmailLogFilter = filterGroups.some(group => {
+      const groupRules = group.rules || [];
+      return groupRules.some(r => r.field === 'last_email_sent' && r.value);
+    });
+
+    // Fetch last email sent dates if needed
+    let lastEmailMap = {};
+    if (needsEmailLogFilter && allAccounts.length > 0) {
+      const accountIds = allAccounts.map(a => a.account_unique_id);
+      // Get the most recent email sent to each account
+      const { data: emailLogs, error: emailError } = await supabase
+        .from('email_logs')
+        .select('account_id, sent_at')
+        .in('account_id', accountIds)
+        .eq('status', 'sent')
+        .order('sent_at', { ascending: false });
+
+      if (emailError) throw emailError;
+
+      // Build map of account_id -> most recent sent_at
+      emailLogs?.forEach(log => {
+        if (!lastEmailMap[log.account_id] && log.sent_at) {
+          lastEmailMap[log.account_id] = log.sent_at;
+        }
       });
     }
 
@@ -428,6 +456,40 @@ export const massEmailsService = {
           return true;
         }
 
+        case 'policy_effective': {
+          const today = new Date().toISOString().split('T')[0];
+          if (operator === 'in_next_days') {
+            const days = parseInt(value, 10);
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            const futureDateStr = futureDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date >= today && p.effective_date <= futureDateStr
+            );
+          }
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date >= pastDateStr && p.effective_date <= today
+            );
+          }
+          if (operator === 'before') {
+            return accountPolicies.some(p => p.effective_date && p.effective_date < value);
+          }
+          if (operator === 'after') {
+            return accountPolicies.some(p => p.effective_date && p.effective_date > value);
+          }
+          if (operator === 'between') {
+            return accountPolicies.some(p =>
+              p.effective_date && p.effective_date >= value && p.effective_date <= (value2 || value)
+            );
+          }
+          return true;
+        }
+
         case 'state': {
           const accountState = (account.billing_state || '').toUpperCase();
           if (operator === 'is') return accountState === value.toUpperCase();
@@ -492,6 +554,71 @@ export const massEmailsService = {
           if (!coords) return false;
           const distance = calculateDistance(centerLat, centerLng, coords.lat, coords.lng);
           return distance <= radiusMiles;
+        }
+
+        case 'last_email_sent': {
+          const lastEmailDate = lastEmailMap[account.account_unique_id];
+          const today = new Date().toISOString().split('T')[0];
+
+          // If no email sent, treat as very old for "before" and "in_last_days" checks
+          if (!lastEmailDate) {
+            if (operator === 'before') return true; // Never emailed = older than any date
+            if (operator === 'in_last_days') return false; // Never emailed in last X days
+            if (operator === 'in_next_days') return false; // Makes no sense for past dates
+            if (operator === 'after') return false; // Never emailed
+            if (operator === 'between') return false;
+            return true;
+          }
+
+          const emailDateStr = lastEmailDate.split('T')[0];
+
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return emailDateStr >= pastDateStr && emailDateStr <= today;
+          }
+          if (operator === 'before') {
+            return emailDateStr < value;
+          }
+          if (operator === 'after') {
+            return emailDateStr > value;
+          }
+          if (operator === 'between') {
+            return emailDateStr >= value && emailDateStr <= (value2 || value);
+          }
+          return true;
+        }
+
+        case 'account_created': {
+          const createdAt = account.created_at;
+          if (!createdAt) return false;
+
+          const createdDateStr = createdAt.split('T')[0];
+          const today = new Date().toISOString().split('T')[0];
+
+          if (operator === 'in_next_days') {
+            // For account created, "in next days" doesn't make sense - treat as no match
+            return false;
+          }
+          if (operator === 'in_last_days') {
+            const days = parseInt(value, 10);
+            const pastDate = new Date();
+            pastDate.setDate(pastDate.getDate() - days);
+            const pastDateStr = pastDate.toISOString().split('T')[0];
+            return createdDateStr >= pastDateStr && createdDateStr <= today;
+          }
+          if (operator === 'before') {
+            return createdDateStr < value;
+          }
+          if (operator === 'after') {
+            return createdDateStr > value;
+          }
+          if (operator === 'between') {
+            return createdDateStr >= value && createdDateStr <= (value2 || value);
+          }
+          return true;
         }
 
         default:
