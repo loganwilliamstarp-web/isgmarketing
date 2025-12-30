@@ -75,6 +75,23 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  // Mock data for preview enrollees - in production this would come from an API
+  const [previewEnrollees] = useState([
+    { id: 1, name: 'John Smith', email: 'john@example.com', entryDate: '2024-01-15', status: 'active' },
+    { id: 2, name: 'Sarah Johnson', email: 'sarah@example.com', entryDate: '2024-01-14', status: 'active' },
+    { id: 3, name: 'Mike Brown', email: 'mike@example.com', entryDate: '2024-01-13', status: 'completed' },
+    { id: 4, name: 'Emily Davis', email: 'emily@example.com', entryDate: '2024-01-12', status: 'active' },
+    { id: 5, name: 'Chris Wilson', email: 'chris@example.com', entryDate: '2024-01-11', status: 'active' },
+  ]);
+
+  // Mock stats for nodes - in production this would come from automation.stats
+  const nodeStats = {
+    'entry-criteria': { entered: 1250, pending: 45 },
+    'trigger': { processed: 1205 },
+    'node-1': { sent: 1180, opened: 892, clicked: 234 },
+  };
 
   // Get entry criteria node's config
   const entryCriteriaNode = nodes.find(n => n.type === 'entry_criteria');
@@ -189,6 +206,29 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     return `${totalFilters} filter${totalFilters !== 1 ? 's' : ''} in ${groups.length} group${groups.length !== 1 ? 's' : ''}`;
   };
 
+  // Helper to format node stats
+  const getNodeStatsDisplay = (nodeId, nodeType) => {
+    const stats = nodeStats[nodeId] || node?.stats || {};
+    if (nodeType === 'entry_criteria') {
+      return stats.entered ? `${stats.entered.toLocaleString()} entered` : null;
+    }
+    if (nodeType === 'trigger') {
+      return stats.processed ? `${stats.processed.toLocaleString()} processed` : null;
+    }
+    if (nodeType === 'send_email') {
+      if (stats.sent) {
+        return `${stats.sent.toLocaleString()} sent`;
+      }
+    }
+    if (nodeType === 'delay') {
+      return stats.waiting ? `${stats.waiting.toLocaleString()} waiting` : null;
+    }
+    if (nodeType === 'condition' || nodeType === 'field_condition') {
+      return stats.evaluated ? `${stats.evaluated.toLocaleString()} evaluated` : null;
+    }
+    return null;
+  };
+
   // Node Component
   const WorkflowNode = ({ node }) => {
     const typeConfig = nodeTypes[node.type] || nodeTypes.send_email;
@@ -196,6 +236,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     const isEntryCriteria = node.type === 'entry_criteria';
     const isTrigger = node.type === 'trigger';
     const isProtected = isEntryCriteria || isTrigger; // Can't delete these
+    const statsDisplay = getNodeStatsDisplay(node.id, node.type);
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -216,6 +257,24 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
             position: 'relative'
           }}
         >
+          {/* Stats badge */}
+          {statsDisplay && (
+            <div style={{
+              position: 'absolute',
+              top: '-10px',
+              right: '12px',
+              padding: '4px 10px',
+              backgroundColor: typeConfig.color,
+              color: '#fff',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: '600',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}>
+              {statsDisplay}
+            </div>
+          )}
+
           {!isProtected && (
             <button
               onClick={(e) => { e.stopPropagation(); deleteNode(node.id); }}
@@ -254,26 +313,46 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
           </div>
 
           {isEntryCriteria && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowFilterPanel(true); }}
-              style={{
-                marginTop: '12px',
-                width: '100%',
-                padding: '10px',
-                backgroundColor: t.bgHover,
-                border: `1px solid ${t.borderLight}`,
-                borderRadius: '8px',
-                color: t.textSecondary,
-                cursor: 'pointer',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <span>🎯</span> Edit Entry Criteria
-            </button>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowFilterPanel(true); }}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.borderLight}`,
+                  borderRadius: '8px',
+                  color: t.textSecondary,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>🎯</span> Edit Criteria
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowPreviewModal(true); }}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: t.primary + '15',
+                  border: `1px solid ${t.primary}40`,
+                  borderRadius: '8px',
+                  color: t.primary,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>👥</span> Preview
+              </button>
+            </div>
           )}
         </div>
 
@@ -929,6 +1008,142 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                 fontSize: '13px',
                 fontWeight: '500'
               }}>Save Criteria</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Preview Enrollees Modal */}
+      {showPreviewModal && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 200 }} onClick={() => setShowPreviewModal(false)} />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '800px',
+            maxWidth: '95vw',
+            maxHeight: '85vh',
+            backgroundColor: t.bgCard,
+            borderRadius: '16px',
+            border: `1px solid ${t.border}`,
+            zIndex: 201,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: `1px solid ${t.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>Preview Enrollees</h2>
+                <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0' }}>
+                  Contacts matching your entry criteria (last 30 days)
+                </p>
+              </div>
+              <button onClick={() => setShowPreviewModal(false)} style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}>×</button>
+            </div>
+
+            {/* Stats Summary */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: `1px solid ${t.border}`,
+              display: 'flex',
+              gap: '24px',
+              backgroundColor: t.bgHover
+            }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>{previewEnrollees.length}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Would Enter</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>{previewEnrollees.filter(e => e.status === 'active').length}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Currently Active</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: t.textSecondary }}>{previewEnrollees.filter(e => e.status === 'completed').length}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Completed</div>
+              </div>
+            </div>
+
+            {/* Enrollees Table */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: t.bgHover }}>
+                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Contact</th>
+                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Entry Date</th>
+                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Current Step</th>
+                    <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewEnrollees.map((enrollee) => (
+                    <tr key={enrollee.id} style={{ borderBottom: `1px solid ${t.border}` }}>
+                      <td style={{ padding: '12px 20px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{enrollee.name}</div>
+                        <div style={{ fontSize: '12px', color: t.textMuted }}>{enrollee.email}</div>
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
+                        {new Date(enrollee.entryDate).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
+                        Send Email
+                      </td>
+                      <td style={{ padding: '12px 20px' }}>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          backgroundColor: enrollee.status === 'active' ? `${t.success}20` : `${t.textMuted}20`,
+                          color: enrollee.status === 'active' ? t.success : t.textMuted
+                        }}>
+                          {enrollee.status === 'active' ? 'Active' : 'Completed'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {previewEnrollees.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>👥</div>
+                  <div style={{ fontSize: '14px' }}>No contacts match your entry criteria</div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: `1px solid ${t.border}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexShrink: 0,
+              backgroundColor: t.bgHover
+            }}>
+              <span style={{ fontSize: '12px', color: t.textMuted }}>
+                Showing {previewEnrollees.length} contacts
+              </span>
+              <button onClick={() => setShowPreviewModal(false)} style={{
+                padding: '8px 16px',
+                backgroundColor: t.bgCard,
+                border: `1px solid ${t.borderLight}`,
+                borderRadius: '6px',
+                color: t.textSecondary,
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}>Close</button>
             </div>
           </div>
         </>
