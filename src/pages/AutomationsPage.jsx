@@ -154,9 +154,18 @@ const TemplateCard = ({ template, onUse, theme: t }) => (
 const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
   const stats = automation.stats || {};
   const isActive = automation.status === 'active';
-  
+
   return (
-    <tr style={{ borderTop: `1px solid ${t.border}` }}>
+    <tr
+      onClick={() => onEdit(automation.id)}
+      style={{
+        borderTop: `1px solid ${t.border}`,
+        cursor: 'pointer',
+        transition: 'background-color 0.15s'
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = t.bgHover}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+    >
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
@@ -186,7 +195,7 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={() => onToggle(automation.id, isActive ? 'pause' : 'activate')}
+            onClick={(e) => { e.stopPropagation(); onToggle(automation.id, isActive ? 'pause' : 'activate'); }}
             style={{
               width: '44px',
               height: '24px',
@@ -234,8 +243,8 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
         {stats.activeEnrollments || 0}
       </td>
       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-        <button 
-          onClick={() => onEdit(automation.id)}
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(automation.id); }}
           style={{
             padding: '6px 12px',
             backgroundColor: t.bgHover,
