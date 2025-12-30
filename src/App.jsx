@@ -256,9 +256,9 @@ const AppLayout = () => {
                 justifyContent: 'center',
                 fontSize: '14px'
               }}>👤</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{currentUser.name}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted }}>{currentUser.email}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: '500', color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</div>
+                <div style={{ fontSize: '11px', color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email}</div>
               </div>
               <Link to={`/${userId}/settings`} style={{ color: t.textMuted, fontSize: '16px', textDecoration: 'none' }}>⚙️</Link>
             </div>
