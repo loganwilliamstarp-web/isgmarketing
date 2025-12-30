@@ -585,6 +585,94 @@ CREATE INDEX idx_mass_email_status ON mass_email_batches(status);
 
 
 -- ============================================
+-- TABLE: admin_users
+-- ============================================
+-- Users who can edit master automations/templates
+CREATE TABLE admin_users (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,  -- Can be user_unique_id or any identifier
+  name VARCHAR(255),  -- Optional display name for reference
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert initial admin user
+INSERT INTO admin_users (user_id, name) VALUES ('0056g000004jvyVAAQ', 'Master Admin');
+
+
+-- ============================================
+-- TABLE: master_automations
+-- ============================================
+-- Canonical default automations that sync to all users
+CREATE TABLE master_automations (
+  id SERIAL PRIMARY KEY,
+
+  -- Unique key to match with user copies (e.g., 'midterm_cross_personal')
+  default_key VARCHAR(100) NOT NULL UNIQUE,
+
+  -- Basic Info
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(50),
+
+  -- Schedule defaults
+  send_time TIME DEFAULT '10:00',
+  timezone VARCHAR(50) DEFAULT 'America/Chicago',
+  frequency VARCHAR(50) DEFAULT 'Daily',
+
+  -- Enrollment Rules
+  max_enrollments INTEGER DEFAULT 1,
+  enrollment_cooldown_days INTEGER DEFAULT 0,
+  distribute_evenly BOOLEAN DEFAULT FALSE,
+
+  -- Configuration (JSON)
+  filter_config JSONB DEFAULT '{}',
+  nodes JSONB DEFAULT '[]',
+
+  -- Version tracking for sync
+  version INTEGER DEFAULT 1,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_master_automations_key ON master_automations(default_key);
+
+
+-- ============================================
+-- TABLE: master_templates
+-- ============================================
+-- Canonical default email templates that sync to all users
+CREATE TABLE master_templates (
+  id SERIAL PRIMARY KEY,
+
+  -- Unique key to match with user copies
+  default_key VARCHAR(100) NOT NULL UNIQUE,
+
+  -- Template Details
+  name VARCHAR(255) NOT NULL,
+  subject VARCHAR(500) NOT NULL,
+  body_html TEXT NOT NULL,
+  body_text TEXT,
+
+  -- Classification
+  category VARCHAR(50),
+
+  -- Merge Fields Used
+  merge_fields JSONB DEFAULT '[]',
+
+  -- Version tracking for sync
+  version INTEGER DEFAULT 1,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_master_templates_key ON master_templates(default_key);
+
+
+-- ============================================
 -- TRIGGERS: Auto-update timestamps
 -- ============================================
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -604,6 +692,178 @@ CREATE TRIGGER unsubscribes_updated_at BEFORE UPDATE ON unsubscribes FOR EACH RO
 CREATE TRIGGER email_stats_daily_updated_at BEFORE UPDATE ON email_stats_daily FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER user_settings_updated_at BEFORE UPDATE ON user_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER mass_email_batches_updated_at BEFORE UPDATE ON mass_email_batches FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER master_automations_updated_at BEFORE UPDATE ON master_automations FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER master_templates_updated_at BEFORE UPDATE ON master_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+
+-- ============================================
+-- FUNCTION: Check if user is admin
+-- ============================================
+CREATE OR REPLACE FUNCTION is_admin_user(p_user_id TEXT)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM admin_users WHERE user_id = p_user_id);
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
+-- FUNCTION: Sync master automation to all users
+-- ============================================
+-- Called when a master automation is updated
+-- Syncs all fields EXCEPT status (user controlled)
+CREATE OR REPLACE FUNCTION sync_master_automation_to_users(p_default_key TEXT)
+RETURNS INTEGER AS $$
+DECLARE
+  v_master master_automations%ROWTYPE;
+  v_updated_count INTEGER;
+BEGIN
+  -- Get the master automation
+  SELECT * INTO v_master FROM master_automations WHERE default_key = p_default_key;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Master automation with key % not found', p_default_key;
+  END IF;
+
+  -- Update all user copies (keep their status intact)
+  UPDATE automations
+  SET
+    name = v_master.name,
+    description = v_master.description,
+    category = v_master.category,
+    send_time = v_master.send_time,
+    timezone = v_master.timezone,
+    frequency = v_master.frequency,
+    max_enrollments = v_master.max_enrollments,
+    enrollment_cooldown_days = v_master.enrollment_cooldown_days,
+    distribute_evenly = v_master.distribute_evenly,
+    filter_config = v_master.filter_config,
+    nodes = v_master.nodes,
+    updated_at = NOW()
+  WHERE default_key = p_default_key
+    AND is_default = TRUE;
+
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+  RETURN v_updated_count;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
+-- FUNCTION: Sync master template to all users
+-- ============================================
+CREATE OR REPLACE FUNCTION sync_master_template_to_users(p_default_key TEXT)
+RETURNS INTEGER AS $$
+DECLARE
+  v_master master_templates%ROWTYPE;
+  v_updated_count INTEGER;
+BEGIN
+  -- Get the master template
+  SELECT * INTO v_master FROM master_templates WHERE default_key = p_default_key;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Master template with key % not found', p_default_key;
+  END IF;
+
+  -- Update all user copies
+  UPDATE email_templates
+  SET
+    name = v_master.name,
+    subject = v_master.subject,
+    body_html = v_master.body_html,
+    body_text = v_master.body_text,
+    category = v_master.category,
+    merge_fields = v_master.merge_fields,
+    updated_at = NOW()
+  WHERE default_key = p_default_key
+    AND is_default = TRUE;
+
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+  RETURN v_updated_count;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
+-- FUNCTION: Sync ALL master automations to all users
+-- ============================================
+CREATE OR REPLACE FUNCTION sync_all_master_automations()
+RETURNS TABLE(default_key TEXT, users_updated INTEGER) AS $$
+DECLARE
+  v_master RECORD;
+BEGIN
+  FOR v_master IN SELECT ma.default_key FROM master_automations ma
+  LOOP
+    default_key := v_master.default_key;
+    users_updated := sync_master_automation_to_users(v_master.default_key);
+    RETURN NEXT;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
+-- FUNCTION: Sync ALL master templates to all users
+-- ============================================
+CREATE OR REPLACE FUNCTION sync_all_master_templates()
+RETURNS TABLE(default_key TEXT, users_updated INTEGER) AS $$
+DECLARE
+  v_master RECORD;
+BEGIN
+  FOR v_master IN SELECT mt.default_key FROM master_templates mt
+  LOOP
+    default_key := v_master.default_key;
+    users_updated := sync_master_template_to_users(v_master.default_key);
+    RETURN NEXT;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
+-- TRIGGER: Auto-sync when master automation is updated
+-- ============================================
+CREATE OR REPLACE FUNCTION on_master_automation_updated()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Increment version
+  NEW.version := OLD.version + 1;
+
+  -- Sync to all users (after the update completes)
+  PERFORM sync_master_automation_to_users(NEW.default_key);
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER master_automation_sync_trigger
+  AFTER UPDATE ON master_automations
+  FOR EACH ROW
+  EXECUTE FUNCTION on_master_automation_updated();
+
+
+-- ============================================
+-- TRIGGER: Auto-sync when master template is updated
+-- ============================================
+CREATE OR REPLACE FUNCTION on_master_template_updated()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Increment version
+  NEW.version := OLD.version + 1;
+
+  -- Sync to all users (after the update completes)
+  PERFORM sync_master_template_to_users(NEW.default_key);
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER master_template_sync_trigger
+  AFTER UPDATE ON master_templates
+  FOR EACH ROW
+  EXECUTE FUNCTION on_master_template_updated();
 
 
 -- ============================================

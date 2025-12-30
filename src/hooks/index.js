@@ -127,3 +127,16 @@ export {
   useMassEmailMutations,
   useRoleUserIds
 } from './useMassEmails';
+
+// Admin
+export {
+  useIsAdmin,
+  useAdminUsers,
+  useAdminUserMutations,
+  useMasterAutomations,
+  useMasterAutomation,
+  useMasterAutomationMutations,
+  useMasterTemplates,
+  useMasterTemplate,
+  useMasterTemplateMutations
+} from './useAdmin';
