@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FilterBuilder, { formatRuleText } from './FilterBuilder';
 import { useMassEmailRecipients, useMassEmailRecipientCount } from '../hooks';
 
@@ -95,8 +95,26 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
     allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri']
   });
 
+  // Track if we're updating internally to prevent circular updates
+  const isInternalUpdate = useRef(false);
+  const lastAutomationNodesRef = useRef(automation?.nodes);
+
   // Sync state from automation prop when it changes (e.g., after loading from database)
+  // Only run when the prop actually changes from an external source
   useEffect(() => {
+    // Skip if this is triggered by our own internal update
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false;
+      return;
+    }
+
+    // Skip if the nodes reference is the same (no actual change from parent)
+    if (automation?.nodes === lastAutomationNodesRef.current) {
+      return;
+    }
+
+    lastAutomationNodesRef.current = automation?.nodes;
+
     if (automation?.nodes && automation.nodes.length > 0) {
       setNodes(automation.nodes);
       const entryNode = automation.nodes.find(n => n.type === 'entry_criteria');
@@ -147,6 +165,8 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
   // Sync nodes back to parent whenever they change
   useEffect(() => {
     if (onUpdate) {
+      // Mark this as an internal update so we don't re-sync from parent
+      isInternalUpdate.current = true;
       onUpdate(prev => ({
         ...prev,
         nodes: nodes,
