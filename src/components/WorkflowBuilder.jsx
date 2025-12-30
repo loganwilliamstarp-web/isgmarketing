@@ -1121,7 +1121,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                     <tr style={{ backgroundColor: t.bgHover }}>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Contact</th>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Account Type</th>
-                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Location</th>
+                      <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Last Email</th>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Matched Groups</th>
                     </tr>
                   </thead>
@@ -1136,12 +1136,12 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave }) => {
                           {contact.account_type || '—'}
                         </td>
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
-                          {contact.city && contact.state ? `${contact.city}, ${contact.state}` : contact.state || '—'}
+                          {contact._lastEmailSent ? new Date(contact._lastEmailSent).toLocaleDateString() : 'Never'}
                         </td>
                         <td style={{ padding: '12px 20px' }}>
-                          {contact.matchedGroups && contact.matchedGroups.length > 0 ? (
+                          {contact._matchedGroups && contact._matchedGroups.length > 0 ? (
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                              {contact.matchedGroups.map((groupIndex) => (
+                              {contact._matchedGroups.map((groupIndex) => (
                                 <span key={groupIndex} style={{
                                   padding: '2px 8px',
                                   borderRadius: '10px',
