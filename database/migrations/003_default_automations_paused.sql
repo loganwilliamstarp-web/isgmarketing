@@ -9,12 +9,12 @@
 ALTER TABLE automations
 ALTER COLUMN status SET DEFAULT 'paused';
 
--- 2. Update existing default automations from 'Active' to 'paused'
+-- 2. Update existing default automations to 'paused' (handles 'Active', 'Draft', or any case variations)
 UPDATE automations
 SET status = 'paused',
     updated_at = NOW()
 WHERE is_default = TRUE
-  AND status = 'Active';
+  AND LOWER(status) IN ('active', 'draft');
 
 -- 3. Recreate the create_default_automations_for_user function with 'paused' status
 CREATE OR REPLACE FUNCTION create_default_automations_for_user(p_user_id TEXT)
