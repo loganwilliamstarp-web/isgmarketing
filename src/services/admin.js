@@ -58,6 +58,29 @@ export const adminService = {
     return true;
   },
 
+  /**
+   * Get all users (for admin impersonation picker)
+   */
+  async getAllUsers(searchQuery = '') {
+    let query = supabase
+      .from('users')
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
+      .order('first_name');
+
+    // Add search filter if query provided
+    if (searchQuery) {
+      query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+    }
+
+    // Limit results
+    query = query.limit(50);
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data || [];
+  },
+
   // ==========================================
   // Master Automations
   // ==========================================
