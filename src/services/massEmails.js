@@ -269,7 +269,7 @@ export const massEmailsService = {
     const needsPolicyFilter = filterGroups.some(group => {
       const groupRules = group.rules || [];
       return groupRules.some(r =>
-        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration', 'policy_effective'].includes(r.field) && r.value
+        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration', 'policy_effective', 'policy_class'].includes(r.field) && r.value
       );
     });
 
@@ -406,6 +406,18 @@ export const massEmailsService = {
           const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
           const hasMatch = accountPolicies.some(p =>
             values.some(v => p.policy_status?.toLowerCase() === v.toLowerCase())
+          );
+          if (operator === 'is') return hasMatch;
+          if (operator === 'is_any') return hasMatch;
+          if (operator === 'is_not') return !hasMatch;
+          if (operator === 'is_not_any') return !hasMatch;
+          return true;
+        }
+
+        case 'policy_class': {
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+          const hasMatch = accountPolicies.some(p =>
+            values.some(v => p.policy_class?.toLowerCase() === v.toLowerCase())
           );
           if (operator === 'is') return hasMatch;
           if (operator === 'is_any') return hasMatch;
@@ -780,6 +792,15 @@ export const massEmailsService = {
           return true;
         }
 
+        case 'policy_class': {
+          const values = ['is_any', 'is_not_any'].includes(operator) ? value.split(',') : [value];
+          const classMatch = values.some(v => policy.policy_class?.toLowerCase() === v.toLowerCase());
+
+          if (operator === 'is' || operator === 'is_any') return classMatch;
+          if (operator === 'is_not' || operator === 'is_not_any') return !classMatch;
+          return true;
+        }
+
         case 'policy_expiration': {
           // Only check active policies for expiration
           const status = policy.policy_status?.toLowerCase().trim();
@@ -898,7 +919,7 @@ export const massEmailsService = {
     };
 
     // List of policy-related fields that should be correlated (checked on same policy)
-    const CORRELATED_POLICY_FIELDS = ['active_policy_type', 'policy_type', 'policy_status', 'policy_expiration', 'policy_effective'];
+    const CORRELATED_POLICY_FIELDS = ['active_policy_type', 'policy_type', 'policy_status', 'policy_class', 'policy_expiration', 'policy_effective'];
 
     // Check if a rule is a negative/exclusion rule (should be checked at account level, not correlated)
     const isNegativeRule = (rule) => {
@@ -933,6 +954,14 @@ export const massEmailsService = {
           values.some(v => p.policy_status?.toLowerCase() === v.toLowerCase())
         );
         return !hasExcludedStatus;
+      }
+
+      if (field === 'policy_class') {
+        // Check that the account does NOT have any policy with the specified class
+        const hasExcludedClass = accountPolicies.some(p =>
+          values.some(v => p.policy_class?.toLowerCase() === v.toLowerCase())
+        );
+        return !hasExcludedClass;
       }
 
       // For other policy fields with negative operators, default to true
@@ -1034,7 +1063,7 @@ export const massEmailsService = {
     const hasComplexFilters = filterGroups.some(group => {
       const groupRules = group.rules || [];
       return groupRules.some(r =>
-        ['policy_type', 'active_policy_type', 'policy_status', 'policy_count', 'policy_expiration',
+        ['policy_type', 'active_policy_type', 'policy_status', 'policy_class', 'policy_count', 'policy_expiration',
           'location', 'city', 'zip_code', 'email_domain'].includes(r.field) &&
         (r.value || ['is_empty', 'is_not_empty'].includes(r.operator))
       );

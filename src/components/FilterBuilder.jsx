@@ -32,6 +32,10 @@ export const FILTER_FIELDS = [
     { value: 'cancelled', label: 'Cancelled' },
     { value: 'expired', label: 'Expired' }
   ]},
+  { value: 'policy_class', label: 'Policy Class', type: 'select', options: [
+    { value: 'Personal', label: 'Personal' },
+    { value: 'Commercial', label: 'Commercial' }
+  ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
   { value: 'policy_term', label: 'Policy Term', type: 'select', options: [
     { value: '6', label: '6 Months' },
