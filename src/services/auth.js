@@ -165,12 +165,14 @@ export const authService = {
 
   /**
    * Send OTP code to email
+   * Note: We allow user creation in Supabase Auth, but validate against
+   * our users table after verification to control access
    */
   async sendOTP(email) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false, // Don't create new users, we validate against users table
+        shouldCreateUser: true, // Allow creation, we validate against users table after OTP
       }
     });
 
