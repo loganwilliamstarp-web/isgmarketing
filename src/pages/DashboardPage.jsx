@@ -159,7 +159,7 @@ const DashboardPage = ({ t }) => {
   const comparisonStats = [
     { label: 'Open Rate', you: stats?.openRate || 0, avg: 32 },
     { label: 'Click Rate', you: stats?.clickRate || 0, avg: 8 },
-    { label: 'Response Rate', you: stats?.responseRate || 8, avg: 5 },
+    { label: 'Response Rate', you: stats?.responseRate || 0, avg: 5 },
   ];
 
   // Format numbers
