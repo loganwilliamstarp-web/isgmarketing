@@ -140,3 +140,9 @@ export {
   useMasterTemplate,
   useMasterTemplateMutations
 } from './useAdmin';
+
+// Effective Owner (for scope filtering)
+export {
+  useEffectiveOwner,
+  useOwnerId
+} from './useEffectiveOwner';

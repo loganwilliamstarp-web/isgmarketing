@@ -1,23 +1,18 @@
 // src/hooks/useDashboard.js
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboard';
-import { useParams } from 'react-router-dom';
-
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get all dashboard data
  */
 export function useDashboard(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, options],
-    queryFn: () => dashboardService.getDashboardData(ownerId, options),
-    enabled: !!ownerId,
+    queryKey: ['dashboard', filterKey, options],
+    queryFn: () => dashboardService.getDashboardData(ownerIds, options),
+    enabled: ownerIds.length > 0,
     staleTime: 30000, // Consider fresh for 30 seconds
     refetchInterval: 60000 // Auto-refresh every minute
   });
@@ -27,12 +22,12 @@ export function useDashboard(options = {}) {
  * Get quick stats (lightweight)
  */
 export function useQuickStats() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'quick'],
-    queryFn: () => dashboardService.getQuickStats(ownerId),
-    enabled: !!ownerId,
+    queryKey: ['dashboard', filterKey, 'quick'],
+    queryFn: () => dashboardService.getQuickStats(ownerIds),
+    enabled: ownerIds.length > 0,
     staleTime: 10000,
     refetchInterval: 30000
   });
@@ -42,12 +37,12 @@ export function useQuickStats() {
  * Get automation stats
  */
 export function useAutomationStatsOverview() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'automationStats'],
-    queryFn: () => dashboardService.getAutomationStats(ownerId),
-    enabled: !!ownerId
+    queryKey: ['dashboard', filterKey, 'automationStats'],
+    queryFn: () => dashboardService.getAutomationStats(ownerIds),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -55,12 +50,12 @@ export function useAutomationStatsOverview() {
  * Get email performance over time (for charts)
  */
 export function useEmailPerformanceChart(days = 30) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'performance', days],
-    queryFn: () => dashboardService.getEmailPerformanceOverTime(ownerId, days),
-    enabled: !!ownerId
+    queryKey: ['dashboard', filterKey, 'performance', days],
+    queryFn: () => dashboardService.getEmailPerformanceOverTime(ownerIds, days),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -68,12 +63,12 @@ export function useEmailPerformanceChart(days = 30) {
  * Get top performing automations
  */
 export function useTopAutomations(limit = 5) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'topAutomations', limit],
-    queryFn: () => dashboardService.getTopAutomations(ownerId, limit),
-    enabled: !!ownerId
+    queryKey: ['dashboard', filterKey, 'topAutomations', limit],
+    queryFn: () => dashboardService.getTopAutomations(ownerIds, limit),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -81,12 +76,12 @@ export function useTopAutomations(limit = 5) {
  * Get accounts needing attention
  */
 export function useAccountsNeedingAttention() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'needsAttention'],
-    queryFn: () => dashboardService.getAccountsNeedingAttention(ownerId),
-    enabled: !!ownerId
+    queryKey: ['dashboard', filterKey, 'needsAttention'],
+    queryFn: () => dashboardService.getAccountsNeedingAttention(ownerIds),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -94,12 +89,12 @@ export function useAccountsNeedingAttention() {
  * Live stats with auto-refresh
  */
 export function useLiveStats(refreshInterval = 30000) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['dashboard', ownerId, 'live'],
-    queryFn: () => dashboardService.getQuickStats(ownerId),
-    enabled: !!ownerId,
+    queryKey: ['dashboard', filterKey, 'live'],
+    queryFn: () => dashboardService.getQuickStats(ownerIds),
+    enabled: ownerIds.length > 0,
     refetchInterval: refreshInterval
   });
 }

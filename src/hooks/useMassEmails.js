@@ -2,28 +2,27 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { massEmailsService } from '../services/massEmails';
 import { userSettingsService } from '../services/userSettings';
-import { useParams } from 'react-router-dom';
-
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get all user IDs with the same role as the current user
  */
 export function useRoleUserIds(includeRoleAccounts = false) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['roleUserIds', ownerId, includeRoleAccounts],
+    queryKey: ['roleUserIds', filterKey, includeRoleAccounts],
     queryFn: async () => {
       if (!includeRoleAccounts) {
-        return [ownerId];
+        return ownerIds;
       }
-      return userSettingsService.getUserIdsByRole(ownerId);
+      // When scope filter is active, ownerIds already contains all relevant users
+      if (ownerIds.length > 1) {
+        return ownerIds;
+      }
+      return userSettingsService.getUserIdsByRole(ownerIds[0]);
     },
-    enabled: !!ownerId,
+    enabled: ownerIds.length > 0,
     staleTime: 60000 // Cache for 1 minute
   });
 }
@@ -32,12 +31,12 @@ export function useRoleUserIds(includeRoleAccounts = false) {
  * Get all mass email batches
  */
 export function useMassEmailBatches(options = {}) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['massEmails', ownerId, options],
-    queryFn: () => massEmailsService.getAll(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['massEmails', filterKey, options],
+    queryFn: () => massEmailsService.getAll(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -45,12 +44,12 @@ export function useMassEmailBatches(options = {}) {
  * Get all mass email batches with stats
  */
 export function useMassEmailBatchesWithStats(options = {}) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['massEmails', ownerId, 'withStats', options],
-    queryFn: () => massEmailsService.getAllWithStats(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['massEmails', filterKey, 'withStats', options],
+    queryFn: () => massEmailsService.getAllWithStats(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -58,12 +57,12 @@ export function useMassEmailBatchesWithStats(options = {}) {
  * Get a single mass email batch
  */
 export function useMassEmailBatch(batchId) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['massEmail', ownerId, batchId],
-    queryFn: () => massEmailsService.getById(ownerId, batchId),
-    enabled: !!ownerId && !!batchId
+    queryKey: ['massEmail', filterKey, batchId],
+    queryFn: () => massEmailsService.getById(ownerIds, batchId),
+    enabled: ownerIds.length > 0 && !!batchId
   });
 }
 
@@ -71,12 +70,12 @@ export function useMassEmailBatch(batchId) {
  * Get recipients for a filter config
  */
 export function useMassEmailRecipients(filterConfig, options = {}) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['massEmailRecipients', ownerId, filterConfig, options],
-    queryFn: () => massEmailsService.getRecipients(ownerId, filterConfig, options),
-    enabled: !!ownerId && !!filterConfig
+    queryKey: ['massEmailRecipients', filterKey, filterConfig, options],
+    queryFn: () => massEmailsService.getRecipients(ownerIds, filterConfig, options),
+    enabled: ownerIds.length > 0 && !!filterConfig
   });
 }
 
@@ -87,8 +86,8 @@ export function useMassEmailRecipients(filterConfig, options = {}) {
  * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
  */
 export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = false) {
-  const ownerId = useOwnerId();
-  const { data: ownerIds } = useRoleUserIds(includeRoleAccounts);
+  const { ownerIds: effectiveOwnerIds, filterKey } = useEffectiveOwner();
+  const { data: roleOwnerIds } = useRoleUserIds(includeRoleAccounts);
 
   // Create a stable filter key that only includes filter-relevant data
   // This prevents unnecessary refetches when locationData object changes
@@ -115,9 +114,9 @@ export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = f
   } : null;
 
   return useQuery({
-    queryKey: ['massEmailRecipientStats', ownerId, stableFilterConfig, ownerIds],
-    queryFn: () => massEmailsService.getRecipientStats(ownerIds || [ownerId], filterConfig),
-    enabled: !!ownerId && !!filterConfig && !!ownerIds,
+    queryKey: ['massEmailRecipientStats', filterKey, stableFilterConfig, roleOwnerIds],
+    queryFn: () => massEmailsService.getRecipientStats(roleOwnerIds || effectiveOwnerIds, filterConfig),
+    enabled: effectiveOwnerIds.length > 0 && !!filterConfig && !!roleOwnerIds,
     staleTime: 30000, // Keep data fresh for 30 seconds
     gcTime: 60000, // Cache for 1 minute
     placeholderData: (previousData) => previousData // Show previous data while loading
@@ -160,12 +159,12 @@ export function useMassEmailLocationBreakdown(filterConfig, includeRoleAccounts 
  * Get batch stats
  */
 export function useMassEmailBatchStats(batchId) {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
 
   return useQuery({
-    queryKey: ['massEmailStats', ownerId, batchId],
-    queryFn: () => massEmailsService.getBatchStats(ownerId, batchId),
-    enabled: !!ownerId && !!batchId
+    queryKey: ['massEmailStats', filterKey, batchId],
+    queryFn: () => massEmailsService.getBatchStats(ownerIds, batchId),
+    enabled: ownerIds.length > 0 && !!batchId
   });
 }
 
@@ -173,41 +172,41 @@ export function useMassEmailBatchStats(batchId) {
  * Mass email mutations
  */
 export function useMassEmailMutations() {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
   const queryClient = useQueryClient();
 
   const invalidateMassEmails = () => {
-    queryClient.invalidateQueries({ queryKey: ['massEmails', ownerId] });
+    queryClient.invalidateQueries({ queryKey: ['massEmails'] });
   };
 
   const createBatch = useMutation({
-    mutationFn: (batch) => massEmailsService.create(ownerId, batch),
+    mutationFn: (batch) => massEmailsService.create(ownerIds, batch),
     onSuccess: invalidateMassEmails
   });
 
   const updateBatch = useMutation({
-    mutationFn: ({ batchId, updates }) => massEmailsService.update(ownerId, batchId, updates),
+    mutationFn: ({ batchId, updates }) => massEmailsService.update(ownerIds, batchId, updates),
     onSuccess: invalidateMassEmails
   });
 
   const deleteBatch = useMutation({
-    mutationFn: (batchId) => massEmailsService.delete(ownerId, batchId),
+    mutationFn: (batchId) => massEmailsService.delete(ownerIds, batchId),
     onSuccess: invalidateMassEmails
   });
 
   const scheduleBatch = useMutation({
-    mutationFn: ({ batchId, scheduledFor }) => massEmailsService.scheduleBatch(ownerId, batchId, scheduledFor),
+    mutationFn: ({ batchId, scheduledFor }) => massEmailsService.scheduleBatch(ownerIds, batchId, scheduledFor),
     onSuccess: () => {
       invalidateMassEmails();
-      queryClient.invalidateQueries({ queryKey: ['scheduledEmails', ownerId] });
+      queryClient.invalidateQueries({ queryKey: ['scheduledEmails'] });
     }
   });
 
   const cancelBatch = useMutation({
-    mutationFn: (batchId) => massEmailsService.cancelBatch(ownerId, batchId),
+    mutationFn: (batchId) => massEmailsService.cancelBatch(ownerIds, batchId),
     onSuccess: () => {
       invalidateMassEmails();
-      queryClient.invalidateQueries({ queryKey: ['scheduledEmails', ownerId] });
+      queryClient.invalidateQueries({ queryKey: ['scheduledEmails'] });
     }
   });
 

@@ -1,13 +1,15 @@
 // src/services/activityLog.js
 import { supabase } from '../lib/supabase';
+import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
 
 export const activityLogService = {
   /**
    * Get recent activity for a user
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getRecent(ownerId, options = {}) {
+  async getRecent(ownerIds, options = {}) {
     const { category, limit = 20, offset = 0 } = options;
-    
+
     let query = supabase
       .from('activity_log')
       .select(`
@@ -16,14 +18,14 @@ export const activityLogService = {
         automation:automations(id, name),
         email_log:email_logs(id, subject)
       `)
-      .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-    
+    query = applyOwnerFilter(query, ownerIds);
+
     if (category) {
       query = query.eq('event_category', category);
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
     return data;
@@ -31,68 +33,76 @@ export const activityLogService = {
 
   /**
    * Get activity for a specific account
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByAccount(ownerId, accountId, limit = 20) {
-    const { data, error } = await supabase
+  async getByAccount(ownerIds, accountId, limit = 20) {
+    let query = supabase
       .from('activity_log')
       .select(`
         *,
         automation:automations(id, name),
         email_log:email_logs(id, subject)
       `)
-      .eq('owner_id', ownerId)
       .eq('account_id', accountId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Get activity for a specific automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByAutomation(ownerId, automationId, limit = 50) {
-    const { data, error } = await supabase
+  async getByAutomation(ownerIds, automationId, limit = 50) {
+    let query = supabase
       .from('activity_log')
       .select(`
         *,
         account:accounts(account_unique_id, name)
       `)
-      .eq('owner_id', ownerId)
       .eq('automation_id', automationId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Get activity by event type
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByType(ownerId, eventType, options = {}) {
+  async getByType(ownerIds, eventType, options = {}) {
     const { limit = 50, offset = 0 } = options;
-    
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('activity_log')
       .select(`
         *,
         account:accounts(account_unique_id, name)
       `)
-      .eq('owner_id', ownerId)
       .eq('event_type', eventType)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Log an activity
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async log(ownerId, activity) {
+  async log(ownerIds, activity) {
+    const ownerId = getFirstOwnerId(ownerIds);
     const { data, error } = await supabase
       .from('activity_log')
       .insert({
@@ -101,16 +111,17 @@ export const activityLogService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Log email sent
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logEmailSent(ownerId, emailLogId, accountId, automationId = null) {
-    return this.log(ownerId, {
+  async logEmailSent(ownerIds, emailLogId, accountId, automationId = null) {
+    return this.log(ownerIds, {
       event_type: 'email_sent',
       event_category: 'email',
       title: 'Email sent',
@@ -123,9 +134,10 @@ export const activityLogService = {
 
   /**
    * Log email opened
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logEmailOpened(ownerId, emailLogId, accountId) {
-    return this.log(ownerId, {
+  async logEmailOpened(ownerIds, emailLogId, accountId) {
+    return this.log(ownerIds, {
       event_type: 'email_opened',
       event_category: 'email',
       title: 'Email opened',
@@ -137,9 +149,10 @@ export const activityLogService = {
 
   /**
    * Log email clicked
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logEmailClicked(ownerId, emailLogId, accountId, url = null) {
-    return this.log(ownerId, {
+  async logEmailClicked(ownerIds, emailLogId, accountId, url = null) {
+    return this.log(ownerIds, {
       event_type: 'email_clicked',
       event_category: 'email',
       title: 'Email link clicked',
@@ -152,9 +165,10 @@ export const activityLogService = {
 
   /**
    * Log automation enrollment
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logEnrollment(ownerId, automationId, accountId, automationName) {
-    return this.log(ownerId, {
+  async logEnrollment(ownerIds, automationId, accountId, automationName) {
+    return this.log(ownerIds, {
       event_type: 'enrollment_created',
       event_category: 'automation',
       title: `Enrolled in ${automationName}`,
@@ -166,9 +180,10 @@ export const activityLogService = {
 
   /**
    * Log automation completion
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logAutomationCompleted(ownerId, automationId, accountId, automationName) {
-    return this.log(ownerId, {
+  async logAutomationCompleted(ownerIds, automationId, accountId, automationName) {
+    return this.log(ownerIds, {
       event_type: 'automation_completed',
       event_category: 'automation',
       title: `Completed ${automationName}`,
@@ -180,9 +195,10 @@ export const activityLogService = {
 
   /**
    * Log unsubscribe
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logUnsubscribe(ownerId, accountId, type, automationId = null) {
-    return this.log(ownerId, {
+  async logUnsubscribe(ownerIds, accountId, type, automationId = null) {
+    return this.log(ownerIds, {
       event_type: 'unsubscribed',
       event_category: 'account',
       title: type === 'all' ? 'Unsubscribed from all emails' : 'Unsubscribed from automation',
@@ -195,9 +211,10 @@ export const activityLogService = {
 
   /**
    * Log bounce
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async logBounce(ownerId, emailLogId, accountId, bounceType) {
-    return this.log(ownerId, {
+  async logBounce(ownerIds, emailLogId, accountId, bounceType) {
+    return this.log(ownerIds, {
       event_type: 'email_bounced',
       event_category: 'email',
       title: `Email bounced (${bounceType})`,
@@ -211,17 +228,19 @@ export const activityLogService = {
 
   /**
    * Get activity stats
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getStats(ownerId, days = 7) {
+  async getStats(ownerIds, days = 7) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
-    
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('activity_log')
       .select('event_type, event_category')
-      .eq('owner_id', ownerId)
       .gte('created_at', startDate.toISOString());
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
 
     const stats = {

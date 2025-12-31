@@ -5,6 +5,13 @@ import { authService } from '../services/auth';
 
 const AuthContext = createContext();
 
+// User role constants
+export const USER_ROLES = {
+  MASTER_ADMIN: 'master_admin',
+  AGENCY_ADMIN: 'agency_admin',
+  MARKETING_USER: 'marketing_user',
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -16,14 +23,26 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null); // { id, name, email }
+  const [user, setUser] = useState(null); // { id, name, email, profileName }
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAgencyAdmin, setIsAgencyAdmin] = useState(false);
+  const [userRole, setUserRole] = useState(null); // 'master_admin' | 'agency_admin' | 'marketing_user'
   const [impersonating, setImpersonating] = useState({
     active: false,
     originalUserId: null,
     originalUserName: null,
     targetUserId: null,
     targetUserName: null,
+    targetProfileName: null,
+  });
+
+  // Scope filter state - for filtering data site-wide
+  const [scopeFilter, setScopeFilter] = useState({
+    active: false,
+    filterType: null, // 'agency' | 'agent' | 'all_agencies' | 'all_agents'
+    filterValue: null, // profile_name for agency, user_id for agent, null for all
+    filterLabel: null, // Display name
+    ownerIds: null, // Array of owner IDs to query (populated when filter changes)
   });
 
   // Check for existing session on mount - handles both Salesforce and OTP auth
@@ -140,21 +159,49 @@ export const AuthProvider = ({ children }) => {
       id: userData.user_unique_id,
       name: userName,
       email: userData.email,
+      profileName: userData.profile_name || null,
     });
     setIsAuthenticated(true);
 
-    // Check if user is admin
+    // Check if user is admin (Master Admin)
     const adminStatus = await authService.isAdmin(userData.user_unique_id);
     setIsAdmin(adminStatus);
 
-    // Check for saved impersonation state
+    // Check if user is agency admin
+    const agencyAdminStatus = userData.marketing_cloud_agency_admin === true;
+    setIsAgencyAdmin(agencyAdminStatus);
+
+    // Determine user role (priority: Master Admin > Agency Admin > Marketing User)
+    let role;
+    if (adminStatus) {
+      role = USER_ROLES.MASTER_ADMIN;
+    } else if (agencyAdminStatus) {
+      role = USER_ROLES.AGENCY_ADMIN;
+    } else {
+      role = USER_ROLES.MARKETING_USER;
+    }
+    setUserRole(role);
+
+    // Check for saved impersonation state (only admins and agency admins can impersonate)
     const savedImpersonation = localStorage.getItem('isg_impersonation');
-    if (savedImpersonation && adminStatus) {
+    if (savedImpersonation && (adminStatus || agencyAdminStatus)) {
       const parsed = JSON.parse(savedImpersonation);
       if (parsed.originalUserId === userData.user_unique_id) {
         setImpersonating(parsed);
       } else {
         localStorage.removeItem('isg_impersonation');
+      }
+    }
+
+    // Check for saved scope filter state
+    const savedScopeFilter = localStorage.getItem('isg_scope_filter');
+    if (savedScopeFilter && (adminStatus || agencyAdminStatus)) {
+      const parsed = JSON.parse(savedScopeFilter);
+      // Verify the filter is still valid for this user
+      if (parsed.originalUserId === userData.user_unique_id) {
+        setScopeFilter(parsed);
+      } else {
+        localStorage.removeItem('isg_scope_filter');
       }
     }
   };
@@ -227,20 +274,32 @@ export const AuthProvider = ({ children }) => {
     await authService.signOut();
     authService.clearLocalSession();
     localStorage.removeItem('isg_impersonation');
+    localStorage.removeItem('isg_scope_filter');
     setIsAuthenticated(false);
     setUser(null);
     setIsAdmin(false);
+    setIsAgencyAdmin(false);
+    setUserRole(null);
     setImpersonating({
       active: false,
       originalUserId: null,
       originalUserName: null,
       targetUserId: null,
       targetUserName: null,
+      targetProfileName: null,
+    });
+    setScopeFilter({
+      active: false,
+      filterType: null,
+      filterValue: null,
+      filterLabel: null,
+      ownerIds: null,
     });
   };
 
-  const impersonate = useCallback((targetUserId, targetUserName) => {
-    if (!isAdmin || !user) return false;
+  const impersonate = useCallback((targetUserId, targetUserName, targetProfileName = null) => {
+    // Both Master Admins and Agency Admins can impersonate
+    if ((!isAdmin && !isAgencyAdmin) || !user) return false;
 
     const newImpersonation = {
       active: true,
@@ -248,12 +307,13 @@ export const AuthProvider = ({ children }) => {
       originalUserName: user.name,
       targetUserId,
       targetUserName,
+      targetProfileName,
     };
 
     setImpersonating(newImpersonation);
     localStorage.setItem('isg_impersonation', JSON.stringify(newImpersonation));
     return true;
-  }, [isAdmin, user]);
+  }, [isAdmin, isAgencyAdmin, user]);
 
   const exitImpersonation = useCallback(() => {
     localStorage.removeItem('isg_impersonation');
@@ -263,6 +323,7 @@ export const AuthProvider = ({ children }) => {
       originalUserName: null,
       targetUserId: null,
       targetUserName: null,
+      targetProfileName: null,
     });
   }, []);
 
@@ -281,12 +342,84 @@ export const AuthProvider = ({ children }) => {
     return user?.name || null;
   }, [impersonating, user]);
 
+  /**
+   * Update the scope filter and persist to localStorage
+   * @param {Object} newFilter - { filterType, filterValue, filterLabel, ownerIds }
+   */
+  const updateScopeFilter = useCallback((newFilter) => {
+    if (!user) return;
+
+    const filterState = {
+      active: newFilter.filterType !== null,
+      filterType: newFilter.filterType,
+      filterValue: newFilter.filterValue,
+      filterLabel: newFilter.filterLabel,
+      ownerIds: newFilter.ownerIds,
+      originalUserId: user.id,
+    };
+
+    setScopeFilter(filterState);
+
+    if (filterState.active) {
+      localStorage.setItem('isg_scope_filter', JSON.stringify(filterState));
+    } else {
+      localStorage.removeItem('isg_scope_filter');
+    }
+  }, [user]);
+
+  /**
+   * Clear the scope filter
+   */
+  const clearScopeFilter = useCallback(() => {
+    localStorage.removeItem('isg_scope_filter');
+    setScopeFilter({
+      active: false,
+      filterType: null,
+      filterValue: null,
+      filterLabel: null,
+      ownerIds: null,
+    });
+  }, []);
+
+  /**
+   * Get the effective owner IDs for data queries based on current filter state
+   * Returns: single user ID (string) or array of user IDs
+   */
+  const getEffectiveOwnerIds = useCallback(() => {
+    // If impersonating a specific user, use that user's ID (single)
+    if (impersonating.active && impersonating.targetUserId) {
+      return impersonating.targetUserId;
+    }
+
+    // If scope filter is active with specific ownerIds, use those
+    if (scopeFilter.active && scopeFilter.ownerIds && scopeFilter.ownerIds.length > 0) {
+      // If only one owner, return as string for backwards compatibility
+      if (scopeFilter.ownerIds.length === 1) {
+        return scopeFilter.ownerIds[0];
+      }
+      return scopeFilter.ownerIds;
+    }
+
+    // Default: return current user's ID
+    return user?.id || null;
+  }, [impersonating, scopeFilter, user]);
+
+  /**
+   * Check if the current view is filtered (showing more than just own data)
+   */
+  const isViewingFiltered = useCallback(() => {
+    return scopeFilter.active || impersonating.active;
+  }, [scopeFilter, impersonating]);
+
   const value = {
     isLoading,
     isAuthenticated,
     user,
     isAdmin,
+    isAgencyAdmin,
+    userRole,
     impersonating,
+    scopeFilter,
     sendOTP,
     verifyOTP,
     logout,
@@ -294,6 +427,10 @@ export const AuthProvider = ({ children }) => {
     exitImpersonation,
     getEffectiveUserId,
     getEffectiveUserName,
+    updateScopeFilter,
+    clearScopeFilter,
+    getEffectiveOwnerIds,
+    isViewingFiltered,
     checkSession,
   };
 

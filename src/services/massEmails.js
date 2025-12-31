@@ -1,5 +1,6 @@
 // src/services/massEmails.js
 import { supabase } from '../lib/supabase';
+import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
 
 // Haversine formula to calculate distance between two points in miles
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -112,8 +113,9 @@ const batchGeocode = async (locations, maxConcurrent = 10) => {
 export const massEmailsService = {
   /**
    * Get all mass email batches for a user
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAll(ownerId, options = {}) {
+  async getAll(ownerIds, options = {}) {
     const { status, limit = 50, offset = 0 } = options;
 
     let query = supabase
@@ -122,9 +124,9 @@ export const massEmailsService = {
         *,
         template:email_templates(id, name, subject)
       `)
-      .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+    query = applyOwnerFilter(query, ownerIds);
 
     if (status) {
       query = query.eq('status', status);
@@ -137,17 +139,18 @@ export const massEmailsService = {
 
   /**
    * Get a single mass email batch by ID
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getById(ownerId, batchId) {
-    const { data, error } = await supabase
+  async getById(ownerIds, batchId) {
+    let query = supabase
       .from('mass_email_batches')
       .select(`
         *,
         template:email_templates(*)
       `)
-      .eq('owner_id', ownerId)
-      .eq('id', batchId)
-      .single();
+      .eq('id', batchId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.single();
 
     if (error) throw error;
     return data;
@@ -155,8 +158,10 @@ export const massEmailsService = {
 
   /**
    * Create a new mass email batch (draft)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async create(ownerId, batch) {
+  async create(ownerIds, batch) {
+    const ownerId = getFirstOwnerId(ownerIds);
     const { data, error } = await supabase
       .from('mass_email_batches')
       .insert({
@@ -173,18 +178,18 @@ export const massEmailsService = {
 
   /**
    * Update a mass email batch
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async update(ownerId, batchId, updates) {
-    const { data, error } = await supabase
+  async update(ownerIds, batchId, updates) {
+    let query = supabase
       .from('mass_email_batches')
       .update({
         ...updates,
         updated_at: new Date().toISOString()
       })
-      .eq('owner_id', ownerId)
-      .eq('id', batchId)
-      .select()
-      .single();
+      .eq('id', batchId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.select().single();
 
     if (error) throw error;
     return data;
@@ -192,14 +197,16 @@ export const massEmailsService = {
 
   /**
    * Delete a mass email batch (only drafts)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async delete(ownerId, batchId) {
-    const { error } = await supabase
+  async delete(ownerIds, batchId) {
+    let query = supabase
       .from('mass_email_batches')
       .delete()
-      .eq('owner_id', ownerId)
       .eq('id', batchId)
       .eq('status', 'Draft'); // Safety: only delete drafts
+    query = applyOwnerFilter(query, ownerIds);
+    const { error } = await query;
 
     if (error) throw error;
     return true;
@@ -1139,15 +1146,17 @@ export const massEmailsService = {
   /**
    * Schedule a mass email batch for sending
    * Creates scheduled_emails entries for each recipient
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async scheduleBatch(ownerId, batchId, scheduledFor = null) {
+  async scheduleBatch(ownerIds, batchId, scheduledFor = null) {
+    const ownerId = getFirstOwnerId(ownerIds);
     // Get the batch
-    const batch = await this.getById(ownerId, batchId);
+    const batch = await this.getById(ownerIds, batchId);
     if (!batch) throw new Error('Batch not found');
     if (batch.status !== 'Draft') throw new Error('Can only schedule draft batches');
 
     // Get recipients (fetch more for actual sending)
-    const recipients = await this.getRecipients(ownerId, batch.filter_config, { limit: 10000 });
+    const recipients = await this.getRecipients(ownerIds, batch.filter_config, { limit: 10000 });
     if (recipients.length === 0) throw new Error('No recipients match the filter');
 
     const sendTime = scheduledFor || new Date().toISOString();
@@ -1183,7 +1192,7 @@ export const massEmailsService = {
     }
 
     // Update batch status
-    await this.update(ownerId, batchId, {
+    await this.update(ownerIds, batchId, {
       status: scheduledFor ? 'Scheduled' : 'Sending',
       total_recipients: recipients.length,
       scheduled_for: sendTime,
@@ -1199,20 +1208,22 @@ export const massEmailsService = {
 
   /**
    * Cancel a scheduled batch
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async cancelBatch(ownerId, batchId) {
+  async cancelBatch(ownerIds, batchId) {
     // Update batch status
-    await this.update(ownerId, batchId, {
+    await this.update(ownerIds, batchId, {
       status: 'Cancelled'
     });
 
     // Cancel all pending scheduled emails for this batch
-    const { error } = await supabase
+    let query = supabase
       .from('scheduled_emails')
       .update({ status: 'Cancelled' })
-      .eq('owner_id', ownerId)
       .eq('batch_id', batchId)
       .eq('status', 'Pending');
+    query = applyOwnerFilter(query, ownerIds);
+    const { error } = await query;
 
     if (error) throw error;
 
@@ -1221,13 +1232,15 @@ export const massEmailsService = {
 
   /**
    * Get batch stats
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getBatchStats(ownerId, batchId) {
-    const { data, error } = await supabase
+  async getBatchStats(ownerIds, batchId) {
+    let query = supabase
       .from('scheduled_emails')
       .select('status')
-      .eq('owner_id', ownerId)
       .eq('batch_id', batchId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -1251,9 +1264,10 @@ export const massEmailsService = {
 
   /**
    * Get all batches with stats summary
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAllWithStats(ownerId, options = {}) {
-    const batches = await this.getAll(ownerId, options);
+  async getAllWithStats(ownerIds, options = {}) {
+    const batches = await this.getAll(ownerIds, options);
 
     // Get stats for non-draft batches
     const batchesWithStats = await Promise.all(
@@ -1261,7 +1275,7 @@ export const massEmailsService = {
         if (batch.status === 'Draft') {
           return { ...batch, stats: null };
         }
-        const stats = await this.getBatchStats(ownerId, batch.id);
+        const stats = await this.getBatchStats(ownerIds, batch.id);
         return { ...batch, stats };
       })
     );

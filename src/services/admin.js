@@ -64,7 +64,7 @@ export const adminService = {
   async getAllUsers(searchQuery = '') {
     let query = supabase
       .from('users')
-      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name, marketing_cloud_agency_admin')
       .order('first_name');
 
     // Add search filter if query provided
@@ -79,6 +79,111 @@ export const adminService = {
 
     if (error) throw error;
     return data || [];
+  },
+
+  /**
+   * Get all unique agencies (profile_names) for Master Admin dropdown
+   */
+  async getUniqueAgencies() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('profile_name')
+      .not('profile_name', 'is', null)
+      .order('profile_name');
+
+    if (error) throw error;
+
+    // Deduplicate and return unique values
+    const unique = [...new Set(data?.map(u => u.profile_name))];
+    return unique.filter(Boolean);
+  },
+
+  /**
+   * Get all users belonging to a specific agency (profile_name)
+   */
+  async getUsersByAgency(profileName) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name, marketing_cloud_agency_admin')
+      .eq('profile_name', profileName)
+      .order('first_name');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Get all user IDs belonging to a specific agency (for query filtering)
+   */
+  async getUserIdsByAgency(profileName) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_unique_id')
+      .eq('profile_name', profileName);
+
+    if (error) throw error;
+    return data?.map(u => u.user_unique_id) || [];
+  },
+
+  /**
+   * Get agents in the same agency as the current user (for Agency Admin dropdown)
+   * Excludes the current user from the list
+   */
+  async getAgencyAgents(profileName, excludeUserId = null, searchQuery = '') {
+    let query = supabase
+      .from('users')
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
+      .eq('profile_name', profileName)
+      .order('first_name');
+
+    // Exclude the current user if provided
+    if (excludeUserId) {
+      query = query.neq('user_unique_id', excludeUserId);
+    }
+
+    // Add search filter if query provided
+    if (searchQuery) {
+      query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+    }
+
+    query = query.limit(50);
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Check if a user is an agency admin
+   */
+  async isAgencyAdmin(userId) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('marketing_cloud_agency_admin')
+      .eq('user_unique_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    return data?.marketing_cloud_agency_admin === true;
+  },
+
+  /**
+   * Get user's profile name (agency)
+   */
+  async getUserProfileName(userId) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('profile_name')
+      .eq('user_unique_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    return data?.profile_name || null;
   },
 
   // ==========================================

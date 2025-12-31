@@ -1,13 +1,15 @@
 // src/services/scheduledEmails.js
 import { supabase } from '../lib/supabase';
+import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
 
 export const scheduledEmailsService = {
   /**
    * Get all scheduled emails for a user
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAll(ownerId, options = {}) {
+  async getAll(ownerIds, options = {}) {
     const { status, automationId, limit = 50, offset = 0 } = options;
-    
+
     let query = supabase
       .from('scheduled_emails')
       .select(`
@@ -16,9 +18,9 @@ export const scheduledEmailsService = {
         template:email_templates(id, name),
         automation:automations(id, name)
       `)
-      .eq('owner_id', ownerId)
       .order('scheduled_for', { ascending: true })
       .range(offset, offset + limit - 1);
+    query = applyOwnerFilter(query, ownerIds);
     
     if (status) {
       query = query.eq('status', status);
@@ -35,21 +37,23 @@ export const scheduledEmailsService = {
 
   /**
    * Get upcoming scheduled emails
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getUpcoming(ownerId, limit = 10) {
-    const { data, error } = await supabase
+  async getUpcoming(ownerIds, limit = 10) {
+    let query = supabase
       .from('scheduled_emails')
       .select(`
         *,
         account:accounts(account_unique_id, name, person_email),
         automation:automations(id, name)
       `)
-      .eq('owner_id', ownerId)
       .eq('status', 'Pending')
       .gte('scheduled_for', new Date().toISOString())
       .order('scheduled_for', { ascending: true })
       .limit(limit);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return data;
   },
@@ -76,9 +80,10 @@ export const scheduledEmailsService = {
 
   /**
    * Get a single scheduled email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getById(ownerId, scheduledEmailId) {
-    const { data, error } = await supabase
+  async getById(ownerIds, scheduledEmailId) {
+    let query = supabase
       .from('scheduled_emails')
       .select(`
         *,
@@ -86,18 +91,20 @@ export const scheduledEmailsService = {
         template:email_templates(*),
         automation:automations(id, name)
       `)
-      .eq('owner_id', ownerId)
-      .eq('id', scheduledEmailId)
-      .single();
-    
+      .eq('id', scheduledEmailId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.single();
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Create a scheduled email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async create(ownerId, scheduledEmail) {
+  async create(ownerIds, scheduledEmail) {
+    const ownerId = getFirstOwnerId(ownerIds);
     const { data, error } = await supabase
       .from('scheduled_emails')
       .insert({
@@ -107,15 +114,17 @@ export const scheduledEmailsService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Create multiple scheduled emails
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async createBatch(ownerId, scheduledEmails) {
+  async createBatch(ownerIds, scheduledEmails) {
+    const ownerId = getFirstOwnerId(ownerIds);
     const emailsWithOwner = scheduledEmails.map(e => ({
       owner_id: ownerId,
       status: 'Pending',
@@ -126,42 +135,44 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .insert(emailsWithOwner)
       .select();
-    
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Update a scheduled email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async update(ownerId, scheduledEmailId, updates) {
-    const { data, error } = await supabase
+  async update(ownerIds, scheduledEmailId, updates) {
+    let query = supabase
       .from('scheduled_emails')
       .update({
         ...updates,
         updated_at: new Date().toISOString()
       })
-      .eq('owner_id', ownerId)
-      .eq('id', scheduledEmailId)
-      .select()
-      .single();
-    
+      .eq('id', scheduledEmailId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.select().single();
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Cancel a scheduled email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async cancel(ownerId, scheduledEmailId) {
-    return this.update(ownerId, scheduledEmailId, { status: 'Cancelled' });
+  async cancel(ownerIds, scheduledEmailId) {
+    return this.update(ownerIds, scheduledEmailId, { status: 'Cancelled' });
   },
 
   /**
    * Reschedule an email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async reschedule(ownerId, scheduledEmailId, newScheduledFor) {
-    return this.update(ownerId, scheduledEmailId, {
+  async reschedule(ownerIds, scheduledEmailId, newScheduledFor) {
+    return this.update(ownerIds, scheduledEmailId, {
       scheduled_for: newScheduledFor,
       status: 'Pending',
       attempts: 0
@@ -238,27 +249,31 @@ export const scheduledEmailsService = {
 
   /**
    * Delete a scheduled email
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async delete(ownerId, scheduledEmailId) {
-    const { error } = await supabase
+  async delete(ownerIds, scheduledEmailId) {
+    let query = supabase
       .from('scheduled_emails')
       .delete()
-      .eq('owner_id', ownerId)
       .eq('id', scheduledEmailId);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { error } = await query;
+
     if (error) throw error;
     return true;
   },
 
   /**
    * Get stats for scheduled emails
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getStats(ownerId) {
-    const { data, error } = await supabase
+  async getStats(ownerIds) {
+    let query = supabase
       .from('scheduled_emails')
-      .select('status, scheduled_for')
-      .eq('owner_id', ownerId);
-    
+      .select('status, scheduled_for');
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
 
     const now = new Date();

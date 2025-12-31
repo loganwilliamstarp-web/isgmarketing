@@ -1,18 +1,20 @@
 // src/services/accounts.js
 import { supabase } from '../lib/supabase';
+import { applyOwnerFilter, getFirstOwnerId, normalizeOwnerIds } from './utils/ownerFilter';
 
 export const accountsService = {
   /**
-   * Get paginated accounts for an owner with policy counts
+   * Get paginated accounts for owner(s) with policy counts
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAll(ownerId, options = {}) {
+  async getAll(ownerIds, options = {}) {
     const { status, search, limit = 25, offset = 0, expiring = false } = options;
-    
+
     // First get total count (without pagination)
     let countQuery = supabase
       .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId);
+      .select('*', { count: 'exact', head: true });
+    countQuery = applyOwnerFilter(countQuery, ownerIds);
     
     if (status) {
       // Map UI filter values to database values
@@ -33,9 +35,9 @@ export const accountsService = {
     let query = supabase
       .from('accounts')
       .select('*')
-      .eq('owner_id', ownerId)
       .order('name')
       .range(offset, offset + limit - 1);
+    query = applyOwnerFilter(query, ownerIds);
     
     if (status) {
       // Map UI filter values to database values
@@ -113,44 +115,36 @@ export const accountsService = {
   },
 
   /**
-   * Get account stats summary - counts ALL accounts for user using proper count queries
+   * Get account stats summary - counts ALL accounts for owner(s) using proper count queries
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getStats(ownerId) {
+  async getStats(ownerIds) {
     // Use count queries instead of fetching all rows (Supabase has 1000 row default limit)
-    
+
     // Total count
-    const { count: totalCount, error: totalError } = await supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId);
-    
+    let totalQuery = supabase.from('accounts').select('*', { count: 'exact', head: true });
+    totalQuery = applyOwnerFilter(totalQuery, ownerIds);
+    const { count: totalCount, error: totalError } = await totalQuery;
+
     if (totalError) throw totalError;
-    
+
     // Count by status - use ilike for case-insensitive matching
-    const { count: customerCount } = await supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId)
-      .ilike('account_status', 'customer');
-    
-    const { count: prospectCount } = await supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId)
-      .ilike('account_status', 'prospect');
-    
+    let customerQuery = supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'customer');
+    customerQuery = applyOwnerFilter(customerQuery, ownerIds);
+    const { count: customerCount } = await customerQuery;
+
+    let prospectQuery = supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'prospect');
+    prospectQuery = applyOwnerFilter(prospectQuery, ownerIds);
+    const { count: prospectCount } = await prospectQuery;
+
     // Match "prior_customer" or "prior"
-    const { count: priorCount } = await supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId)
-      .ilike('account_status', 'prior_customer');
-    
-    const { count: leadCount } = await supabase
-      .from('accounts')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', ownerId)
-      .ilike('account_status', 'lead');
+    let priorQuery = supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'prior_customer');
+    priorQuery = applyOwnerFilter(priorQuery, ownerIds);
+    const { count: priorCount } = await priorQuery;
+
+    let leadQuery = supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'lead');
+    leadQuery = applyOwnerFilter(leadQuery, ownerIds);
+    const { count: leadCount } = await leadQuery;
     
     // For expiring policies count, we'll estimate based on a sample
     // This avoids hitting row limits when there are many expiring policies
@@ -187,18 +181,16 @@ export const accountsService = {
           // Count in batches of 100 to avoid query limits
           let ownerExpiringCount = 0;
           const batchSize = 100;
-          
+
           for (let i = 0; i < uniqueAccountIds.length; i += batchSize) {
             const batch = uniqueAccountIds.slice(i, i + batchSize);
-            const { count } = await supabase
-              .from('accounts')
-              .select('*', { count: 'exact', head: true })
-              .eq('owner_id', ownerId)
-              .in('account_unique_id', batch);
-            
+            let batchQuery = supabase.from('accounts').select('*', { count: 'exact', head: true }).in('account_unique_id', batch);
+            batchQuery = applyOwnerFilter(batchQuery, ownerIds);
+            const { count } = await batchQuery;
+
             ownerExpiringCount += (count || 0);
           }
-          
+
           expiringAccountCount = ownerExpiringCount;
         }
       }
@@ -288,22 +280,24 @@ export const accountsService = {
 
   /**
    * Get account with email history
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByIdWithEmailHistory(ownerId, accountId) {
+  async getByIdWithEmailHistory(ownerIds, accountId) {
     const account = await this.getByIdWithPolicies(accountId);
-    
+
     // Get email logs
-    const { data: emailLogs, error: logsError } = await supabase
+    let logsQuery = supabase
       .from('email_logs')
       .select(`
         *,
         template:email_templates(id, name),
         automation:automations(id, name)
       `)
-      .eq('owner_id', ownerId)
       .eq('account_id', accountId)
       .order('created_at', { ascending: false })
       .limit(20);
+    logsQuery = applyOwnerFilter(logsQuery, ownerIds);
+    const { data: emailLogs, error: logsError } = await logsQuery;
     
     if (logsError) throw logsError;
 
@@ -328,65 +322,74 @@ export const accountsService = {
 
   /**
    * Search accounts
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async search(ownerId, searchTerm, limit = 20) {
-    const { data, error } = await supabase
+  async search(ownerIds, searchTerm, limit = 20) {
+    let query = supabase
       .from('accounts')
       .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name')
-      .eq('owner_id', ownerId)
       .or(`name.ilike.%${searchTerm}%,person_email.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,primary_contact_first_name.ilike.%${searchTerm}%,primary_contact_last_name.ilike.%${searchTerm}%`)
       .limit(limit);
-    
+    query = applyOwnerFilter(query, ownerIds);
+
+    const { data, error } = await query;
     if (error) throw error;
     return data;
   },
 
   /**
    * Get accounts by status
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByStatus(ownerId, status, options = {}) {
+  async getByStatus(ownerIds, status, options = {}) {
     const { limit = 50, offset = 0 } = options;
-    
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('accounts')
       .select('*')
-      .eq('owner_id', ownerId)
       .eq('account_status', status)
       .order('name')
       .range(offset, offset + limit - 1);
-    
+    query = applyOwnerFilter(query, ownerIds);
+
+    const { data, error } = await query;
     if (error) throw error;
     return data;
   },
 
   /**
    * Get customers (active accounts)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getCustomers(ownerId, options = {}) {
-    return this.getByStatus(ownerId, 'customer', options);
+  async getCustomers(ownerIds, options = {}) {
+    return this.getByStatus(ownerIds, 'customer', options);
   },
 
   /**
    * Get prospects
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getProspects(ownerId, options = {}) {
-    return this.getByStatus(ownerId, 'prospect', options);
+  async getProspects(ownerIds, options = {}) {
+    return this.getByStatus(ownerIds, 'prospect', options);
   },
 
   /**
    * Get prior customers
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getPriorCustomers(ownerId, options = {}) {
-    return this.getByStatus(ownerId, 'prior_customer', options);
+  async getPriorCustomers(ownerIds, options = {}) {
+    return this.getByStatus(ownerIds, 'prior_customer', options);
   },
 
   /**
    * Get accounts with expiring policies
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getWithExpiringPolicies(ownerId, daysOut = 45) {
+  async getWithExpiringPolicies(ownerIds, daysOut = 45) {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysOut);
-    
+    const ownerIdsArray = normalizeOwnerIds(ownerIds);
+
     const { data, error } = await supabase
       .from('policies')
       .select(`
@@ -409,22 +412,22 @@ export const accountsService = {
       .lte('expiration_date', futureDate.toISOString().split('T')[0])
       .gte('expiration_date', new Date().toISOString().split('T')[0])
       .order('expiration_date');
-    
+
     if (error) throw error;
-    
+
     // Filter by owner_id on the account side
-    return data.filter(p => p.account?.owner_id === ownerId);
+    return data.filter(p => p.account?.owner_id && ownerIdsArray.includes(p.account.owner_id));
   },
 
   /**
    * Get account counts by status
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getCounts(ownerId) {
-    const { data, error } = await supabase
-      .from('accounts')
-      .select('account_status')
-      .eq('owner_id', ownerId);
-    
+  async getCounts(ownerIds) {
+    let query = supabase.from('accounts').select('account_status');
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
 
     const counts = {
@@ -477,16 +480,17 @@ export const accountsService = {
 
   /**
    * Get accounts eligible for automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getEligibleForAutomation(ownerId, filterConfig) {
+  async getEligibleForAutomation(ownerIds, filterConfig) {
     // Get accounts first
     let query = supabase
       .from('accounts')
       .select('*')
-      .eq('owner_id', ownerId)
       .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
       .not('person_email', 'is', null);
-    
+    query = applyOwnerFilter(query, ownerIds);
+
     const { data: accounts, error } = await query;
     if (error) throw error;
     

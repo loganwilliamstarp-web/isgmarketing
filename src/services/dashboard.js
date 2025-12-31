@@ -4,12 +4,14 @@ import { emailLogsService } from './emailLogs';
 import { activityLogService } from './activityLog';
 import { scheduledEmailsService } from './scheduledEmails';
 import { accountsService } from './accounts';
+import { applyOwnerFilter } from './utils/ownerFilter';
 
 export const dashboardService = {
   /**
    * Get all dashboard data in one call
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getDashboardData(ownerId, options = {}) {
+  async getDashboardData(ownerIds, options = {}) {
     const { days = 30 } = options;
 
     const [
@@ -21,13 +23,13 @@ export const dashboardService = {
       accountCounts,
       automationStats
     ] = await Promise.all([
-      emailLogsService.getComparisonStats(ownerId, days),
-      activityLogService.getRecent(ownerId, { limit: 10 }),
-      scheduledEmailsService.getUpcoming(ownerId, 5),
-      emailLogsService.getRecentOpens(ownerId, 5),
-      emailLogsService.getRecentClicks(ownerId, 5),
-      accountsService.getCounts(ownerId),
-      this.getAutomationStats(ownerId)
+      emailLogsService.getComparisonStats(ownerIds, days),
+      activityLogService.getRecent(ownerIds, { limit: 10 }),
+      scheduledEmailsService.getUpcoming(ownerIds, 5),
+      emailLogsService.getRecentOpens(ownerIds, 5),
+      emailLogsService.getRecentClicks(ownerIds, 5),
+      accountsService.getCounts(ownerIds),
+      this.getAutomationStats(ownerIds)
     ]);
 
     return {
@@ -44,9 +46,10 @@ export const dashboardService = {
 
   /**
    * Get automation stats summary
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAutomationStats(ownerId) {
-    const { data: automations, error } = await supabase
+  async getAutomationStats(ownerIds) {
+    let query = supabase
       .from('automations')
       .select(`
         id,
@@ -54,8 +57,9 @@ export const dashboardService = {
         status,
         stats
       `)
-      .eq('owner_id', ownerId)
       .eq('status', 'Active');
+    query = applyOwnerFilter(query, ownerIds);
+    const { data: automations, error } = await query;
     
     if (error) throw error;
 
@@ -94,34 +98,38 @@ export const dashboardService = {
 
   /**
    * Get email performance over time (for charts)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getEmailPerformanceOverTime(ownerId, days = 30) {
+  async getEmailPerformanceOverTime(ownerIds, days = 30) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
-    
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('email_stats_daily')
       .select('*')
-      .eq('owner_id', ownerId)
       .is('automation_id', null)
       .gte('stat_date', startDate.toISOString().split('T')[0])
       .order('stat_date');
-    
+    query = applyOwnerFilter(query, ownerIds);
+
+    const { data, error } = await query;
     if (error) throw error;
-    
+
     return data;
   },
 
   /**
    * Get top performing automations
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getTopAutomations(ownerId, limit = 5) {
-    const { data: automations, error } = await supabase
+  async getTopAutomations(ownerIds, limit = 5) {
+    let query = supabase
       .from('automations')
       .select('id, name, stats')
-      .eq('owner_id', ownerId)
       .eq('status', 'Active');
-    
+    query = applyOwnerFilter(query, ownerIds);
+
+    const { data: automations, error } = await query;
     if (error) throw error;
 
     // Sort by open rate from stats
@@ -141,23 +149,25 @@ export const dashboardService = {
 
   /**
    * Get accounts needing attention
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAccountsNeedingAttention(ownerId) {
+  async getAccountsNeedingAttention(ownerIds) {
     // Get accounts with bounced emails
-    const { data: bouncedAccounts, error: bounceError } = await supabase
+    let bouncedQuery = supabase
       .from('email_logs')
       .select(`
         account:accounts(account_unique_id, name, person_email)
       `)
-      .eq('owner_id', ownerId)
       .eq('status', 'Bounced')
       .not('account_id', 'is', null)
       .limit(10);
-    
+    bouncedQuery = applyOwnerFilter(bouncedQuery, ownerIds);
+
+    const { data: bouncedAccounts, error: bounceError } = await bouncedQuery;
     if (bounceError) throw bounceError;
 
     // Get expiring policies (next 30 days)
-    const expiringPolicies = await accountsService.getWithExpiringPolicies(ownerId, 30);
+    const expiringPolicies = await accountsService.getWithExpiringPolicies(ownerIds, 30);
 
     return {
       bouncedEmails: bouncedAccounts
@@ -169,12 +179,26 @@ export const dashboardService = {
 
   /**
    * Get quick stats (lightweight version for header/sidebar)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getQuickStats(ownerId) {
+  async getQuickStats(ownerIds) {
     const today = new Date().toISOString().split('T')[0];
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
+    // Build queries with owner filter
+    let emailsTodayQuery = supabase.from('email_logs').select('*', { count: 'exact', head: true }).gte('sent_at', today);
+    emailsTodayQuery = applyOwnerFilter(emailsTodayQuery, ownerIds);
+
+    let opensTodayQuery = supabase.from('email_logs').select('*', { count: 'exact', head: true }).gte('first_opened_at', today);
+    opensTodayQuery = applyOwnerFilter(opensTodayQuery, ownerIds);
+
+    let activeAutomationsQuery = supabase.from('automations').select('*', { count: 'exact', head: true }).eq('status', 'Active');
+    activeAutomationsQuery = applyOwnerFilter(activeAutomationsQuery, ownerIds);
+
+    let pendingScheduledQuery = supabase.from('scheduled_emails').select('*', { count: 'exact', head: true }).eq('status', 'Pending');
+    pendingScheduledQuery = applyOwnerFilter(pendingScheduledQuery, ownerIds);
+
     // Parallel queries for speed
     const [
       { count: emailsToday },
@@ -182,29 +206,10 @@ export const dashboardService = {
       { count: activeAutomations },
       { count: pendingScheduled }
     ] = await Promise.all([
-      supabase
-        .from('email_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', ownerId)
-        .gte('sent_at', today),
-      
-      supabase
-        .from('email_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', ownerId)
-        .gte('first_opened_at', today),
-      
-      supabase
-        .from('automations')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', ownerId)
-        .eq('status', 'Active'),
-      
-      supabase
-        .from('scheduled_emails')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', ownerId)
-        .eq('status', 'Pending')
+      emailsTodayQuery,
+      opensTodayQuery,
+      activeAutomationsQuery,
+      pendingScheduledQuery
     ]);
 
     return {
