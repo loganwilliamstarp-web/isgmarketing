@@ -1,23 +1,18 @@
 // src/hooks/useAccounts.js
 import { useQuery } from '@tanstack/react-query';
 import { accountsService } from '../services/accounts';
-import { useParams } from 'react-router-dom';
-
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get all accounts
  */
 export function useAccounts(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, options],
-    queryFn: () => accountsService.getAll(ownerId, options),
-    enabled: !!ownerId,
+    queryKey: ['accounts', filterKey, options],
+    queryFn: () => accountsService.getAll(ownerIds, options),
+    enabled: ownerIds.length > 0,
     staleTime: 30000, // Cache for 30 seconds
   });
 }
@@ -49,12 +44,12 @@ export function useAccountWithPolicies(accountId) {
  * Get account with full email history
  */
 export function useAccountWithEmailHistory(accountId) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['account', accountId, 'emailHistory', ownerId],
-    queryFn: () => accountsService.getByIdWithEmailHistory(ownerId, accountId),
-    enabled: !!ownerId && !!accountId
+    queryKey: ['account', accountId, 'emailHistory', filterKey],
+    queryFn: () => accountsService.getByIdWithEmailHistory(ownerIds, accountId),
+    enabled: ownerIds.length > 0 && !!accountId
   });
 }
 
@@ -62,12 +57,12 @@ export function useAccountWithEmailHistory(accountId) {
  * Search accounts
  */
 export function useAccountSearch(searchTerm, limit = 20) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'search', searchTerm],
-    queryFn: () => accountsService.search(ownerId, searchTerm, limit),
-    enabled: !!ownerId && !!searchTerm && searchTerm.length >= 2
+    queryKey: ['accounts', filterKey, 'search', searchTerm],
+    queryFn: () => accountsService.search(ownerIds, searchTerm, limit),
+    enabled: ownerIds.length > 0 && !!searchTerm && searchTerm.length >= 2
   });
 }
 
@@ -75,12 +70,12 @@ export function useAccountSearch(searchTerm, limit = 20) {
  * Get customers
  */
 export function useCustomers(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'customers', options],
-    queryFn: () => accountsService.getCustomers(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'customers', options],
+    queryFn: () => accountsService.getCustomers(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -88,12 +83,12 @@ export function useCustomers(options = {}) {
  * Get prospects
  */
 export function useProspects(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'prospects', options],
-    queryFn: () => accountsService.getProspects(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'prospects', options],
+    queryFn: () => accountsService.getProspects(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -101,12 +96,12 @@ export function useProspects(options = {}) {
  * Get prior customers
  */
 export function usePriorCustomers(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'priorCustomers', options],
-    queryFn: () => accountsService.getPriorCustomers(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'priorCustomers', options],
+    queryFn: () => accountsService.getPriorCustomers(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -114,12 +109,12 @@ export function usePriorCustomers(options = {}) {
  * Get accounts with expiring policies
  */
 export function useExpiringPolicies(daysOut = 45) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'expiring', daysOut],
-    queryFn: () => accountsService.getWithExpiringPolicies(ownerId, daysOut),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'expiring', daysOut],
+    queryFn: () => accountsService.getWithExpiringPolicies(ownerIds, daysOut),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -127,12 +122,12 @@ export function useExpiringPolicies(daysOut = 45) {
  * Get account counts by status
  */
 export function useAccountCounts() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'counts'],
-    queryFn: () => accountsService.getCounts(ownerId),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'counts'],
+    queryFn: () => accountsService.getCounts(ownerIds),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -140,12 +135,12 @@ export function useAccountCounts() {
  * Get account stats summary (type counts + expiring policies)
  */
 export function useAccountStats() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['accounts', ownerId, 'stats'],
-    queryFn: () => accountsService.getStats(ownerId),
-    enabled: !!ownerId
+    queryKey: ['accounts', filterKey, 'stats'],
+    queryFn: () => accountsService.getStats(ownerIds),
+    enabled: ownerIds.length > 0
   });
 }
 

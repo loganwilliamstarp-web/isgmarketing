@@ -1,22 +1,24 @@
 // src/services/automations.js
 import { supabase } from '../lib/supabase';
+import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
 
 export const automationsService = {
   /**
    * Get all automations for a user
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAll(ownerId, options = {}) {
+  async getAll(ownerIds, options = {}) {
     const { status, category, search } = options;
-    
+
     let query = supabase
       .from('automations')
       .select(`
         *,
         _count:automation_enrollments(count)
       `)
-      .eq('owner_id', ownerId)
       .order('is_default', { ascending: false })
       .order('name');
+    query = applyOwnerFilter(query, ownerIds);
     
     if (status) {
       query = query.eq('status', status);
@@ -37,14 +39,16 @@ export const automationsService = {
 
   /**
    * Get all automations with enrollment stats
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getAllWithStats(ownerId) {
-    const { data: automations, error } = await supabase
+  async getAllWithStats(ownerIds) {
+    let query = supabase
       .from('automations')
       .select('*')
-      .eq('owner_id', ownerId)
       .order('is_default', { ascending: false })
       .order('name');
+    query = applyOwnerFilter(query, ownerIds);
+    const { data: automations, error } = await query;
     
     if (error) throw error;
 
@@ -76,24 +80,26 @@ export const automationsService = {
 
   /**
    * Get a single automation by ID
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getById(ownerId, automationId) {
-    const { data, error } = await supabase
+  async getById(ownerIds, automationId) {
+    let query = supabase
       .from('automations')
       .select('*')
-      .eq('owner_id', ownerId)
-      .eq('id', automationId)
-      .single();
-    
+      .eq('id', automationId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.single();
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Get automation with full details (enrollments, email stats)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByIdWithDetails(ownerId, automationId) {
-    const automation = await this.getById(ownerId, automationId);
+  async getByIdWithDetails(ownerIds, automationId) {
+    const automation = await this.getById(ownerIds, automationId);
     
     // Get enrollment stats
     const { data: enrollments, error: enrollError } = await supabase
@@ -136,23 +142,26 @@ export const automationsService = {
 
   /**
    * Get automation by default key
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByDefaultKey(ownerId, defaultKey) {
-    const { data, error } = await supabase
+  async getByDefaultKey(ownerIds, defaultKey) {
+    let query = supabase
       .from('automations')
       .select('*')
-      .eq('owner_id', ownerId)
-      .eq('default_key', defaultKey)
-      .single();
-    
+      .eq('default_key', defaultKey);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.single();
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Create a new automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async create(ownerId, automation) {
+  async create(ownerIds, automation) {
+    const ownerId = getFirstOwnerId(ownerIds);
     const { data, error } = await supabase
       .from('automations')
       .insert({
@@ -163,79 +172,87 @@ export const automationsService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Update an automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async update(ownerId, automationId, updates) {
-    const { data, error } = await supabase
+  async update(ownerIds, automationId, updates) {
+    let query = supabase
       .from('automations')
       .update({
         ...updates,
         updated_at: new Date().toISOString()
       })
-      .eq('owner_id', ownerId)
-      .eq('id', automationId)
-      .select()
-      .single();
-    
+      .eq('id', automationId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.select().single();
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Update automation status
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async updateStatus(ownerId, automationId, status) {
-    return this.update(ownerId, automationId, { status });
+  async updateStatus(ownerIds, automationId, status) {
+    return this.update(ownerIds, automationId, { status });
   },
 
   /**
    * Activate an automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async activate(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'active');
+  async activate(ownerIds, automationId) {
+    return this.updateStatus(ownerIds, automationId, 'active');
   },
 
   /**
    * Pause an automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async pause(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'paused');
+  async pause(ownerIds, automationId) {
+    return this.updateStatus(ownerIds, automationId, 'paused');
   },
 
   /**
    * Archive an automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async archive(ownerId, automationId) {
-    return this.updateStatus(ownerId, automationId, 'archived');
+  async archive(ownerIds, automationId) {
+    return this.updateStatus(ownerIds, automationId, 'archived');
   },
 
   /**
    * Delete an automation (only non-default)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async delete(ownerId, automationId) {
-    const { error } = await supabase
+  async delete(ownerIds, automationId) {
+    let query = supabase
       .from('automations')
       .delete()
-      .eq('owner_id', ownerId)
       .eq('id', automationId)
       .eq('is_default', false);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { error } = await query;
+
     if (error) throw error;
     return true;
   },
 
   /**
    * Duplicate an automation
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
-  async duplicate(ownerId, automationId) {
-    const original = await this.getById(ownerId, automationId);
-    
+  async duplicate(ownerIds, automationId) {
+    const original = await this.getById(ownerIds, automationId);
+    const ownerId = getFirstOwnerId(ownerIds);
+
     const { data, error } = await supabase
       .from('automations')
       .insert({
@@ -257,31 +274,34 @@ export const automationsService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Update filter configuration
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async updateFilters(ownerId, automationId, filterConfig) {
-    return this.update(ownerId, automationId, { filter_config: filterConfig });
+  async updateFilters(ownerIds, automationId, filterConfig) {
+    return this.update(ownerIds, automationId, { filter_config: filterConfig });
   },
 
   /**
    * Update workflow nodes
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async updateNodes(ownerId, automationId, nodes) {
-    return this.update(ownerId, automationId, { nodes });
+  async updateNodes(ownerIds, automationId, nodes) {
+    return this.update(ownerIds, automationId, { nodes });
   },
 
   /**
    * Update schedule settings
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async updateSchedule(ownerId, automationId, scheduleConfig) {
+  async updateSchedule(ownerIds, automationId, scheduleConfig) {
     const { sendTime, timezone, frequency } = scheduleConfig;
-    return this.update(ownerId, automationId, {
+    return this.update(ownerIds, automationId, {
       send_time: sendTime,
       timezone,
       frequency
@@ -290,10 +310,11 @@ export const automationsService = {
 
   /**
    * Update enrollment rules
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async updateEnrollmentRules(ownerId, automationId, rules) {
+  async updateEnrollmentRules(ownerIds, automationId, rules) {
     const { maxEnrollments, cooldownDays, distributeEvenly } = rules;
-    return this.update(ownerId, automationId, {
+    return this.update(ownerIds, automationId, {
       max_enrollments: maxEnrollments,
       enrollment_cooldown_days: cooldownDays,
       distribute_evenly: distributeEvenly
@@ -302,36 +323,41 @@ export const automationsService = {
 
   /**
    * Get automations by status
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getByStatus(ownerId, status) {
-    const { data, error } = await supabase
+  async getByStatus(ownerIds, status) {
+    let query = supabase
       .from('automations')
       .select('*')
-      .eq('owner_id', ownerId)
       .eq('status', status)
       .order('name');
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return data;
   },
 
   /**
    * Get active automations
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getActive(ownerId) {
-    return this.getByStatus(ownerId, 'Active');
+  async getActive(ownerIds) {
+    return this.getByStatus(ownerIds, 'Active');
   },
 
   /**
    * Get all unique categories
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
-  async getCategories(ownerId) {
-    const { data, error } = await supabase
+  async getCategories(ownerIds) {
+    let query = supabase
       .from('automations')
       .select('category')
-      .eq('owner_id', ownerId)
       .not('category', 'is', null);
-    
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
     if (error) throw error;
     return [...new Set(data.map(a => a.category))];
   }

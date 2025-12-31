@@ -1,24 +1,18 @@
 // src/hooks/useTemplates.js
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { templatesService } from '../services/templates';
-import { useParams } from 'react-router-dom';
-
-// Get owner ID from URL params
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get all templates
  */
 export function useTemplates(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['templates', ownerId, options],
-    queryFn: () => templatesService.getAll(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['templates', filterKey, options],
+    queryFn: () => templatesService.getAll(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -26,12 +20,12 @@ export function useTemplates(options = {}) {
  * Get a single template by ID
  */
 export function useTemplate(templateId) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['template', ownerId, templateId],
-    queryFn: () => templatesService.getById(ownerId, templateId),
-    enabled: !!ownerId && !!templateId
+    queryKey: ['template', filterKey, templateId],
+    queryFn: () => templatesService.getById(ownerIds, templateId),
+    enabled: ownerIds.length > 0 && !!templateId
   });
 }
 
@@ -39,12 +33,12 @@ export function useTemplate(templateId) {
  * Get template by default key
  */
 export function useTemplateByKey(defaultKey) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['template', ownerId, 'key', defaultKey],
-    queryFn: () => templatesService.getByDefaultKey(ownerId, defaultKey),
-    enabled: !!ownerId && !!defaultKey
+    queryKey: ['template', filterKey, 'key', defaultKey],
+    queryFn: () => templatesService.getByDefaultKey(ownerIds, defaultKey),
+    enabled: ownerIds.length > 0 && !!defaultKey
   });
 }
 
@@ -52,12 +46,12 @@ export function useTemplateByKey(defaultKey) {
  * Get templates by category
  */
 export function useTemplatesByCategory(category) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['templates', ownerId, 'category', category],
-    queryFn: () => templatesService.getByCategory(ownerId, category),
-    enabled: !!ownerId && !!category
+    queryKey: ['templates', filterKey, 'category', category],
+    queryFn: () => templatesService.getByCategory(ownerIds, category),
+    enabled: ownerIds.length > 0 && !!category
   });
 }
 
@@ -65,12 +59,12 @@ export function useTemplatesByCategory(category) {
  * Get all template categories
  */
 export function useTemplateCategories() {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['templates', ownerId, 'categories'],
-    queryFn: () => templatesService.getCategories(ownerId),
-    enabled: !!ownerId
+    queryKey: ['templates', filterKey, 'categories'],
+    queryFn: () => templatesService.getCategories(ownerIds),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -78,33 +72,33 @@ export function useTemplateCategories() {
  * Template mutations (create, update, delete, duplicate)
  */
 export function useTemplateMutations() {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
   const queryClient = useQueryClient();
 
   const invalidateTemplates = () => {
-    queryClient.invalidateQueries({ queryKey: ['templates', ownerId] });
+    queryClient.invalidateQueries({ queryKey: ['templates'] });
   };
 
   const createTemplate = useMutation({
-    mutationFn: (template) => templatesService.create(ownerId, template),
+    mutationFn: (template) => templatesService.create(ownerIds, template),
     onSuccess: invalidateTemplates
   });
 
   const updateTemplate = useMutation({
-    mutationFn: ({ templateId, updates }) => templatesService.update(ownerId, templateId, updates),
+    mutationFn: ({ templateId, updates }) => templatesService.update(ownerIds, templateId, updates),
     onSuccess: (data) => {
       invalidateTemplates();
-      queryClient.setQueryData(['template', ownerId, data.id], data);
+      queryClient.setQueryData(['template', filterKey, data.id], data);
     }
   });
 
   const deleteTemplate = useMutation({
-    mutationFn: (templateId) => templatesService.delete(ownerId, templateId),
+    mutationFn: (templateId) => templatesService.delete(ownerIds, templateId),
     onSuccess: invalidateTemplates
   });
 
   const duplicateTemplate = useMutation({
-    mutationFn: (templateId) => templatesService.duplicate(ownerId, templateId),
+    mutationFn: (templateId) => templatesService.duplicate(ownerIds, templateId),
     onSuccess: invalidateTemplates
   });
 

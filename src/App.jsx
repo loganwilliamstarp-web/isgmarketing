@@ -7,8 +7,9 @@ import { userSettingsService } from './services/userSettings';
 import { adminService } from './services/admin';
 
 // Auth imports
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider, useAuth, USER_ROLES } from './contexts/AuthContext';
 import { LoginPage, ProtectedRoute, ImpersonationBanner } from './components/auth';
+import { ScopeFilterDropdown } from './components/filters';
 
 // Import connected pages
 import {
@@ -79,27 +80,38 @@ export const useUser = () => useContext(UserContext);
 // ============================================
 const ImpersonationPicker = ({ t }) => {
   const navigate = useNavigate();
-  const { isAdmin, impersonate, impersonating } = useAuth();
+  const { isAdmin, isAgencyAdmin, user, impersonate, impersonating } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const searchTimeoutRef = React.useRef(null);
 
-  // Don't render if not admin
-  if (!isAdmin) return null;
+  // Don't render if not admin or agency admin
+  if (!isAdmin && !isAgencyAdmin) return null;
 
-  const handleOpen = async () => {
-    setIsOpen(true);
+  const fetchUsers = async (query = '') => {
     setIsLoading(true);
     try {
-      const data = await adminService.getAllUsers();
-      setUsers(data);
+      if (isAdmin) {
+        // Master Admin can see all users
+        const data = await adminService.getAllUsers(query);
+        setUsers(data);
+      } else if (isAgencyAdmin && user?.profileName) {
+        // Agency Admin can only see agents in their agency
+        const data = await adminService.getAgencyAgents(user.profileName, user.id, query);
+        setUsers(data);
+      }
     } catch (err) {
       console.error('Error fetching users:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpen = async () => {
+    setIsOpen(true);
+    await fetchUsers();
   };
 
   const handleSearch = (query) => {
@@ -111,25 +123,28 @@ const ImpersonationPicker = ({ t }) => {
     }
 
     // Debounce search - wait 300ms after typing stops
-    searchTimeoutRef.current = setTimeout(async () => {
-      setIsLoading(true);
-      try {
-        const data = await adminService.getAllUsers(query);
-        setUsers(data);
-      } catch (err) {
-        console.error('Error searching users:', err);
-      } finally {
-        setIsLoading(false);
-      }
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchUsers(query);
     }, 300);
   };
 
-  const handleSelectUser = (user) => {
-    const userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email;
-    impersonate(user.user_unique_id, userName);
+  const handleSelectUser = (selectedUser) => {
+    const userName = `${selectedUser.first_name || ''} ${selectedUser.last_name || ''}`.trim() || selectedUser.email;
+    impersonate(selectedUser.user_unique_id, userName, selectedUser.profile_name);
     setIsOpen(false);
     setSearchQuery('');
-    navigate(`/${user.user_unique_id}/dashboard`);
+    navigate(`/${selectedUser.user_unique_id}/dashboard`);
+  };
+
+  // Determine the label based on user role
+  const getPickerLabel = () => {
+    if (isAdmin) return 'View As User';
+    return 'View As Agent';
+  };
+
+  const getPickerDescription = () => {
+    if (isAdmin) return 'Select a user to impersonate';
+    return 'Select an agent in your agency to impersonate';
   };
 
   return (
@@ -151,7 +166,7 @@ const ImpersonationPicker = ({ t }) => {
           gap: '10px',
         }}
       >
-        <span>👁️</span> View As User
+        <span>👁️</span> {getPickerLabel()}
         {impersonating.active && (
           <span style={{
             marginLeft: 'auto',
@@ -203,12 +218,12 @@ const ImpersonationPicker = ({ t }) => {
                 fontSize: '16px',
                 fontWeight: '600',
                 color: t.text,
-              }}>View As User</h3>
+              }}>{getPickerLabel()}</h3>
               <p style={{
                 margin: '4px 0 0',
                 fontSize: '13px',
                 color: t.textMuted,
-              }}>Select a user to impersonate</p>
+              }}>{getPickerDescription()}</p>
             </div>
 
             {/* Search */}
@@ -594,12 +609,16 @@ const AppLayout = () => {
               alignItems: 'center',
               backgroundColor: t.bgCard
             }}>
-              <div style={{ fontSize: '11px', color: t.textMuted }}>
-                {impersonating.active ? (
-                  <span>Viewing as: <strong>{currentUser.name}</strong></span>
-                ) : (
-                  <span>User: {userId?.substring(0, 8)}...</span>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ fontSize: '11px', color: t.textMuted }}>
+                  {impersonating.active ? (
+                    <span>Viewing as: <strong>{currentUser.name}</strong></span>
+                  ) : (
+                    <span>User: {userId?.substring(0, 8)}...</span>
+                  )}
+                </div>
+                {/* Scope Filter Dropdown - visible for Master Admins and Agency Admins */}
+                <ScopeFilterDropdown t={t} />
               </div>
               <button
                 onClick={() => setIsDark(!isDark)}

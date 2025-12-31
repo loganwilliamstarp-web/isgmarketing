@@ -1,23 +1,18 @@
 // src/hooks/useEmailLogs.js
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { emailLogsService, emailEventsService } from '../services/emailLogs';
-import { useParams } from 'react-router-dom';
-
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get all email logs
  */
 export function useEmailLogs(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, options],
-    queryFn: () => emailLogsService.getAll(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['emailLogs', filterKey, options],
+    queryFn: () => emailLogsService.getAll(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -25,12 +20,12 @@ export function useEmailLogs(options = {}) {
  * Get a single email log by ID
  */
 export function useEmailLog(emailLogId) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLog', ownerId, emailLogId],
-    queryFn: () => emailLogsService.getById(ownerId, emailLogId),
-    enabled: !!ownerId && !!emailLogId
+    queryKey: ['emailLog', filterKey, emailLogId],
+    queryFn: () => emailLogsService.getById(ownerIds, emailLogId),
+    enabled: ownerIds.length > 0 && !!emailLogId
   });
 }
 
@@ -38,12 +33,12 @@ export function useEmailLog(emailLogId) {
  * Get email log with all events
  */
 export function useEmailLogWithEvents(emailLogId) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLog', ownerId, emailLogId, 'events'],
-    queryFn: () => emailLogsService.getByIdWithEvents(ownerId, emailLogId),
-    enabled: !!ownerId && !!emailLogId
+    queryKey: ['emailLog', filterKey, emailLogId, 'events'],
+    queryFn: () => emailLogsService.getByIdWithEvents(ownerIds, emailLogId),
+    enabled: ownerIds.length > 0 && !!emailLogId
   });
 }
 
@@ -51,12 +46,12 @@ export function useEmailLogWithEvents(emailLogId) {
  * Get emails for an account
  */
 export function useAccountEmailLogs(accountId, options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, 'account', accountId, options],
-    queryFn: () => emailLogsService.getByAccount(ownerId, accountId, options),
-    enabled: !!ownerId && !!accountId,
+    queryKey: ['emailLogs', filterKey, 'account', accountId, options],
+    queryFn: () => emailLogsService.getByAccount(ownerIds, accountId, options),
+    enabled: ownerIds.length > 0 && !!accountId,
     staleTime: 30000, // Cache for 30 seconds
   });
 }
@@ -65,12 +60,12 @@ export function useAccountEmailLogs(accountId, options = {}) {
  * Get emails for an automation
  */
 export function useAutomationEmailLogs(automationId, options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, 'automation', automationId, options],
-    queryFn: () => emailLogsService.getByAutomation(ownerId, automationId, options),
-    enabled: !!ownerId && !!automationId
+    queryKey: ['emailLogs', filterKey, 'automation', automationId, options],
+    queryFn: () => emailLogsService.getByAutomation(ownerIds, automationId, options),
+    enabled: ownerIds.length > 0 && !!automationId
   });
 }
 
@@ -78,12 +73,12 @@ export function useAutomationEmailLogs(automationId, options = {}) {
  * Get recent opens
  */
 export function useRecentOpens(limit = 10) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, 'recentOpens', limit],
-    queryFn: () => emailLogsService.getRecentOpens(ownerId, limit),
-    enabled: !!ownerId
+    queryKey: ['emailLogs', filterKey, 'recentOpens', limit],
+    queryFn: () => emailLogsService.getRecentOpens(ownerIds, limit),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -91,12 +86,12 @@ export function useRecentOpens(limit = 10) {
  * Get recent clicks
  */
 export function useRecentClicks(limit = 10) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, 'recentClicks', limit],
-    queryFn: () => emailLogsService.getRecentClicks(ownerId, limit),
-    enabled: !!ownerId
+    queryKey: ['emailLogs', filterKey, 'recentClicks', limit],
+    queryFn: () => emailLogsService.getRecentClicks(ownerIds, limit),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -104,12 +99,12 @@ export function useRecentClicks(limit = 10) {
  * Get bounced emails
  */
 export function useBounces(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailLogs', ownerId, 'bounces', options],
-    queryFn: () => emailLogsService.getBounces(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['emailLogs', filterKey, 'bounces', options],
+    queryFn: () => emailLogsService.getBounces(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -117,12 +112,12 @@ export function useBounces(options = {}) {
  * Get email stats for date range
  */
 export function useEmailStats(startDate, endDate, automationId = null) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailStats', ownerId, startDate, endDate, automationId],
-    queryFn: () => emailLogsService.getStats(ownerId, startDate, endDate, automationId),
-    enabled: !!ownerId && !!startDate && !!endDate
+    queryKey: ['emailStats', filterKey, startDate, endDate, automationId],
+    queryFn: () => emailLogsService.getStats(ownerIds, startDate, endDate, automationId),
+    enabled: ownerIds.length > 0 && !!startDate && !!endDate
   });
 }
 
@@ -130,12 +125,12 @@ export function useEmailStats(startDate, endDate, automationId = null) {
  * Get daily stats for charts
  */
 export function useDailyStats(startDate, endDate, automationId = null) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailStats', ownerId, 'daily', startDate, endDate, automationId],
-    queryFn: () => emailLogsService.getDailyStats(ownerId, startDate, endDate, automationId),
-    enabled: !!ownerId && !!startDate && !!endDate
+    queryKey: ['emailStats', filterKey, 'daily', startDate, endDate, automationId],
+    queryFn: () => emailLogsService.getDailyStats(ownerIds, startDate, endDate, automationId),
+    enabled: ownerIds.length > 0 && !!startDate && !!endDate
   });
 }
 
@@ -143,12 +138,12 @@ export function useDailyStats(startDate, endDate, automationId = null) {
  * Get comparison stats (current vs previous period)
  */
 export function useComparisonStats(days = 30) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['emailStats', ownerId, 'comparison', days],
-    queryFn: () => emailLogsService.getComparisonStats(ownerId, days),
-    enabled: !!ownerId
+    queryKey: ['emailStats', filterKey, 'comparison', days],
+    queryFn: () => emailLogsService.getComparisonStats(ownerIds, days),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -167,34 +162,34 @@ export function useEmailEvents(emailLogId) {
  * Email log mutations
  */
 export function useEmailLogMutations() {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
   const queryClient = useQueryClient();
 
   const invalidateEmailLogs = () => {
-    queryClient.invalidateQueries({ queryKey: ['emailLogs', ownerId] });
-    queryClient.invalidateQueries({ queryKey: ['emailStats', ownerId] });
+    queryClient.invalidateQueries({ queryKey: ['emailLogs'] });
+    queryClient.invalidateQueries({ queryKey: ['emailStats'] });
   };
 
   const createEmailLog = useMutation({
-    mutationFn: (emailLog) => emailLogsService.create(ownerId, emailLog),
+    mutationFn: (emailLog) => emailLogsService.create(ownerIds, emailLog),
     onSuccess: invalidateEmailLogs
   });
 
   const markSent = useMutation({
-    mutationFn: ({ emailLogId, sendgridMessageId }) => 
-      emailLogsService.markSent(ownerId, emailLogId, sendgridMessageId),
+    mutationFn: ({ emailLogId, sendgridMessageId }) =>
+      emailLogsService.markSent(ownerIds, emailLogId, sendgridMessageId),
     onSuccess: (data) => {
       invalidateEmailLogs();
-      queryClient.setQueryData(['emailLog', ownerId, data.id], data);
+      queryClient.setQueryData(['emailLog', filterKey, data.id], data);
     }
   });
 
   const markFailed = useMutation({
-    mutationFn: ({ emailLogId, errorMessage, errorCode }) => 
-      emailLogsService.markFailed(ownerId, emailLogId, errorMessage, errorCode),
+    mutationFn: ({ emailLogId, errorMessage, errorCode }) =>
+      emailLogsService.markFailed(ownerIds, emailLogId, errorMessage, errorCode),
     onSuccess: (data) => {
       invalidateEmailLogs();
-      queryClient.setQueryData(['emailLog', ownerId, data.id], data);
+      queryClient.setQueryData(['emailLog', filterKey, data.id], data);
     }
   });
 
