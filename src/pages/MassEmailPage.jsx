@@ -542,6 +542,10 @@ const FILTER_FIELDS = [
     { value: 'cancelled', label: 'Cancelled' },
     { value: 'expired', label: 'Expired' }
   ]},
+  { value: 'policy_class', label: 'Policy Class', type: 'select', options: [
+    { value: 'Personal', label: 'Personal' },
+    { value: 'Commercial', label: 'Commercial' }
+  ]},
   { value: 'policy_count', label: 'Number of Policies', type: 'number' },
   { value: 'policy_effective', label: 'Policy Effective Date', type: 'date' },
   { value: 'policy_expiration', label: 'Policy Expiration', type: 'date' },
