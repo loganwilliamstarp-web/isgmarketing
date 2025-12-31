@@ -84,6 +84,7 @@ const ImpersonationPicker = ({ t }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const searchTimeoutRef = React.useRef(null);
 
   // Don't render if not admin
   if (!isAdmin) return null;
@@ -101,17 +102,26 @@ const ImpersonationPicker = ({ t }) => {
     }
   };
 
-  const handleSearch = async (query) => {
+  const handleSearch = (query) => {
     setSearchQuery(query);
-    setIsLoading(true);
-    try {
-      const data = await adminService.getAllUsers(query);
-      setUsers(data);
-    } catch (err) {
-      console.error('Error searching users:', err);
-    } finally {
-      setIsLoading(false);
+
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
+
+    // Debounce search - wait 300ms after typing stops
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const data = await adminService.getAllUsers(query);
+        setUsers(data);
+      } catch (err) {
+        console.error('Error searching users:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300);
   };
 
   const handleSelectUser = (user) => {
