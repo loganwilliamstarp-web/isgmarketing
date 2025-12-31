@@ -107,16 +107,31 @@ export const authService = {
 
   /**
    * Get user from users table by Salesforce user ID
+   * Checks ALL records for this user ID - user has access if ANY record has
+   * marketing_cloud_engagement=true OR marketing_cloud_agency_admin=true
    */
   async getUserById(userId) {
     const { data, error } = await supabase
       .from('users')
-      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
-      .eq('user_unique_id', userId)
-      .single();
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name, marketing_cloud_engagement, marketing_cloud_agency_admin')
+      .eq('user_unique_id', userId);
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return data;
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+
+    // Check if ANY record for this user has marketing cloud access
+    const hasAccess = data.some(
+      record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
+    );
+
+    if (!hasAccess) return null;
+
+    // Return the first record with access
+    const accessRecord = data.find(
+      record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
+    );
+
+    return accessRecord || data[0];
   },
 
   /**
@@ -196,17 +211,32 @@ export const authService = {
 
   /**
    * Get user from users table by email
-   * Returns null if user doesn't exist (no access)
+   * Checks ALL records for this email - user has access if ANY record has
+   * marketing_cloud_engagement=true OR marketing_cloud_agency_admin=true
+   * Returns the first matching user record with access, or null if no access
    */
   async getUserByEmail(email) {
     const { data, error } = await supabase
       .from('users')
-      .select('user_unique_id, email, first_name, last_name, role_name, profile_name')
-      .eq('email', email)
-      .single();
+      .select('user_unique_id, email, first_name, last_name, role_name, profile_name, marketing_cloud_engagement, marketing_cloud_agency_admin')
+      .eq('email', email);
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-    return data;
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+
+    // Check if ANY record for this email has marketing cloud access
+    const hasAccess = data.some(
+      record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
+    );
+
+    if (!hasAccess) return null;
+
+    // Return the first record with access (or just the first record for user info)
+    const accessRecord = data.find(
+      record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
+    );
+
+    return accessRecord || data[0];
   },
 
   /**
