@@ -4,6 +4,11 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from './lib/queryClient';
 import { userSettingsService } from './services/userSettings';
+import { adminService } from './services/admin';
+
+// Auth imports
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginPage, ProtectedRoute, ImpersonationBanner } from './components/auth';
 
 // Import connected pages
 import {
@@ -70,6 +75,258 @@ const UserContext = createContext();
 export const useUser = () => useContext(UserContext);
 
 // ============================================
+// IMPERSONATION USER PICKER
+// ============================================
+const ImpersonationPicker = ({ t }) => {
+  const navigate = useNavigate();
+  const { isAdmin, impersonate, impersonating } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Don't render if not admin
+  if (!isAdmin) return null;
+
+  const handleOpen = async () => {
+    setIsOpen(true);
+    setIsLoading(true);
+    try {
+      const data = await adminService.getAllUsers();
+      setUsers(data);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = async (query) => {
+    setSearchQuery(query);
+    setIsLoading(true);
+    try {
+      const data = await adminService.getAllUsers(query);
+      setUsers(data);
+    } catch (err) {
+      console.error('Error searching users:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectUser = (user) => {
+    const userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email;
+    impersonate(user.user_unique_id, userName);
+    setIsOpen(false);
+    setSearchQuery('');
+    navigate(`/${user.user_unique_id}/dashboard`);
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleOpen}
+        style={{
+          display: 'flex',
+          width: '100%',
+          padding: '10px 12px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderRadius: '8px',
+          color: t.textSecondary,
+          cursor: 'pointer',
+          fontSize: '13px',
+          textAlign: 'left',
+          alignItems: 'center',
+          gap: '10px',
+        }}
+      >
+        <span>👁️</span> View As User
+        {impersonating.active && (
+          <span style={{
+            marginLeft: 'auto',
+            padding: '2px 6px',
+            backgroundColor: t.warning,
+            borderRadius: '4px',
+            fontSize: '9px',
+            color: '#fff',
+            fontWeight: '600'
+          }}>ACTIVE</span>
+        )}
+      </button>
+
+      {/* Modal */}
+      {isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+          }}
+          onClick={() => setIsOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              width: '400px',
+              maxHeight: '500px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: `1px solid ${t.border}`,
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: '16px',
+                fontWeight: '600',
+                color: t.text,
+              }}>View As User</h3>
+              <p style={{
+                margin: '4px 0 0',
+                fontSize: '13px',
+                color: t.textMuted,
+              }}>Select a user to impersonate</p>
+            </div>
+
+            {/* Search */}
+            <div style={{ padding: '12px 20px' }}>
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  backgroundColor: t.bgInput,
+                  color: t.text,
+                  outline: 'none',
+                }}
+                autoFocus
+              />
+            </div>
+
+            {/* User List */}
+            <div style={{
+              maxHeight: '300px',
+              overflowY: 'auto',
+              padding: '0 12px 12px',
+            }}>
+              {isLoading ? (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: t.textMuted,
+                }}>Loading...</div>
+              ) : users.length === 0 ? (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: t.textMuted,
+                }}>No users found</div>
+              ) : (
+                users.map((user) => {
+                  const userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown';
+                  return (
+                    <button
+                      key={user.user_unique_id}
+                      onClick={() => handleSelectUser(user)}
+                      style={{
+                        display: 'flex',
+                        width: '100%',
+                        padding: '10px 12px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '4px',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = t.bgHover}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <div style={{
+                        width: '36px',
+                        height: '36px',
+                        backgroundColor: t.bgHover,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '14px',
+                        flexShrink: 0,
+                      }}>👤</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          color: t.text,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>{userName}</div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: t.textMuted,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>{user.email}</div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: `1px solid ${t.border}`,
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}>
+              <button
+                onClick={() => setIsOpen(false)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: t.text,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ============================================
 // APP LAYOUT WITH SIDEBAR
 // ============================================
 const AppLayout = () => {
@@ -77,8 +334,9 @@ const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
-  
-  // Fetch user data from Supabase based on userId
+  const { user, isAdmin, impersonating, logout } = useAuth();
+
+  // Fetch user data from Supabase based on userId (the viewed user, not necessarily the logged-in user)
   const { data: userData } = useQuery({
     queryKey: ['currentUser', userId],
     queryFn: () => userSettingsService.getCurrentUser(userId),
@@ -103,7 +361,17 @@ const AppLayout = () => {
       });
     }
   }, [userData, userId]);
-  
+
+  // Validate access: user can only view their own data OR must be admin impersonating
+  useEffect(() => {
+    if (user && userId && !impersonating.active) {
+      // If not impersonating, redirect to own dashboard if trying to access another user's data
+      if (user.id !== userId && !isAdmin) {
+        navigate(`/${user.id}/dashboard`, { replace: true });
+      }
+    }
+  }, [user, userId, isAdmin, impersonating.active, navigate]);
+
   const t = isDark ? themes.dark : themes.light;
 
   // Determine current page from URL
@@ -126,15 +394,27 @@ const AppLayout = () => {
     { id: 'settings', label: 'Settings', icon: '⚙️', path: `/${userId}/settings` },
   ];
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  // Calculate top offset when impersonation banner is active
+  const topOffset = impersonating.active ? '44px' : '0px';
+
   return (
     <ThemeContext.Provider value={{ isDark, setIsDark, t, themes }}>
       <UserContext.Provider value={{ userId, currentUser, setCurrentUser }}>
+        {/* Impersonation Banner */}
+        <ImpersonationBanner />
+
         <div style={{
           fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
           backgroundColor: t.bg,
           minHeight: '100vh',
           display: 'flex',
-          color: t.text
+          color: t.text,
+          paddingTop: topOffset,
         }}>
           {/* Sidebar */}
           <div style={{
@@ -144,7 +424,7 @@ const AppLayout = () => {
             display: 'flex',
             flexDirection: 'column',
             position: 'fixed',
-            top: 0,
+            top: topOffset,
             left: 0,
             bottom: 0
           }}>
@@ -175,7 +455,7 @@ const AppLayout = () => {
             </div>
 
             {/* Navigation */}
-            <div style={{ flex: 1, padding: '12px 8px' }}>
+            <div style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
               <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, padding: '8px 12px', textTransform: 'uppercase' }}>
                 Navigation
               </div>
@@ -236,31 +516,60 @@ const AppLayout = () => {
                   color: t.textMuted
                 }}>Admin</span>
               </Link>
+
+              {/* Impersonation Picker - Only for admins */}
+              <ImpersonationPicker t={t} />
             </div>
 
-            {/* User */}
+            {/* User & Logout */}
             <div style={{
               padding: '16px',
               borderTop: `1px solid ${t.border}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
             }}>
               <div style={{
-                width: '32px',
-                height: '32px',
-                backgroundColor: t.bgHover,
-                borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '14px'
-              }}>👤</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</div>
-                <div style={{ fontSize: '11px', color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email}</div>
+                gap: '10px',
+                marginBottom: '12px'
+              }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: t.bgHover,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px'
+                }}>👤</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {impersonating.active ? currentUser.name : user?.name}
+                  </div>
+                  <div style={{ fontSize: '11px', color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {impersonating.active ? currentUser.email : user?.email}
+                  </div>
+                </div>
               </div>
-              <Link to={`/${userId}/settings`} style={{ color: t.textMuted, fontSize: '16px', textDecoration: 'none' }}>⚙️</Link>
+              <button
+                onClick={handleLogout}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  backgroundColor: 'transparent',
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: t.textSecondary,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>🚪</span> Sign Out
+              </button>
             </div>
           </div>
 
@@ -276,7 +585,11 @@ const AppLayout = () => {
               backgroundColor: t.bgCard
             }}>
               <div style={{ fontSize: '11px', color: t.textMuted }}>
-                User: {userId?.substring(0, 8)}...
+                {impersonating.active ? (
+                  <span>Viewing as: <strong>{currentUser.name}</strong></span>
+                ) : (
+                  <span>User: {userId?.substring(0, 8)}...</span>
+                )}
               </div>
               <button
                 onClick={() => setIsDark(!isDark)}
@@ -327,10 +640,10 @@ const TimelinePage = ({ t }) => (
   <div>
     <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>Activity Timeline</h1>
     <p style={{ color: t.textSecondary, fontSize: '14px' }}>View all email activity across your organization</p>
-    <div style={{ 
-      marginTop: '24px', 
-      padding: '60px', 
-      textAlign: 'center', 
+    <div style={{
+      marginTop: '24px',
+      padding: '60px',
+      textAlign: 'center',
       backgroundColor: t.bgCard,
       borderRadius: '12px',
       border: `1px solid ${t.border}`
@@ -342,19 +655,27 @@ const TimelinePage = ({ t }) => (
 );
 
 // ============================================
-// REDIRECT COMPONENT
+// REDIRECT COMPONENT - Now redirects to login or user dashboard
 // ============================================
-const RedirectToUser = () => {
+const RedirectToAuth = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading, user } = useAuth();
+
   useEffect(() => {
-    // Demo user ID - in production this would come from Salesforce iframe
-    navigate('/0056g000004jvyVAAQ/dashboard');
-  }, [navigate]);
+    if (!isLoading) {
+      if (isAuthenticated && user?.id) {
+        navigate(`/${user.id}/dashboard`, { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [isAuthenticated, isLoading, user, navigate]);
+
   return (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       height: '100vh',
       fontFamily: "'Inter', sans-serif"
     }}>
@@ -373,13 +694,22 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          {/* Redirect root to demo user */}
-          <Route path="/" element={<RedirectToUser />} />
-          
-          {/* All routes under userId */}
-          <Route path="/:userId/*" element={<AppLayout />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Redirect root based on auth state */}
+            <Route path="/" element={<RedirectToAuth />} />
+
+            {/* Protected routes under userId */}
+            <Route path="/:userId/*" element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
