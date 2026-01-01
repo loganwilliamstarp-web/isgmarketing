@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   useTemplates,
   useTemplateMutations,
@@ -8,7 +8,8 @@ import {
   useMassEmailRecipientCount,
   useMassEmailLocationBreakdown,
   useMassEmailMutations,
-  useRoleUserIds
+  useRoleUserIds,
+  useVerifiedSenderDomains
 } from '../hooks';
 
 // Google Maps API key
@@ -2208,7 +2209,10 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
 };
 
 // Review step
-const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, recipients, isLoadingRecipients, theme: t }) => {
+const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, scheduleOption, setScheduleOption, scheduledDate, setScheduledDate, scheduledTime, setScheduledTime, recipients, isLoadingRecipients, theme: t }) => {
+  // Get minimum date (today) and time
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div>
       <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
@@ -2270,6 +2274,122 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
         <p style={{ fontSize: '12px', color: t.textMuted, marginTop: '6px' }}>
           Use merge fields like {'{{first_name}}'} for personalization
         </p>
+      </div>
+
+      {/* Schedule Options */}
+      <div style={{
+        padding: '20px',
+        backgroundColor: t.bgCard,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`,
+        marginBottom: '16px'
+      }}>
+        <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '12px' }}>
+          When to Send
+        </label>
+
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <button
+            type="button"
+            onClick={() => setScheduleOption('now')}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              backgroundColor: scheduleOption === 'now' ? `${t.primary}15` : t.bgHover,
+              border: `2px solid ${scheduleOption === 'now' ? t.primary : t.border}`,
+              borderRadius: '8px',
+              color: scheduleOption === 'now' ? t.primary : t.text,
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>⚡</span>
+            Send Now
+          </button>
+          <button
+            type="button"
+            onClick={() => setScheduleOption('scheduled')}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              backgroundColor: scheduleOption === 'scheduled' ? `${t.primary}15` : t.bgHover,
+              border: `2px solid ${scheduleOption === 'scheduled' ? t.primary : t.border}`,
+              borderRadius: '8px',
+              color: scheduleOption === 'scheduled' ? t.primary : t.text,
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>📅</span>
+            Schedule for Later
+          </button>
+        </div>
+
+        {scheduleOption === 'scheduled' && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+            padding: '16px',
+            backgroundColor: t.bgHover,
+            borderRadius: '8px'
+          }}>
+            <div>
+              <label style={{ fontSize: '12px', color: t.textSecondary, display: 'block', marginBottom: '6px' }}>
+                Date
+              </label>
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                min={today}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: t.textSecondary, display: 'block', marginBottom: '6px' }}>
+                Time
+              </label>
+              <input
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <p style={{ fontSize: '12px', color: t.textMuted, margin: 0 }}>
+                Emails will be sent at the scheduled time in your local timezone
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{
@@ -2359,6 +2479,7 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
 // Main component
 const MassEmailPage = ({ t }) => {
   const { userId } = useParams();
+  const navigate = useNavigate();
   const [showWizard, setShowWizard] = useState(false);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [step, setStep] = useState(0);
@@ -2371,9 +2492,16 @@ const MassEmailPage = ({ t }) => {
   const [includeRoleAccounts, setIncludeRoleAccounts] = useState(false);
   const [subject, setSubject] = useState('');
   const [name, setName] = useState('');
+  const [scheduleOption, setScheduleOption] = useState('now'); // 'now' or 'scheduled'
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('09:00');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  // Check for verified sender domains
+  const { data: verifiedDomains, isLoading: loadingDomains } = useVerifiedSenderDomains();
+  const hasVerifiedDomain = (verifiedDomains?.length || 0) > 0;
 
   // Fetch data
   const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useTemplates();
@@ -2436,6 +2564,19 @@ const MassEmailPage = ({ t }) => {
   const handleSend = async () => {
     if (!selectedTemplate || !subject) return;
 
+    // Validate scheduled date/time if scheduling for later
+    if (scheduleOption === 'scheduled') {
+      if (!scheduledDate || !scheduledTime) {
+        setError('Please select a date and time for the scheduled send');
+        return;
+      }
+      const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+      if (scheduledDateTime <= new Date()) {
+        setError('Scheduled time must be in the future');
+        return;
+      }
+    }
+
     setIsSending(true);
     setError(null);
 
@@ -2449,10 +2590,21 @@ const MassEmailPage = ({ t }) => {
         total_recipients: recipientCount || 0
       });
 
-      // Schedule it for immediate sending
-      await scheduleBatch.mutateAsync({ batchId: batch.id });
+      // Calculate scheduled time if scheduling for later
+      let scheduledFor = null;
+      if (scheduleOption === 'scheduled' && scheduledDate && scheduledTime) {
+        scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+      }
 
-      setSuccess(`Successfully scheduled ${recipientCount} emails for sending!`);
+      // Schedule the batch (immediately or for later)
+      await scheduleBatch.mutateAsync({ batchId: batch.id, scheduledFor });
+
+      if (scheduleOption === 'scheduled') {
+        const formattedDate = new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString();
+        setSuccess(`Successfully scheduled ${recipientCount} emails for ${formattedDate}`);
+      } else {
+        setSuccess(`Successfully scheduled ${recipientCount} emails for sending!`);
+      }
       setShowWizard(false);
       resetWizard();
       refetchBatches();
@@ -2474,6 +2626,9 @@ const MassEmailPage = ({ t }) => {
     setIncludeRoleAccounts(false);
     setSubject('');
     setName('');
+    setScheduleOption('now');
+    setScheduledDate('');
+    setScheduledTime('09:00');
   };
 
   const canProceed = () => {
@@ -2496,25 +2651,69 @@ const MassEmailPage = ({ t }) => {
         </div>
         {!showWizard && (
           <button
-            onClick={() => setShowWizard(true)}
+            onClick={() => hasVerifiedDomain ? setShowWizard(true) : null}
+            disabled={loadingDomains || !hasVerifiedDomain}
+            title={!hasVerifiedDomain ? 'You need a verified sender domain to create campaigns' : ''}
             style={{
               padding: '10px 20px',
-              backgroundColor: t.primary,
+              backgroundColor: hasVerifiedDomain ? t.primary : t.textMuted,
               border: 'none',
               borderRadius: '8px',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: hasVerifiedDomain ? 'pointer' : 'not-allowed',
               fontSize: '14px',
               fontWeight: '500',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              opacity: loadingDomains ? 0.7 : 1
             }}
           >
             <span>+</span> New Campaign
           </button>
         )}
       </div>
+
+      {/* No verified domain warning */}
+      {!loadingDomains && !hasVerifiedDomain && !showWizard && (
+        <div style={{
+          padding: '20px',
+          backgroundColor: `${t.warning}15`,
+          border: `1px solid ${t.warning}30`,
+          borderRadius: '12px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
+          <div>
+            <div style={{ fontWeight: '600', color: t.text, marginBottom: '4px' }}>
+              Sender Domain Required
+            </div>
+            <div style={{ fontSize: '14px', color: t.textSecondary }}>
+              You need to add and verify a sender domain before you can send mass emails.
+              This ensures emails are delivered from your agency's domain.
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/settings')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.warning,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Add Domain
+          </button>
+        </div>
+      )}
 
       {/* Success message */}
       {success && (
@@ -2601,6 +2800,12 @@ const MassEmailPage = ({ t }) => {
                 setSubject={setSubject}
                 name={name}
                 setName={setName}
+                scheduleOption={scheduleOption}
+                setScheduleOption={setScheduleOption}
+                scheduledDate={scheduledDate}
+                setScheduledDate={setScheduledDate}
+                scheduledTime={scheduledTime}
+                setScheduledTime={setScheduledTime}
                 recipients={recipients}
                 isLoadingRecipients={loadingRecipients}
                 theme={t}
@@ -2673,7 +2878,10 @@ const MassEmailPage = ({ t }) => {
                   gap: '8px'
                 }}
               >
-                {isSending ? 'Sending...' : 'Send Emails'}
+                {isSending
+                  ? (scheduleOption === 'scheduled' ? 'Scheduling...' : 'Sending...')
+                  : (scheduleOption === 'scheduled' ? 'Schedule Emails' : 'Send Emails')
+                }
               </button>
             )}
           </div>

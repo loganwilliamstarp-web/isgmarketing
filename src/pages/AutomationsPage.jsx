@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   useAutomationsWithStats,
-  useAutomationMutations
+  useAutomationMutations,
+  useVerifiedSenderDomains
 } from '../hooks';
 
 // Loading skeleton
@@ -20,9 +21,11 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 
 
 // Automation row component
-const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
+const AutomationRow = ({ automation, onEdit, onToggle, hasVerifiedDomain, theme: t }) => {
   const stats = automation.stats || {};
   const isActive = automation.status === 'active';
+  // Can only activate if has verified domain (can always pause)
+  const canToggle = isActive || hasVerifiedDomain;
 
   return (
     <tr
@@ -64,17 +67,23 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={(e) => { e.stopPropagation(); onToggle(automation.id, isActive ? 'pause' : 'activate'); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canToggle) onToggle(automation.id, isActive ? 'pause' : 'activate');
+            }}
+            disabled={!canToggle}
+            title={!canToggle ? 'Add a verified sender domain to activate automations' : ''}
             style={{
               width: '44px',
               height: '24px',
               borderRadius: '12px',
               border: 'none',
               backgroundColor: isActive ? t.success : t.bgHover,
-              cursor: 'pointer',
+              cursor: canToggle ? 'pointer' : 'not-allowed',
               position: 'relative',
               transition: 'background-color 0.2s',
-              flexShrink: 0
+              flexShrink: 0,
+              opacity: canToggle ? 1 : 0.5
             }}
           >
             <div style={{
@@ -90,8 +99,8 @@ const AutomationRow = ({ automation, onEdit, onToggle, theme: t }) => {
               pointerEvents: 'none'
             }} />
           </button>
-          <span style={{ 
-            fontSize: '12px', 
+          <span style={{
+            fontSize: '12px',
             color: isActive ? t.success : t.textMuted,
             fontWeight: '500'
           }}>
@@ -136,14 +145,18 @@ const AutomationsPage = ({ t }) => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState('automations');
-  
+
+  // Check for verified sender domains
+  const { data: verifiedDomains, isLoading: loadingDomains } = useVerifiedSenderDomains();
+  const hasVerifiedDomain = (verifiedDomains?.length || 0) > 0;
+
   // Fetch automations with stats
-  const { 
-    data: automations, 
-    isLoading, 
-    error 
+  const {
+    data: automations,
+    isLoading,
+    error
   } = useAutomationsWithStats();
-  
+
   // Mutations
   const {
     activateAutomation,
@@ -223,6 +236,47 @@ const AutomationsPage = ({ t }) => {
           fontSize: '14px'
         }}>
           Failed to load automations. Please try refreshing the page.
+        </div>
+      )}
+
+      {/* No verified domain warning */}
+      {!loadingDomains && !hasVerifiedDomain && (
+        <div style={{
+          padding: '20px',
+          backgroundColor: `${t.warning}15`,
+          border: `1px solid ${t.warning}30`,
+          borderRadius: '12px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
+          <div>
+            <div style={{ fontWeight: '600', color: t.text, marginBottom: '4px' }}>
+              Sender Domain Required
+            </div>
+            <div style={{ fontSize: '14px', color: t.textSecondary }}>
+              You need to add and verify a sender domain before you can activate automations.
+              This ensures emails are delivered from your agency's domain.
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(`/${userId}/settings`)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.warning,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Add Domain
+          </button>
         </div>
       )}
 
@@ -365,6 +419,7 @@ const AutomationsPage = ({ t }) => {
                       automation={automation}
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
+                      hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />
                   ))}
@@ -451,6 +506,7 @@ const AutomationsPage = ({ t }) => {
                       automation={automation}
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
+                      hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />
                   ))}

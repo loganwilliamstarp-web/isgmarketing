@@ -1146,6 +1146,8 @@ export const massEmailsService = {
   /**
    * Schedule a mass email batch for sending
    * Creates scheduled_emails entries for each recipient
+   * Deduplicates recipients by email address to prevent duplicate sends
+   * Prevents sending the same template to the same email within 7 days
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
    */
   async scheduleBatch(ownerIds, batchId, scheduledFor = null) {
@@ -1159,10 +1161,68 @@ export const massEmailsService = {
     const recipients = await this.getRecipients(ownerIds, batch.filter_config, { limit: 10000 });
     if (recipients.length === 0) throw new Error('No recipients match the filter');
 
+    // Deduplicate recipients by email address (case-insensitive)
+    // Keep the first occurrence of each email to prevent duplicate sends
+    const seenEmails = new Set();
+    const uniqueRecipients = [];
+    let duplicateCount = 0;
+
+    for (const recipient of recipients) {
+      const email = (recipient.person_email || recipient.email || '').toLowerCase().trim();
+      if (email && !seenEmails.has(email)) {
+        seenEmails.add(email);
+        uniqueRecipients.push(recipient);
+      } else if (email) {
+        duplicateCount++;
+      }
+    }
+
+    if (uniqueRecipients.length === 0) throw new Error('No valid recipients after deduplication');
+
+    // Template-level deduplication: Check which emails received this template in the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
+
+    let recentlySentEmails = new Set();
+    let templateDuplicateCount = 0;
+
+    if (batch.template_id) {
+      // Get emails that received this template in the last 7 days
+      const { data: recentSends, error: recentError } = await supabase
+        .from('email_logs')
+        .select('to_email')
+        .eq('template_id', batch.template_id)
+        .gte('sent_at', sevenDaysAgoStr)
+        .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked']);
+
+      if (recentError) {
+        console.warn('Failed to check recent sends, proceeding without template deduplication:', recentError);
+      } else if (recentSends) {
+        recentlySentEmails = new Set(
+          recentSends.map(r => (r.to_email || '').toLowerCase().trim())
+        );
+      }
+    }
+
+    // Filter out recipients who received this template recently
+    const eligibleRecipients = uniqueRecipients.filter(recipient => {
+      const email = (recipient.person_email || recipient.email || '').toLowerCase().trim();
+      if (recentlySentEmails.has(email)) {
+        templateDuplicateCount++;
+        return false;
+      }
+      return true;
+    });
+
+    if (eligibleRecipients.length === 0) {
+      throw new Error('No eligible recipients - all have received this template within the last 7 days');
+    }
+
     const sendTime = scheduledFor || new Date().toISOString();
 
-    // Create scheduled emails for each recipient
-    const scheduledEmails = recipients.map(recipient => ({
+    // Create scheduled emails for each eligible recipient
+    const scheduledEmails = eligibleRecipients.map(recipient => ({
       owner_id: ownerId,
       account_id: recipient.account_unique_id,
       template_id: batch.template_id,
@@ -1194,14 +1254,16 @@ export const massEmailsService = {
     // Update batch status
     await this.update(ownerIds, batchId, {
       status: scheduledFor ? 'Scheduled' : 'Sending',
-      total_recipients: recipients.length,
+      total_recipients: eligibleRecipients.length,
       scheduled_for: sendTime,
       started_at: scheduledFor ? null : new Date().toISOString()
     });
 
     return {
       scheduled: totalCreated,
-      total: recipients.length,
+      total: eligibleRecipients.length,
+      duplicatesRemoved: duplicateCount,
+      recentlySentSkipped: templateDuplicateCount,
       scheduledFor: sendTime
     };
   },

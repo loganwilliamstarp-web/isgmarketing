@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUserSettings, useUserSettingsMutations } from '../hooks';
+import SenderDomainsManager from '../components/settings/SenderDomainsManager';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -187,6 +188,7 @@ const SettingsPage = ({ t }) => {
   const tabs = [
     { id: 'signature', label: 'Email Signature', icon: '👤' },
     { id: 'agency', label: 'Agency Info', icon: '🏢' },
+    { id: 'domains', label: 'Sender Domains', icon: '@' },
     { id: 'email', label: 'Email Settings', icon: '📧' },
     { id: 'integrations', label: 'Integrations', icon: '🔗' }
   ];
@@ -431,6 +433,18 @@ const SettingsPage = ({ t }) => {
               >
                 {isSaving ? '💾 Saving...' : '💾 Save Agency Info'}
               </button>
+            </div>
+          )}
+
+          {/* Sender Domains Tab */}
+          {activeTab === 'domains' && (
+            <div style={{
+              padding: '24px',
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`
+            }}>
+              <SenderDomainsManager theme={t} />
             </div>
           )}
 

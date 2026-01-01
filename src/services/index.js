@@ -10,3 +10,5 @@ export { accountsService } from './accounts';
 export { activityLogService } from './activityLog';
 export { scheduledEmailsService } from './scheduledEmails';
 export { dashboardService } from './dashboard';
+export { automationSchedulerService } from './automationScheduler';
+export { senderDomainsService } from './senderDomains';

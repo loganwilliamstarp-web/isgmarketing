@@ -290,6 +290,29 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
     if (selectedNode === nodeId) setSelectedNode(null);
   };
 
+  // Update a node's properties (config, subtitle, etc.)
+  const updateNode = (nodeId, updates) => {
+    setNodes(prev => {
+      // Helper to recursively update nodes in branches
+      const updateInList = (nodeList) => nodeList.map(node => {
+        if (node.id === nodeId) {
+          return { ...node, ...updates };
+        }
+        if (node.branches) {
+          return {
+            ...node,
+            branches: {
+              yes: updateInList(node.branches.yes || []),
+              no: updateInList(node.branches.no || [])
+            }
+          };
+        }
+        return node;
+      });
+      return updateInList(prev);
+    });
+  };
+
   // Get filter summary for display
   const getFilterSummary = () => {
     const groups = filterConfig?.groups || [];
@@ -909,7 +932,19 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                     <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Run Time</label>
                     <input
                       type="time"
-                      defaultValue={selectedNodeData.config?.time || '09:00'}
+                      value={selectedNodeData.config?.time || '09:00'}
+                      onChange={(e) => {
+                        const newTime = e.target.value;
+                        const frequency = selectedNodeData.config?.frequency || 'Daily';
+                        const timezone = selectedNodeData.config?.timezone || 'America/Chicago';
+                        updateNode(selectedNode, {
+                          config: {
+                            ...selectedNodeData.config,
+                            time: newTime
+                          },
+                          subtitle: `${frequency} at ${newTime} (${timezone.split('/')[1] || timezone})`
+                        });
+                      }}
                       style={{
                         width: '100%',
                         padding: '10px 12px',
@@ -923,7 +958,19 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                     />
                     <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Frequency</label>
                     <select
-                      defaultValue={selectedNodeData.config?.frequency || 'Daily'}
+                      value={selectedNodeData.config?.frequency || 'Daily'}
+                      onChange={(e) => {
+                        const newFrequency = e.target.value;
+                        const time = selectedNodeData.config?.time || '09:00';
+                        const timezone = selectedNodeData.config?.timezone || 'America/Chicago';
+                        updateNode(selectedNode, {
+                          config: {
+                            ...selectedNodeData.config,
+                            frequency: newFrequency
+                          },
+                          subtitle: `${newFrequency} at ${time} (${timezone.split('/')[1] || timezone})`
+                        });
+                      }}
                       style={{
                         width: '100%',
                         padding: '10px 12px',
@@ -934,9 +981,9 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                         fontSize: '14px'
                       }}
                     >
-                      <option>Daily</option>
-                      <option>Weekly</option>
-                      <option>Monthly</option>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Monthly">Monthly</option>
                     </select>
                   </div>
                 )}
@@ -985,8 +1032,19 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <input
                         type="number"
-                        defaultValue={selectedNodeData.config?.duration || 1}
+                        value={selectedNodeData.config?.duration || 1}
                         min="1"
+                        onChange={(e) => {
+                          const newDuration = parseInt(e.target.value, 10) || 1;
+                          const unit = selectedNodeData.config?.unit || 'days';
+                          updateNode(selectedNode, {
+                            config: {
+                              ...selectedNodeData.config,
+                              duration: newDuration
+                            },
+                            subtitle: `Wait ${newDuration} ${unit}`
+                          });
+                        }}
                         style={{
                           flex: 1,
                           padding: '10px 12px',
@@ -998,7 +1056,18 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                         }}
                       />
                       <select
-                        defaultValue={selectedNodeData.config?.unit || 'days'}
+                        value={selectedNodeData.config?.unit || 'days'}
+                        onChange={(e) => {
+                          const newUnit = e.target.value;
+                          const duration = selectedNodeData.config?.duration || 1;
+                          updateNode(selectedNode, {
+                            config: {
+                              ...selectedNodeData.config,
+                              unit: newUnit
+                            },
+                            subtitle: `Wait ${duration} ${newUnit}`
+                          });
+                        }}
                         style={{
                           flex: 1,
                           padding: '10px 12px',
@@ -1021,7 +1090,22 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Condition Type</label>
                     <select
-                      defaultValue={selectedNodeData.config?.type || 'email_opened'}
+                      value={selectedNodeData.config?.type || 'email_opened'}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        const conditionLabels = {
+                          email_opened: 'If email opened',
+                          email_clicked: 'If email clicked',
+                          field_value: 'If field matches'
+                        };
+                        updateNode(selectedNode, {
+                          config: {
+                            ...selectedNodeData.config,
+                            type: newType
+                          },
+                          subtitle: conditionLabels[newType] || 'Configure condition...'
+                        });
+                      }}
                       style={{
                         width: '100%',
                         padding: '10px 12px',

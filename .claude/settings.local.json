@@ -24,7 +24,8 @@
       "Bash(else echo \".env.local file not found\")",
       "Bash(find:*)",
       "Bash(git show:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(ls -la \"C:\\Coding\\isgmarketing-main\\supabase\\functions\"\" 2>/dev/null || echo \"Functions directory not found \")"
     ]
   }
 }
