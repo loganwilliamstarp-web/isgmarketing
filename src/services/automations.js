@@ -1,6 +1,7 @@
 // src/services/automations.js
 import { supabase } from '../lib/supabase';
 import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
+import { automationSchedulerService } from './automationScheduler';
 
 export const automationsService = {
   /**
@@ -179,9 +180,15 @@ export const automationsService = {
 
   /**
    * Update an automation
+   * If the automation is active, re-evaluates scheduled emails when filter/nodes change
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async update(ownerIds, automationId, updates) {
+    // Check if this is an active automation with significant changes
+    const shouldRefreshSchedule = updates.filter_config !== undefined ||
+      updates.nodes !== undefined ||
+      updates.send_time !== undefined;
+
     let query = supabase
       .from('automations')
       .update({
@@ -193,15 +200,39 @@ export const automationsService = {
     const { data, error } = await query.select().single();
 
     if (error) throw error;
+
+    // If active automation with significant changes, refresh the schedule
+    if (shouldRefreshSchedule && data && (data.status === 'Active' || data.status === 'active')) {
+      try {
+        // Clear existing pending emails and regenerate
+        await automationSchedulerService.cleanupAutomationSchedule(automationId);
+        await automationSchedulerService.generateAutomationSchedule(automationId);
+      } catch (err) {
+        console.warn('Failed to refresh automation schedule after update:', err.message);
+        // Don't throw - the update succeeded
+      }
+    }
+
     return data;
   },
 
   /**
    * Update automation status
+   * Triggers schedule generation when activated, cleanup when deactivated
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async updateStatus(ownerIds, automationId, status) {
-    return this.update(ownerIds, automationId, { status });
+    const result = await this.update(ownerIds, automationId, { status });
+
+    // Handle schedule generation/cleanup based on status change
+    try {
+      await automationSchedulerService.handleStatusChange(automationId, status);
+    } catch (err) {
+      console.warn('Failed to handle automation schedule:', err.message);
+      // Don't throw - the status update succeeded
+    }
+
+    return result;
   },
 
   /**

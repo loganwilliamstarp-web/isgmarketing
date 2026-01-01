@@ -60,6 +60,7 @@ export const scheduledEmailsService = {
 
   /**
    * Get scheduled emails ready to send
+   * Excludes emails that still require 24-hour verification
    */
   async getReadyToSend() {
     const { data, error } = await supabase
@@ -72,8 +73,9 @@ export const scheduledEmailsService = {
       `)
       .eq('status', 'Pending')
       .lte('scheduled_for', new Date().toISOString())
+      .or('requires_verification.is.null,requires_verification.eq.false') // Only send verified emails
       .order('scheduled_for', { ascending: true });
-    
+
     if (error) throw error;
     return data;
   },
@@ -227,11 +229,11 @@ export const scheduledEmailsService = {
       .select('attempts, max_attempts')
       .eq('id', scheduledEmailId)
       .single();
-    
+
     if (getError) throw getError;
 
     const shouldRetry = current.attempts < current.max_attempts;
-    
+
     const { data, error } = await supabase
       .from('scheduled_emails')
       .update({
@@ -242,9 +244,93 @@ export const scheduledEmailsService = {
       .eq('id', scheduledEmailId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Mark as skipped (for deduplication)
+   */
+  async markSkipped(scheduledEmailId, reason) {
+    const { data, error } = await supabase
+      .from('scheduled_emails')
+      .update({
+        status: 'Cancelled',
+        error_message: reason,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', scheduledEmailId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Check if template was recently sent to this email (within 7 days)
+   * Used for template-level deduplication
+   * @param {string} templateId - The template ID
+   * @param {string} recipientEmail - The recipient email address
+   * @param {number} days - Number of days to look back (default 7)
+   * @returns {Promise<boolean>} True if template was recently sent
+   */
+  async wasRecentlySent(templateId, recipientEmail, days = 7) {
+    if (!templateId || !recipientEmail) return false;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from('email_logs')
+      .select('id')
+      .eq('template_id', templateId)
+      .ilike('to_email', recipientEmail.trim())
+      .gte('sent_at', cutoffDate.toISOString())
+      .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+      .limit(1);
+
+    if (error) {
+      console.warn('Failed to check recent sends:', error);
+      return false; // Fail open - allow send if check fails
+    }
+
+    return data && data.length > 0;
+  },
+
+  /**
+   * Get scheduled emails ready to send, filtered by template deduplication
+   * Skips emails where the template was sent to this recipient in the last 7 days
+   */
+  async getReadyToSendFiltered() {
+    const readyEmails = await this.getReadyToSend();
+
+    if (!readyEmails || readyEmails.length === 0) {
+      return { eligible: [], skipped: [] };
+    }
+
+    const eligible = [];
+    const skipped = [];
+
+    for (const email of readyEmails) {
+      const recipientEmail = email.recipient_email || email.account?.person_email || email.account?.email;
+
+      if (email.template_id && recipientEmail) {
+        const recentlySent = await this.wasRecentlySent(email.template_id, recipientEmail);
+
+        if (recentlySent) {
+          // Mark as skipped and add to skipped list
+          await this.markSkipped(email.id, 'Template already sent to this recipient within 7 days');
+          skipped.push(email);
+          continue;
+        }
+      }
+
+      eligible.push(email);
+    }
+
+    return { eligible, skipped };
   },
 
   /**
