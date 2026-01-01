@@ -25,7 +25,8 @@
       "Bash(find:*)",
       "Bash(git show:*)",
       "Bash(grep:*)",
-      "Bash(ls -la \"C:\\Coding\\isgmarketing-main\\supabase\\functions\"\" 2>/dev/null || echo \"Functions directory not found \")"
+      "Bash(ls -la \"C:\\Coding\\isgmarketing-main\\supabase\\functions\"\" 2>/dev/null || echo \"Functions directory not found \")",
+      "Bash(git push)"
     ]
   }
 }

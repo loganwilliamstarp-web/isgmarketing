@@ -142,7 +142,7 @@ const DnsRecord = ({ record, theme: t }) => {
 // Add Domain Modal
 const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
   const [domain, setDomain] = useState('');
-  const [subdomain, setSubdomain] = useState('em');
+  const [subdomain, setSubdomain] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -152,9 +152,10 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
     setError(null);
 
     try {
-      await onAdd(domain, { subdomain });
+      // Only pass subdomain if user entered one
+      await onAdd(domain, { subdomain: subdomain.trim() || null });
       setDomain('');
-      setSubdomain('em');
+      setSubdomain('');
       onClose();
     } catch (err) {
       setError(err.message);
@@ -218,13 +219,13 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
-              Subdomain Prefix
+              Subdomain Prefix (Optional)
             </label>
             <input
               type="text"
               value={subdomain}
               onChange={(e) => setSubdomain(e.target.value)}
-              placeholder="em"
+              placeholder="Leave blank for no subdomain"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -236,7 +237,7 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
               }}
             />
             <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-              This creates a subdomain like em.{domain || 'youragency.com'} for email sending
+              {subdomain ? `Creates ${subdomain}.${domain || 'youragency.com'}` : 'Emails will be sent directly from your domain'}
             </p>
           </div>
 
