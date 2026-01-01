@@ -146,7 +146,7 @@ async function addDomain(
   supabase: any,
   ownerId: string,
   domain: string,
-  subdomain: string = 'em',
+  subdomain: string | null,
   apiKey: string
 ) {
   // Clean the domain
@@ -171,6 +171,19 @@ async function addDomain(
     throw new Error('This domain is already registered to your account')
   }
 
+  // Build SendGrid request body - only include subdomain if provided
+  const sgBody: any = {
+    domain: cleanDomain,
+    automatic_security: true,
+    custom_spf: false,
+    default: false
+  }
+
+  // Only add subdomain if explicitly provided
+  if (subdomain) {
+    sgBody.subdomain = subdomain
+  }
+
   // Create domain authentication in SendGrid
   const sgResponse = await fetch(`${SENDGRID_API_URL}/whitelabel/domains`, {
     method: 'POST',
@@ -178,13 +191,7 @@ async function addDomain(
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      domain: cleanDomain,
-      subdomain: subdomain || 'em',
-      automatic_security: true,
-      custom_spf: false,
-      default: false
-    })
+    body: JSON.stringify(sgBody)
   })
 
   if (!sgResponse.ok) {
@@ -203,7 +210,7 @@ async function addDomain(
     .insert({
       owner_id: ownerId,
       domain: cleanDomain,
-      subdomain: subdomain || 'em',
+      subdomain: subdomain || null,
       sendgrid_domain_id: sgResult.id,
       status: 'pending',
       dns_records: dnsRecords,

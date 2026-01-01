@@ -60,12 +60,12 @@ export const senderDomainsService = {
   /**
    * Add a new sender domain - initiates SendGrid domain authentication
    * @param {string} domain - Domain to authenticate (e.g., "smithinsurance.com")
-   * @param {Object} options - Optional settings
+   * @param {Object} options - Optional settings (subdomain is optional, defaults to none)
    * @returns {Promise<Object>} Created sender domain with DNS records
    */
   async addDomain(domain, options = {}) {
-    const { subdomain = 'em' } = options;
-    const result = await this.callEdgeFunction('add', { domain, subdomain });
+    const { subdomain } = options;
+    const result = await this.callEdgeFunction('add', { domain, subdomain: subdomain || null });
     return result.domain;
   },
 
