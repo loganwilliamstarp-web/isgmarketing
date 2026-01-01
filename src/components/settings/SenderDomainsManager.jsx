@@ -142,7 +142,7 @@ const DnsRecord = ({ record, theme: t }) => {
 // Add Domain Modal
 const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
   const [domain, setDomain] = useState('');
-  const [subdomain, setSubdomain] = useState('');
+  const [subdomain, setSubdomain] = useState('mail');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -152,10 +152,10 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
     setError(null);
 
     try {
-      // Only pass subdomain if user entered one
-      await onAdd(domain, { subdomain: subdomain.trim() || null });
+      // Subdomain is required by SendGrid - default to 'mail' if empty
+      await onAdd(domain, { subdomain: subdomain.trim() || 'mail' });
       setDomain('');
-      setSubdomain('');
+      setSubdomain('mail');
       onClose();
     } catch (err) {
       setError(err.message);
@@ -219,13 +219,13 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
-              Subdomain Prefix (Optional)
+              Subdomain Prefix
             </label>
             <input
               type="text"
               value={subdomain}
               onChange={(e) => setSubdomain(e.target.value)}
-              placeholder="Leave blank for no subdomain"
+              placeholder="mail"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -237,7 +237,7 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
               }}
             />
             <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-              {subdomain ? `Creates ${subdomain}.${domain || 'youragency.com'}` : 'Emails will be sent directly from your domain'}
+              Creates {subdomain || 'mail'}.{domain || 'youragency.com'} for email sending (required by SendGrid)
             </p>
           </div>
 
