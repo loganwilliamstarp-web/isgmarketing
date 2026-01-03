@@ -63,6 +63,32 @@ async function checkAndRun() {
   }
 }
 
+// Run "refresh" every hour to catch newly scheduled emails
+let lastRefreshHour = null;
+
+async function checkAndRefresh() {
+  const now = new Date();
+  const currentHour = now.getUTCHours();
+  const currentDate = now.toISOString().split('T')[0];
+  const hourKey = `${currentDate}-${currentHour}`;
+
+  // Run refresh every hour (in addition to daily full run)
+  if (lastRefreshHour !== hourKey) {
+    // Skip if this is the daily run hour (already handled by daily run)
+    if (currentHour === DAILY_RUN_HOUR) {
+      lastRefreshHour = hourKey;
+      return;
+    }
+
+    console.log(`[${now.toISOString()}] Running hourly refresh check...`);
+    const result = await callEdgeFunction('refresh');
+
+    if (result.success) {
+      lastRefreshHour = hourKey;
+    }
+  }
+}
+
 // Run "verify" and "send" every 30 minutes for faster delivery
 let lastProcessSlot = null;
 
@@ -101,6 +127,7 @@ async function main() {
   console.log(`Supabase URL: ${SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET'}`);
   console.log(`Service Key: ${SUPABASE_SERVICE_ROLE_KEY ? '***configured***' : 'NOT SET'}`);
   console.log(`Daily run hour: ${DAILY_RUN_HOUR}:00 UTC`);
+  console.log(`Refresh checks: every hour`);
   console.log(`Verify + Send checks: every 30 minutes`);
   console.log('='.repeat(60));
 
@@ -118,6 +145,7 @@ async function main() {
   console.log('Starting cron loop...');
   setInterval(async () => {
     await checkAndRun();
+    await checkAndRefresh();
     await checkAndProcess();
   }, CHECK_INTERVAL);
 
