@@ -3,11 +3,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy the cron script
+# Copy the cron script (Node 18+ has native fetch, no dependencies needed)
 COPY cron-job.js ./
-
-# Install node-fetch for making HTTP requests
-RUN npm init -y && npm install node-fetch@3
 
 # Run the cron script
 CMD ["node", "cron-job.js"]
