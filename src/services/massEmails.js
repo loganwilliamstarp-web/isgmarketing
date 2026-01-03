@@ -504,6 +504,20 @@ export const massEmailsService = {
               p.expiration_date && p.expiration_date >= pastDateStr && p.expiration_date <= today
             );
           }
+          if (operator === 'exactly_days_future') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return activePolicies.some(p => p.expiration_date === targetDateStr);
+          }
+          if (operator === 'exactly_days_ago') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() - days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return activePolicies.some(p => p.expiration_date === targetDateStr);
+          }
           if (operator === 'before') {
             return activePolicies.some(p => p.expiration_date && p.expiration_date < value);
           }
@@ -575,6 +589,20 @@ export const massEmailsService = {
             return activePolicies.some(p =>
               p.effective_date && p.effective_date >= pastDateStr && p.effective_date <= today
             );
+          }
+          if (operator === 'exactly_days_future') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return activePolicies.some(p => p.effective_date === targetDateStr);
+          }
+          if (operator === 'exactly_days_ago') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() - days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return activePolicies.some(p => p.effective_date === targetDateStr);
           }
           if (operator === 'before') {
             return activePolicies.some(p => p.effective_date && p.effective_date < value);
@@ -858,6 +886,20 @@ export const massEmailsService = {
             const pastDateStr = pastDate.toISOString().split('T')[0];
             return expDate >= pastDateStr && expDate <= today;
           }
+          if (operator === 'exactly_days_future') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return expDate === targetDateStr;
+          }
+          if (operator === 'exactly_days_ago') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() - days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return expDate === targetDateStr;
+          }
           if (operator === 'before') return expDate < value;
           if (operator === 'after') return expDate > value;
           if (operator === 'between') return expDate >= value && expDate <= (value2 || value);
@@ -913,6 +955,20 @@ export const massEmailsService = {
             pastDate.setDate(pastDate.getDate() - days);
             const pastDateStr = pastDate.toISOString().split('T')[0];
             return effDate >= pastDateStr && effDate <= today;
+          }
+          if (operator === 'exactly_days_future') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return effDate === targetDateStr;
+          }
+          if (operator === 'exactly_days_ago') {
+            const days = parseInt(value, 10);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() - days);
+            const targetDateStr = targetDate.toISOString().split('T')[0];
+            return effDate === targetDateStr;
           }
           if (operator === 'before') return effDate < value;
           if (operator === 'after') return effDate > value;
