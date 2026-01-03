@@ -63,28 +63,32 @@ async function checkAndRun() {
   }
 }
 
-// Also support running "send" more frequently (every hour) for faster delivery
-let lastSendHour = null;
+// Run "send" every 30 minutes for faster delivery
+let lastSendSlot = null;
 
 async function checkAndSend() {
   const now = new Date();
   const currentHour = now.getUTCHours();
+  const currentMinutes = now.getUTCMinutes();
   const currentDate = now.toISOString().split('T')[0];
-  const hourKey = `${currentDate}-${currentHour}`;
 
-  // Run send every hour (in addition to daily full run)
-  if (lastSendHour !== hourKey) {
-    // Skip if this is the daily run hour (already handled)
-    if (currentHour === DAILY_RUN_HOUR) {
-      lastSendHour = hourKey;
+  // Create a slot key for every 30-minute window (0-29 = slot 0, 30-59 = slot 1)
+  const slot = currentMinutes < 30 ? 0 : 1;
+  const slotKey = `${currentDate}-${currentHour}-${slot}`;
+
+  // Run send every 30 minutes (in addition to daily full run)
+  if (lastSendSlot !== slotKey) {
+    // Skip if this is the daily run hour and first slot (already handled by daily run)
+    if (currentHour === DAILY_RUN_HOUR && slot === 0) {
+      lastSendSlot = slotKey;
       return;
     }
 
-    console.log(`[${now.toISOString()}] Running hourly send check...`);
+    console.log(`[${now.toISOString()}] Running 30-minute send check...`);
     const result = await callEdgeFunction('send');
 
     if (result.success) {
-      lastSendHour = hourKey;
+      lastSendSlot = slotKey;
     }
   }
 }
@@ -96,7 +100,7 @@ async function main() {
   console.log(`Supabase URL: ${SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET'}`);
   console.log(`Service Key: ${SUPABASE_SERVICE_ROLE_KEY ? '***configured***' : 'NOT SET'}`);
   console.log(`Daily run hour: ${DAILY_RUN_HOUR}:00 UTC`);
-  console.log(`Hourly send checks: enabled`);
+  console.log(`Send checks: every 30 minutes`);
   console.log('='.repeat(60));
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
