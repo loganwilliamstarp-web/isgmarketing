@@ -9,6 +9,8 @@ This is a lightweight Node.js service that triggers the email processing edge fu
   - `verify`: 24-hour verification check before sending
   - `send`: Sends all ready-to-send emails via SendGrid
 
+- **Every hour**: Runs `refresh` to find new qualifying accounts for active automations
+
 - **Every 30 minutes**: Runs `verify` + `send` to check pending emails and send any that are ready
 
 ## Deployment on Railway
@@ -55,6 +57,7 @@ ISG Marketing Email Cron Service
 Supabase URL: https://your-project.supab...
 Service Key: ***configured***
 Daily run hour: 6:00 UTC
+Refresh checks: every hour
 Verify + Send checks: every 30 minutes
 ============================================================
 Running initial send check on startup...
