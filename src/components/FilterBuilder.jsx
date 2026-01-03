@@ -94,6 +94,8 @@ export const OPERATORS = {
     { value: 'less_than_days_future', label: 'is less than X days from now' },
     { value: 'more_than_days_ago', label: 'was more than X days ago' },
     { value: 'less_than_days_ago', label: 'was less than X days ago' },
+    { value: 'exactly_days_future', label: 'is exactly X days from now' },
+    { value: 'exactly_days_ago', label: 'was exactly X days ago' },
   ],
   text: [
     { value: 'contains', label: 'contains' },
@@ -184,6 +186,12 @@ export const formatRuleText = (rule) => {
   }
   if (rule.operator === 'less_than_days_ago') {
     return `${fieldLabel} was less than ${rule.value} days ago`;
+  }
+  if (rule.operator === 'exactly_days_future') {
+    return `${fieldLabel} is exactly ${rule.value} days from now`;
+  }
+  if (rule.operator === 'exactly_days_ago') {
+    return `${fieldLabel} was exactly ${rule.value} days ago`;
   }
 
   return `${fieldLabel} ${operatorLabel} ${valueLabel}`;
@@ -391,7 +399,7 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
             />
           )}
 
-          {field?.type === 'date' && ['more_than_days_future', 'less_than_days_future', 'more_than_days_ago', 'less_than_days_ago'].includes(rule.operator) && (
+          {field?.type === 'date' && ['more_than_days_future', 'less_than_days_future', 'more_than_days_ago', 'less_than_days_ago', 'exactly_days_future', 'exactly_days_ago'].includes(rule.operator) && (
             <>
               <input
                 type="number"
