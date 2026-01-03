@@ -9,7 +9,7 @@ This is a lightweight Node.js service that triggers the email processing edge fu
   - `verify`: 24-hour verification check before sending
   - `send`: Sends all ready-to-send emails via SendGrid
 
-- **Every 30 minutes**: Runs a quick `send` check to process any newly verified emails
+- **Every 30 minutes**: Runs `verify` + `send` to check pending emails and send any that are ready
 
 ## Deployment on Railway
 
@@ -55,7 +55,7 @@ ISG Marketing Email Cron Service
 Supabase URL: https://your-project.supab...
 Service Key: ***configured***
 Daily run hour: 6:00 UTC
-Send checks: every 30 minutes
+Verify + Send checks: every 30 minutes
 ============================================================
 Running initial send check on startup...
 [2024-01-15T10:30:00.000Z] Calling edge function with action: send
@@ -78,9 +78,9 @@ Set the `DAILY_RUN_HOUR` environment variable (0-23 UTC):
 - `14` = 2 PM UTC / 9 AM EST
 - `0` = Midnight UTC
 
-### Disable 30-Minute Sends
+### Disable 30-Minute Checks
 
-If you only want the daily run, modify `cron-job.js` and comment out the `checkAndSend()` call.
+If you only want the daily run, modify `cron-job.js` and comment out the `checkAndProcess()` call.
 
 ## Troubleshooting
 

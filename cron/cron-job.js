@@ -63,10 +63,10 @@ async function checkAndRun() {
   }
 }
 
-// Run "send" every 30 minutes for faster delivery
-let lastSendSlot = null;
+// Run "verify" and "send" every 30 minutes for faster delivery
+let lastProcessSlot = null;
 
-async function checkAndSend() {
+async function checkAndProcess() {
   const now = new Date();
   const currentHour = now.getUTCHours();
   const currentMinutes = now.getUTCMinutes();
@@ -76,19 +76,20 @@ async function checkAndSend() {
   const slot = currentMinutes < 30 ? 0 : 1;
   const slotKey = `${currentDate}-${currentHour}-${slot}`;
 
-  // Run send every 30 minutes (in addition to daily full run)
-  if (lastSendSlot !== slotKey) {
+  // Run verify+send every 30 minutes (in addition to daily full run)
+  if (lastProcessSlot !== slotKey) {
     // Skip if this is the daily run hour and first slot (already handled by daily run)
     if (currentHour === DAILY_RUN_HOUR && slot === 0) {
-      lastSendSlot = slotKey;
+      lastProcessSlot = slotKey;
       return;
     }
 
-    console.log(`[${now.toISOString()}] Running 30-minute send check...`);
-    const result = await callEdgeFunction('send');
+    console.log(`[${now.toISOString()}] Running 30-minute verify + send check...`);
+    // 'process' action runs both verify and send
+    const result = await callEdgeFunction('process');
 
     if (result.success) {
-      lastSendSlot = slotKey;
+      lastProcessSlot = slotKey;
     }
   }
 }
@@ -100,7 +101,7 @@ async function main() {
   console.log(`Supabase URL: ${SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET'}`);
   console.log(`Service Key: ${SUPABASE_SERVICE_ROLE_KEY ? '***configured***' : 'NOT SET'}`);
   console.log(`Daily run hour: ${DAILY_RUN_HOUR}:00 UTC`);
-  console.log(`Send checks: every 30 minutes`);
+  console.log(`Verify + Send checks: every 30 minutes`);
   console.log('='.repeat(60));
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -117,7 +118,7 @@ async function main() {
   console.log('Starting cron loop...');
   setInterval(async () => {
     await checkAndRun();
-    await checkAndSend();
+    await checkAndProcess();
   }, CHECK_INTERVAL);
 
   // Keep the process alive
