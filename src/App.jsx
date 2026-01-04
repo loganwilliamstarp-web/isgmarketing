@@ -648,25 +648,6 @@ const AppLayout = () => {
                 {/* Scope Filter Dropdown - visible for Master Admins and Agency Admins */}
                 <ScopeFilterDropdown t={t} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Link
-                  to={`/${userId}/knowledge-center`}
-                  style={{
-                    padding: '8px 12px',
-                    backgroundColor: t.bgHover,
-                    border: `1px solid ${t.border}`,
-                    borderRadius: '8px',
-                    color: t.text,
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    textDecoration: 'none',
-                  }}
-                >
-                  ❓ Help
-                </Link>
               <button
                 onClick={() => setIsDark(!isDark)}
                 style={{
@@ -684,7 +665,6 @@ const AppLayout = () => {
               >
                 {isDark ? '☀️ Light' : '🌙 Dark'}
               </button>
-              </div>
             </div>
 
             {/* Page Content - Routes */}
