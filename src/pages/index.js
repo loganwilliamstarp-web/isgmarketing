@@ -9,6 +9,7 @@ export { default as ClientProfilePage } from './ClientProfilePage';
 export { default as SettingsPage } from './SettingsPage';
 export { default as WorkflowBuilderPage } from './WorkflowBuilderPage';
 export { default as MassEmailPage } from './MassEmailPage';
+export { default as KnowledgeCenterPage } from './KnowledgeCenterPage';
 
 // Re-export for convenience
 export * from './DashboardPage';

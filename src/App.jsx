@@ -20,7 +20,8 @@ import {
   ClientProfilePage,
   SettingsPage,
   WorkflowBuilderPage,
-  MassEmailPage
+  MassEmailPage,
+  KnowledgeCenterPage
 } from './pages';
 
 // ============================================
@@ -544,6 +545,33 @@ const AppLayout = () => {
 
               {/* Impersonation Picker - Only for admins */}
               <ImpersonationPicker t={t} />
+
+              {/* Help & Support Section */}
+              <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, padding: '16px 12px 8px', textTransform: 'uppercase' }}>
+                Help & Support
+              </div>
+              <Link
+                to={`/${userId}/knowledge-center`}
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: currentPage === 'knowledge-center' ? `${t.primary}15` : 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: currentPage === 'knowledge-center' ? t.primary : t.textSecondary,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: currentPage === 'knowledge-center' ? '600' : '400',
+                  textAlign: 'left',
+                  alignItems: 'center',
+                  gap: '10px',
+                  textDecoration: 'none',
+                  marginBottom: '2px',
+                }}
+              >
+                <span>📚</span> Knowledge Center
+              </Link>
             </div>
 
             {/* User & Logout */}
@@ -620,6 +648,25 @@ const AppLayout = () => {
                 {/* Scope Filter Dropdown - visible for Master Admins and Agency Admins */}
                 <ScopeFilterDropdown t={t} />
               </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Link
+                  to={`/${userId}/knowledge-center`}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  ❓ Help
+                </Link>
               <button
                 onClick={() => setIsDark(!isDark)}
                 style={{
@@ -637,6 +684,7 @@ const AppLayout = () => {
               >
                 {isDark ? '☀️ Light' : '🌙 Dark'}
               </button>
+              </div>
             </div>
 
             {/* Page Content - Routes */}
@@ -651,6 +699,7 @@ const AppLayout = () => {
                 <Route path="accounts" element={<ClientsPage t={t} />} />
                 <Route path="accounts/:accountId" element={<ClientProfilePage t={t} />} />
                 <Route path="settings" element={<SettingsPage t={t} />} />
+                <Route path="knowledge-center" element={<KnowledgeCenterPage t={t} />} />
                 <Route path="timeline" element={<TimelinePage t={t} />} />
                 <Route path="*" element={<DashboardPage t={t} />} />
               </Routes>
