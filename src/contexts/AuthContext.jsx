@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
+import { adminService } from '../services/admin';
 
 const AuthContext = createContext();
 
@@ -203,6 +204,19 @@ export const AuthProvider = ({ children }) => {
       } else {
         localStorage.removeItem('isg_scope_filter');
       }
+    } else if (adminStatus) {
+      // Master Admin with no saved filter - initialize "All Agencies" with all user IDs
+      const allUserIds = await adminService.getAllUserIds();
+      const allAgenciesFilter = {
+        active: true,
+        filterType: 'all_agencies',
+        filterValue: null,
+        filterLabel: 'All Agencies',
+        ownerIds: allUserIds,
+        originalUserId: userData.user_unique_id,
+      };
+      setScopeFilter(allAgenciesFilter);
+      localStorage.setItem('isg_scope_filter', JSON.stringify(allAgenciesFilter));
     }
   };
 
