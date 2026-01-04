@@ -528,7 +528,7 @@ async function processReadyEmails(
       }
 
       // Send the email
-      const sendResult = await sendEmailViaSendGrid(email, sendgridApiKey)
+      const sendResult = await sendEmailViaSendGrid(email, sendgridApiKey, supabase)
 
       if (sendResult.success) {
         // Log the sent email
@@ -606,10 +606,18 @@ async function processReadyEmails(
 
 async function sendEmailViaSendGrid(
   email: ScheduledEmail,
-  apiKey: string | undefined
+  apiKey: string | undefined,
+  supabase: any
 ): Promise<{ success: boolean, messageId?: string, error?: string }> {
   const template = email.template
   const account = email.account || {}
+
+  // Fetch user settings for signature and agency info
+  const { data: userSettings } = await supabase
+    .from('user_settings')
+    .select('signature_html, agency_name, agency_address, agency_phone, agency_website')
+    .eq('user_id', email.owner_id)
+    .single()
 
   // Get email content
   const fromEmail = email.from_email || template?.from_email
@@ -630,9 +638,13 @@ async function sendEmailViaSendGrid(
   }
 
   // Apply merge fields to template content
-  const htmlContent = applyMergeFields(template.html_content || '', email, account)
+  const baseHtmlContent = applyMergeFields(template.html_content || '', email, account)
   const textContent = applyMergeFields(template.text_content || '', email, account)
   const finalSubject = applyMergeFields(subject || 'No Subject', email, account)
+
+  // Build email footer with signature, company info, and unsubscribe
+  const emailFooter = buildEmailFooter(userSettings, email)
+  const htmlContent = baseHtmlContent + emailFooter
 
   // Dry run mode if no API key
   if (!apiKey) {
@@ -750,6 +762,52 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
   }
 
   return result
+}
+
+// ============================================================================
+// EMAIL FOOTER BUILDER
+// ============================================================================
+
+function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
+  const appUrl = Deno.env.get('APP_URL') || 'https://app.example.com'
+
+  // Build unsubscribe URL with email ID for tracking
+  const unsubscribeUrl = `${appUrl}/unsubscribe?id=${email.id}&email=${encodeURIComponent(email.recipient_email)}`
+
+  let footer = ''
+
+  // 1. User signature (if exists)
+  if (userSettings?.signature_html) {
+    footer += `
+      <div style="margin-top: 30px; font-family: Arial, sans-serif;">
+        ${userSettings.signature_html}
+      </div>
+    `
+  }
+
+  // 2. Company info line (grey, single line)
+  const companyParts: string[] = []
+  if (userSettings?.agency_name) companyParts.push(userSettings.agency_name)
+  if (userSettings?.agency_address) companyParts.push(userSettings.agency_address)
+  if (userSettings?.agency_phone) companyParts.push(userSettings.agency_phone)
+  if (userSettings?.agency_website) companyParts.push(userSettings.agency_website)
+
+  if (companyParts.length > 0) {
+    footer += `
+      <div style="margin-top: 20px; font-family: Arial, sans-serif; font-size: 12px; color: #888888; text-align: center;">
+        ${companyParts.join(' | ')}
+      </div>
+    `
+  }
+
+  // 3. Unsubscribe link (below company info)
+  footer += `
+    <div style="margin-top: 15px; font-family: Arial, sans-serif; font-size: 11px; text-align: center;">
+      <a href="${unsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from these emails</a>
+    </div>
+  `
+
+  return footer
 }
 
 // ============================================================================
