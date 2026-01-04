@@ -769,10 +769,11 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
 // ============================================================================
 
 function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
-  const appUrl = Deno.env.get('APP_URL') || 'https://app.example.com'
+  // Single unsubscribe URL for all users - set in Supabase Edge Function secrets
+  const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
 
   // Build unsubscribe URL with email ID for tracking
-  const unsubscribeUrl = `${appUrl}/unsubscribe?id=${email.id}&email=${encodeURIComponent(email.recipient_email)}`
+  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${email.id}&email=${encodeURIComponent(email.recipient_email)}`
 
   let footer = ''
 
