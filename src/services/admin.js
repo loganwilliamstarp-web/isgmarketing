@@ -126,6 +126,18 @@ export const adminService = {
   },
 
   /**
+   * Get all user IDs (for Master Admin "All Agencies" filter)
+   */
+  async getAllUserIds() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_unique_id');
+
+    if (error) throw error;
+    return data?.map(u => u.user_unique_id) || [];
+  },
+
+  /**
    * Get agents in the same agency as the current user (for Agency Admin dropdown)
    * Excludes the current user from the list
    */

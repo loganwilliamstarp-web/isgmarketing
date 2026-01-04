@@ -95,9 +95,14 @@ const ScopeFilterDropdown = ({ t }) => {
 
   const handleSelectAll = async () => {
     if (isAdmin) {
-      // Master Admin selecting "All Agencies" - no filter, show all data
-      // We need to fetch ALL user IDs
-      clearScopeFilter();
+      // Master Admin selecting "All Agencies" - fetch ALL user IDs
+      const allUserIds = await adminService.getAllUserIds();
+      updateScopeFilter({
+        filterType: 'all_agencies',
+        filterValue: null,
+        filterLabel: 'All Agencies',
+        ownerIds: allUserIds,
+      });
     } else if (isAgencyAdmin && user?.profileName) {
       // Agency Admin selecting "All Agents" - show all agents in their agency
       const agentIds = await adminService.getUserIdsByAgency(user.profileName);
