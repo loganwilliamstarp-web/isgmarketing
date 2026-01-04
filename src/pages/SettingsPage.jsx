@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUserSettings, useUserSettingsMutations } from '../hooks';
 import SenderDomainsManager from '../components/settings/SenderDomainsManager';
+import SignatureEditor from '../components/settings/SignatureEditor';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -64,36 +65,6 @@ const FormTextarea = ({ label, value, onChange, placeholder, rows = 3, disabled,
   </div>
 );
 
-// Signature preview component
-const SignaturePreview = ({ settings, theme: t }) => (
-  <div style={{
-    padding: '16px',
-    backgroundColor: t.bg,
-    borderRadius: '8px',
-    border: `1px solid ${t.border}`
-  }}>
-    {settings?.full_name && (
-      <div style={{ fontWeight: '600', color: t.text }}>{settings.full_name}</div>
-    )}
-    {settings?.job_title && (
-      <div style={{ color: t.textSecondary, fontSize: '14px' }}>{settings.job_title}</div>
-    )}
-    <div style={{ color: t.textSecondary, fontSize: '14px', marginTop: '4px' }}>
-      {[settings?.phone, settings?.email].filter(Boolean).join(' · ')}
-    </div>
-    {settings?.custom_message && (
-      <div style={{ color: t.textMuted, fontSize: '14px', fontStyle: 'italic', marginTop: '8px' }}>
-        {settings.custom_message}
-      </div>
-    )}
-    {!settings?.full_name && !settings?.job_title && (
-      <div style={{ color: t.textMuted, fontSize: '14px' }}>
-        Fill in your details to see a preview
-      </div>
-    )}
-  </div>
-);
-
 // Main Settings Page Component
 const SettingsPage = ({ t }) => {
   const { userId } = useParams();
@@ -112,6 +83,7 @@ const SettingsPage = ({ t }) => {
     phone: '',
     email: '',
     custom_message: '',
+    signature_html: '',
     // Agency info
     agency_name: '',
     agency_address: '',
@@ -133,6 +105,7 @@ const SettingsPage = ({ t }) => {
         phone: settings.phone || '',
         email: settings.email || '',
         custom_message: settings.custom_message || '',
+        signature_html: settings.signature_html || '',
         agency_name: settings.agency_name || '',
         agency_address: settings.agency_address || '',
         agency_phone: settings.agency_phone || '',
@@ -157,11 +130,7 @@ const SettingsPage = ({ t }) => {
     setSaveMessage(null);
     try {
       await updateSignature.mutateAsync({
-        full_name: formData.full_name,
-        job_title: formData.job_title,
-        phone: formData.phone,
-        email: formData.email,
-        custom_message: formData.custom_message
+        signature_html: formData.signature_html
       });
       setSaveMessage({ type: 'success', text: 'Signature saved successfully!' });
     } catch (err) {
@@ -297,54 +266,42 @@ const SettingsPage = ({ t }) => {
                 Your Email Signature
               </h3>
               <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '24px' }}>
-                This signature will be automatically added to all emails you send through the platform
+                Design your signature using the editor below. Format text, add links, and customize colors.
               </p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <FormInput
-                  label="Full Name"
-                  value={formData.full_name}
-                  onChange={handleChange('full_name')}
-                  placeholder="John Doe"
-                  theme={t}
-                />
-                <FormInput
-                  label="Job Title"
-                  value={formData.job_title}
-                  onChange={handleChange('job_title')}
-                  placeholder="Insurance Advisor"
-                  theme={t}
-                />
-                <FormInput
-                  label="Phone Number"
-                  value={formData.phone}
-                  onChange={handleChange('phone')}
-                  placeholder="(555) 123-4567"
-                  theme={t}
-                />
-                <FormInput
-                  label="Email Address"
-                  value={formData.email}
-                  onChange={handleChange('email')}
-                  placeholder="john.doe@company.com"
-                  type="email"
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '8px' }}>
+                  Signature Editor
+                </label>
+                <SignatureEditor
+                  value={formData.signature_html}
+                  onChange={handleChange('signature_html')}
                   theme={t}
                 />
               </div>
 
-              <FormTextarea
-                label="Custom Message (Optional)"
-                value={formData.custom_message}
-                onChange={handleChange('custom_message')}
-                placeholder="Looking forward to serving you!"
-                theme={t}
-              />
-
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '8px' }}>
-                  Preview
+                  Preview (how it will appear in emails)
                 </label>
-                <SignaturePreview settings={formData} theme={t} />
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#ffffff',
+                  borderRadius: '8px',
+                  border: `1px solid ${t.border}`,
+                  minHeight: '100px'
+                }}>
+                  {formData.signature_html ? (
+                    <div
+                      dangerouslySetInnerHTML={{ __html: formData.signature_html }}
+                      style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', color: '#333' }}
+                    />
+                  ) : (
+                    <div style={{ color: t.textMuted, fontSize: '14px' }}>
+                      Start typing in the editor above to see your signature preview
+                    </div>
+                  )}
+                </div>
               </div>
 
               <button
@@ -365,7 +322,7 @@ const SettingsPage = ({ t }) => {
                   opacity: isSaving ? 0.7 : 1
                 }}
               >
-                {isSaving ? '💾 Saving...' : '💾 Save Signature'}
+                {isSaving ? 'Saving...' : 'Save Signature'}
               </button>
             </div>
           )}

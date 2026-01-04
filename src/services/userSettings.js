@@ -72,13 +72,9 @@ export const userSettingsService = {
    * Update signature settings
    */
   async updateSignature(userId, signature) {
-    const { signatureName, signatureTitle, signaturePhone, signatureEmail, signatureMessage } = signature;
+    const { signature_html } = signature;
     return this.update(userId, {
-      signature_name: signatureName,
-      signature_title: signatureTitle,
-      signature_phone: signaturePhone,
-      signature_email: signatureEmail,
-      signature_message: signatureMessage
+      signature_html
     });
   },
 
@@ -165,29 +161,12 @@ export const userSettingsService = {
     const settings = await this.get(userId);
     if (!settings) return '';
 
-    const { signature_name, signature_title, signature_phone, signature_email, signature_message } = settings;
-    
-    let html = '<table style="margin-top: 20px; font-family: Arial, sans-serif;">';
-    html += '<tr><td>';
-    
-    if (signature_name) {
-      html += `<strong style="font-size: 14px;">${signature_name}</strong><br>`;
+    // Use the custom HTML signature if available
+    if (settings.signature_html) {
+      return `<div style="margin-top: 20px; font-family: Arial, sans-serif;">${settings.signature_html}</div>`;
     }
-    if (signature_title) {
-      html += `<span style="color: #666;">${signature_title}</span><br>`;
-    }
-    if (signature_phone) {
-      html += `<span>${signature_phone}</span><br>`;
-    }
-    if (signature_email) {
-      html += `<a href="mailto:${signature_email}" style="color: #0066cc;">${signature_email}</a><br>`;
-    }
-    if (signature_message) {
-      html += `<p style="margin-top: 10px; font-style: italic; color: #666;">${signature_message}</p>`;
-    }
-    
-    html += '</td></tr></table>';
-    return html;
+
+    return '';
   },
 
   /**
