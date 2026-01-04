@@ -79,7 +79,7 @@ export const userSettingsService = {
   },
 
   /**
-   * Update agency info
+   * Update agency info for a single user
    */
   async updateAgencyInfo(userId, agencyInfo) {
     const { agencyName, agencyAddress, agencyPhone, agencyWebsite } = agencyInfo;
@@ -89,6 +89,41 @@ export const userSettingsService = {
       agency_phone: agencyPhone,
       agency_website: agencyWebsite
     });
+  },
+
+  /**
+   * Update agency info for all users in a profile (agency)
+   * Used by agency admins to update settings for their entire agency
+   */
+  async updateAgencyInfoByProfile(profileName, agencyInfo) {
+    const { agency_name, agency_address, agency_phone, agency_website } = agencyInfo;
+
+    // First, get all user IDs in this profile
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('user_unique_id')
+      .eq('profile_name', profileName);
+
+    if (usersError) throw usersError;
+    if (!users || users.length === 0) return null;
+
+    const userIds = users.map(u => u.user_unique_id);
+
+    // Update all user_settings for these users
+    const { data, error } = await supabase
+      .from('user_settings')
+      .update({
+        agency_name,
+        agency_address,
+        agency_phone,
+        agency_website,
+        updated_at: new Date().toISOString()
+      })
+      .in('user_id', userIds)
+      .select();
+
+    if (error) throw error;
+    return data;
   },
 
   /**

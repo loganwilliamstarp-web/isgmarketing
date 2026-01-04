@@ -73,6 +73,11 @@ export function useUserSettingsMutations() {
     onSuccess: invalidateSettings
   });
 
+  const updateAgencyInfoByProfile = useMutation({
+    mutationFn: ({ profileName, agencyInfo }) => userSettingsService.updateAgencyInfoByProfile(profileName, agencyInfo),
+    onSuccess: invalidateSettings
+  });
+
   const updateEmailSettings = useMutation({
     mutationFn: (emailSettings) => userSettingsService.updateEmailSettings(userId, emailSettings),
     onSuccess: invalidateSettings
@@ -87,6 +92,7 @@ export function useUserSettingsMutations() {
     updateSettings,
     updateSignature,
     updateAgencyInfo,
+    updateAgencyInfoByProfile,
     updateEmailSettings,
     updatePreferences
   };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUserSettings, useUserSettingsMutations } from '../hooks';
+import { useAuth } from '../contexts/AuthContext';
 import SenderDomainsManager from '../components/settings/SenderDomainsManager';
 import SignatureEditor from '../components/settings/SignatureEditor';
 
@@ -72,9 +73,13 @@ const SettingsPage = ({ t }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
 
+  // Get auth context for role checking
+  const { isAdmin, isAgencyAdmin, user } = useAuth();
+  const canEditAgencyInfo = isAdmin || isAgencyAdmin;
+
   // Fetch user settings
   const { data: settings, isLoading, error } = useUserSettings();
-  const { updateSettings, updateSignature } = useUserSettingsMutations();
+  const { updateSettings, updateSignature, updateAgencyInfoByProfile } = useUserSettingsMutations();
 
   // Local form state
   const [formData, setFormData] = useState({
@@ -154,13 +159,42 @@ const SettingsPage = ({ t }) => {
     }
   };
 
+  // Build tabs based on user permissions
   const tabs = [
     { id: 'signature', label: 'Email Signature', icon: '👤' },
-    { id: 'agency', label: 'Agency Info', icon: '🏢' },
+    // Only show Agency Info tab to admins and agency admins
+    ...(canEditAgencyInfo ? [{ id: 'agency', label: 'Agency Info', icon: '🏢' }] : []),
     { id: 'domains', label: 'Sender Domains', icon: '@' },
     { id: 'email', label: 'Email Settings', icon: '📧' },
     { id: 'integrations', label: 'Integrations', icon: '🔗' }
   ];
+
+  // Save agency info for all users in the profile
+  const handleSaveAgencyInfo = async () => {
+    if (!user?.profileName) {
+      setSaveMessage({ type: 'error', text: 'Unable to determine your agency. Please contact support.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveMessage(null);
+    try {
+      await updateAgencyInfoByProfile.mutateAsync({
+        profileName: user.profileName,
+        agencyInfo: {
+          agency_name: formData.agency_name,
+          agency_address: formData.agency_address,
+          agency_phone: formData.agency_phone,
+          agency_website: formData.agency_website
+        }
+      });
+      setSaveMessage({ type: 'success', text: 'Agency info saved for all users in your agency!' });
+    } catch (err) {
+      setSaveMessage({ type: 'error', text: 'Failed to save agency info. Please try again.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -327,20 +361,44 @@ const SettingsPage = ({ t }) => {
             </div>
           )}
 
-          {/* Agency Info Tab */}
-          {activeTab === 'agency' && (
+          {/* Agency Info Tab - Only visible to admins and agency admins */}
+          {activeTab === 'agency' && canEditAgencyInfo && (
             <div style={{
               padding: '24px',
               backgroundColor: t.bgCard,
               borderRadius: '12px',
               border: `1px solid ${t.border}`
             }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '4px' }}>
-                Agency Information
-              </h3>
-              <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '24px' }}>
-                Your agency details used in email templates and footers
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '4px' }}>
+                    Agency Information
+                  </h3>
+                  <p style={{ fontSize: '13px', color: t.textSecondary, margin: 0 }}>
+                    These details are used in email templates and footers for all users in your agency
+                  </p>
+                </div>
+                <span style={{
+                  padding: '4px 10px',
+                  backgroundColor: t.bgHover,
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  color: t.textSecondary
+                }}>
+                  Agency Admin
+                </span>
+              </div>
+
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: `${t.primary}10`,
+                borderRadius: '8px',
+                marginBottom: '24px',
+                fontSize: '13px',
+                color: t.text
+              }}>
+                Changes saved here will apply to all users in your agency ({user?.profileName || 'your agency'}).
+              </div>
 
               <FormInput
                 label="Agency Name"
@@ -374,7 +432,7 @@ const SettingsPage = ({ t }) => {
               </div>
 
               <button
-                onClick={handleSaveSettings}
+                onClick={handleSaveAgencyInfo}
                 disabled={isSaving}
                 style={{
                   padding: '12px 24px',
@@ -388,7 +446,7 @@ const SettingsPage = ({ t }) => {
                   opacity: isSaving ? 0.7 : 1
                 }}
               >
-                {isSaving ? '💾 Saving...' : '💾 Save Agency Info'}
+                {isSaving ? 'Saving...' : 'Save Agency Info'}
               </button>
             </div>
           )}
