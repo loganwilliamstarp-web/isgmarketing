@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext, useEffect } from 'react';
+import React, { useState, createContext, useContext, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
@@ -11,18 +11,40 @@ import { AuthProvider, useAuth, USER_ROLES } from './contexts/AuthContext';
 import { LoginPage, ProtectedRoute, ImpersonationBanner } from './components/auth';
 import { ScopeFilterDropdown } from './components/filters';
 
-// Import connected pages
-import {
-  DashboardPage,
-  AutomationsPage,
-  TemplatesPage,
-  ClientsPage,
-  ClientProfilePage,
-  SettingsPage,
-  WorkflowBuilderPage,
-  MassEmailPage,
-  KnowledgeCenterPage
-} from './pages';
+// Lazy-loaded page components for code splitting
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AutomationsPage = lazy(() => import('./pages/AutomationsPage'));
+const TemplatesPage = lazy(() => import('./pages/TemplatesPage'));
+const ClientsPage = lazy(() => import('./pages/ClientsPage'));
+const ClientProfilePage = lazy(() => import('./pages/ClientProfilePage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const WorkflowBuilderPage = lazy(() => import('./pages/WorkflowBuilderPage'));
+const MassEmailPage = lazy(() => import('./pages/MassEmailPage'));
+const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
+
+// ============================================
+// PAGE LOADING FALLBACK
+// ============================================
+const PageLoader = ({ t }) => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '400px',
+    flexDirection: 'column',
+    gap: '16px'
+  }}>
+    <div style={{
+      width: '40px',
+      height: '40px',
+      border: `3px solid ${t?.border || '#e2e8f0'}`,
+      borderTopColor: t?.primary || '#3b82f6',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 // ============================================
 // THEME CONTEXT
@@ -667,22 +689,24 @@ const AppLayout = () => {
               </button>
             </div>
 
-            {/* Page Content - Routes */}
+            {/* Page Content - Routes with Suspense for lazy loading */}
             <div style={{ padding: '24px' }}>
-              <Routes>
-                <Route path="dashboard" element={<DashboardPage t={t} />} />
-                <Route path="automations" element={<AutomationsPage t={t} />} />
-                <Route path="automations/new" element={<WorkflowBuilderPage t={t} />} />
-                <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
-                <Route path="templates" element={<TemplatesPage t={t} />} />
-                <Route path="mass-email" element={<MassEmailPage t={t} />} />
-                <Route path="accounts" element={<ClientsPage t={t} />} />
-                <Route path="accounts/:accountId" element={<ClientProfilePage t={t} />} />
-                <Route path="settings" element={<SettingsPage t={t} />} />
-                <Route path="knowledge-center" element={<KnowledgeCenterPage t={t} />} />
-                <Route path="timeline" element={<TimelinePage t={t} />} />
-                <Route path="*" element={<DashboardPage t={t} />} />
-              </Routes>
+              <Suspense fallback={<PageLoader t={t} />}>
+                <Routes>
+                  <Route path="dashboard" element={<DashboardPage t={t} />} />
+                  <Route path="automations" element={<AutomationsPage t={t} />} />
+                  <Route path="automations/new" element={<WorkflowBuilderPage t={t} />} />
+                  <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
+                  <Route path="templates" element={<TemplatesPage t={t} />} />
+                  <Route path="mass-email" element={<MassEmailPage t={t} />} />
+                  <Route path="accounts" element={<ClientsPage t={t} />} />
+                  <Route path="accounts/:accountId" element={<ClientProfilePage t={t} />} />
+                  <Route path="settings" element={<SettingsPage t={t} />} />
+                  <Route path="knowledge-center" element={<KnowledgeCenterPage t={t} />} />
+                  <Route path="timeline" element={<TimelinePage t={t} />} />
+                  <Route path="*" element={<DashboardPage t={t} />} />
+                </Routes>
+              </Suspense>
             </div>
           </div>
         </div>
