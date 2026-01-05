@@ -47,22 +47,59 @@ const StatusBadge = ({ status, theme: t }) => {
   );
 };
 
+// Helper function to strip HTML tags and convert to plain text for editing
+const htmlToPlainText = (html) => {
+  if (!html) return '';
+  return html
+    // Convert <br> and </p> to newlines
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    // Remove all other HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    // Decode HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+};
+
+// Helper function to convert plain text back to simple HTML
+const plainTextToHtml = (text) => {
+  if (!text) return '';
+  return text
+    .split('\n\n')
+    .map(paragraph => paragraph.trim())
+    .filter(paragraph => paragraph)
+    .map(paragraph => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
+    .join('\n\n');
+};
+
 // Template Editor Modal (reused from TemplatesPage pattern)
 const TemplateEditorModal = ({ template, onSave, onClose, theme: t }) => {
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
-  const [body, setBody] = useState(template?.body_html || template?.body_text || '');
+  // Convert HTML to plain text for editing
+  const [body, setBody] = useState(htmlToPlainText(template?.body_html || template?.body_text || ''));
   const [category, setCategory] = useState(template?.category || 'general');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      // Convert plain text back to HTML when saving
+      const bodyHtml = plainTextToHtml(body);
       const savedTemplate = await onSave({
         name,
         subject,
-        body_html: body,
-        body_text: body.replace(/<[^>]*>/g, ''),
+        body_html: bodyHtml,
+        body_text: body, // Plain text version is what user typed
         category
       });
       onClose(savedTemplate);

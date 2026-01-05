@@ -14,22 +14,59 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
   <div style={{ width, height, backgroundColor: 'currentColor', opacity: 0.1, borderRadius: '4px' }} />
 );
 
+// Helper function to strip HTML tags and convert to plain text for editing
+const htmlToPlainText = (html) => {
+  if (!html) return '';
+  return html
+    // Convert <br> and </p> to newlines
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    // Remove all other HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    // Decode HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+};
+
+// Helper function to convert plain text back to simple HTML
+const plainTextToHtml = (text) => {
+  if (!text) return '';
+  return text
+    .split('\n\n')
+    .map(paragraph => paragraph.trim())
+    .filter(paragraph => paragraph)
+    .map(paragraph => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
+    .join('\n\n');
+};
+
 // Template editor modal
 const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
-  const [body, setBody] = useState(template?.body_html || template?.body_text || '');
+  // Convert HTML to plain text for editing
+  const [body, setBody] = useState(htmlToPlainText(template?.body_html || template?.body_text || ''));
   const [category, setCategory] = useState(template?.category || 'general');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      // Convert plain text back to HTML when saving
+      const bodyHtml = plainTextToHtml(body);
       await onSave({
         name,
         subject,
-        body_html: body,
-        body_text: body.replace(/<[^>]*>/g, ''), // Strip HTML for text version
+        body_html: bodyHtml,
+        body_text: body, // Plain text version is what user typed
         category
       });
       onClose();
@@ -256,6 +293,251 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
             }}
           >
             {isSubmitting ? 'Saving...' : template ? 'Save Changes' : 'Create Template'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// Create Master Template Modal
+const CreateMasterTemplateModal = ({ onSave, onClose, theme: t }) => {
+  const [name, setName] = useState('');
+  const [defaultKey, setDefaultKey] = useState('');
+  const [subject, setSubject] = useState('');
+  const [category, setCategory] = useState('general');
+  const [body, setBody] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!name || !defaultKey || !subject) return;
+    setIsSubmitting(true);
+    try {
+      // Convert plain text to HTML when saving
+      const bodyHtml = plainTextToHtml(body);
+      await onSave({
+        name,
+        default_key: defaultKey.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
+        subject,
+        category,
+        body_html: bodyHtml,
+        body_text: body, // Plain text version is what user typed
+        version: 1,
+        merge_fields: ['first_name', 'last_name', 'email', 'agent_name']
+      });
+      onClose();
+    } catch (err) {
+      console.error('Failed to create master template:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100 }}
+        onClick={onClose}
+      />
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '600px',
+        maxHeight: '90vh',
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        border: `1px solid ${t.border}`,
+        zIndex: 101,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
+            Create Master Template
+          </h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}
+          >
+            x
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Template Name *
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Welcome Email Template"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Default Key *
+              </label>
+              <input
+                type="text"
+                value={defaultKey}
+                onChange={(e) => setDefaultKey(e.target.value)}
+                placeholder="e.g., welcome_template"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Subject Line *
+              </label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g., Welcome to {{company_name}}!"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              >
+                <option value="welcome">Welcome</option>
+                <option value="renewal">Renewal</option>
+                <option value="cross_sell">Cross-Sell</option>
+                <option value="engagement">Engagement</option>
+                <option value="policy_update">Policy Update</option>
+                <option value="general">General</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Email Body
+            </label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Write your email content here. Use merge fields like {{first_name}} for personalization."
+              rows={8}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                lineHeight: '1.6'
+              }}
+            />
+          </div>
+
+          <div style={{
+            padding: '12px',
+            backgroundColor: `${t.warning}15`,
+            border: `1px solid ${t.warning}30`,
+            borderRadius: '8px',
+            fontSize: '13px',
+            color: t.text
+          }}>
+            <strong>Note:</strong> This creates the master template. Use "Sync to Users" to push it to all user accounts.
+            Users who haven't modified their template will receive the update.
+          </div>
+        </div>
+
+        <div style={{
+          padding: '16px 20px',
+          borderTop: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px'
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.bgHover,
+              border: `1px solid ${t.border}`,
+              borderRadius: '8px',
+              color: t.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !defaultKey || !subject}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: isSubmitting ? 'wait' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              opacity: isSubmitting || !name || !defaultKey || !subject ? 0.6 : 1
+            }}
+          >
+            {isSubmitting ? 'Creating...' : 'Create Master Template'}
           </button>
         </div>
       </div>
@@ -581,7 +863,10 @@ const TemplatesPage = ({ t }) => {
   } = useTemplateMutations();
 
   // Mutations for master templates
-  const { syncMasterTemplate, updateMasterTemplate } = useMasterTemplateMutations();
+  const { syncMasterTemplate, updateMasterTemplate, createMasterTemplate } = useMasterTemplateMutations();
+
+  // State for create master template modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Filter templates (for user view)
   const filteredTemplates = templates?.filter(tmpl => {
@@ -635,6 +920,16 @@ const TemplatesPage = ({ t }) => {
     }
   };
 
+  const handleCreateMasterTemplate = async (templateData) => {
+    try {
+      await createMasterTemplate.mutateAsync(templateData);
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error('Failed to create master template:', err);
+      throw err;
+    }
+  };
+
   const handleDuplicateTemplate = async (template) => {
     await duplicateTemplate.mutateAsync(template.id);
   };
@@ -658,6 +953,25 @@ const TemplatesPage = ({ t }) => {
               Edit master email templates that sync to all users
             </p>
           </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>+</span>
+            Create Master Template
+          </button>
         </div>
 
         {/* Error state */}
@@ -811,6 +1125,16 @@ const TemplatesPage = ({ t }) => {
             onSave={handleSaveTemplate}
             onClose={() => setEditorOpen(false)}
             theme={t}
+          />
+        )}
+
+        {/* Create Master Template Modal */}
+        {showCreateModal && (
+          <CreateMasterTemplateModal
+            onSave={handleCreateMasterTemplate}
+            onClose={() => setShowCreateModal(false)}
+            theme={t}
+            isSubmitting={createMasterTemplate.isPending}
           />
         )}
       </div>
