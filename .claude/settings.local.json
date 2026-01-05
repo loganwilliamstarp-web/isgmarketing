@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx vite:*)",
+      "Bash(node --check:*)",
+      "Bash(npm install:*)",
+      "Bash(node:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then grep -q \"VITE_GOOGLE_MAPS_API_KEY\" .env)",
+      "Bash(else echo \".env file not found\")",
+      "Bash(fi)",
+      "Bash(if [ -f .env.local ])",
+      "Bash(then grep -q \"VITE_GOOGLE_MAPS_API_KEY\" .env.local)",
+      "Bash(else echo \".env.local file not found\")",
+      "Bash(find:*)",
+      "Bash(git show:*)",
+      "Bash(grep:*)",
+      "Bash(ls -la \"C:\\Coding\\isgmarketing-main\\supabase\\functions\"\" 2>/dev/null || echo \"Functions directory not found \")",
+      "Bash(git push)"
+    ]
+  }
+}
