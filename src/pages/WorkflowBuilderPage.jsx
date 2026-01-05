@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useAutomation, useAutomationMutations, useIsAdmin, useMasterAutomationMutations } from '../hooks';
+import { useAutomation, useAutomationMutations, useIsAdmin, useMasterAutomation, useMasterAutomationMutations } from '../hooks';
 import WorkflowBuilder from '../components/WorkflowBuilder';
 
 // Loading skeleton
@@ -9,11 +9,12 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 );
 
 const WorkflowBuilderPage = ({ t }) => {
-  const { userId, automationId } = useParams();
+  const { userId, automationId, defaultKey } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const isNew = !automationId || automationId === 'new';
+  const isMasterEdit = !!defaultKey; // Editing a master automation directly
 
   // Get template info from navigation state (if using a template)
   const templateInfo = location.state?.templateName || location.state?.templateId;
@@ -21,12 +22,19 @@ const WorkflowBuilderPage = ({ t }) => {
   // Check if user is admin
   const { data: isAdmin = false, isLoading: isAdminLoading } = useIsAdmin();
 
-  // Load existing automation if editing
-  const { data: automation, isLoading, error } = useAutomation(isNew ? null : automationId);
+  // Load existing automation if editing (either by ID or master by defaultKey)
+  const { data: automation, isLoading, error } = useAutomation(isNew || isMasterEdit ? null : automationId);
+  const { data: masterAutomation, isLoading: masterLoading, error: masterError } = useMasterAutomation(isMasterEdit ? defaultKey : null);
+
+  // Use the appropriate data source
+  const effectiveAutomation = isMasterEdit ? masterAutomation : automation;
+  const effectiveLoading = isMasterEdit ? masterLoading : isLoading;
+  const effectiveError = isMasterEdit ? masterError : error;
 
   // Check if this is a default automation that non-admins can't edit
-  const isDefaultAutomation = automation?.is_default === true;
-  const canEdit = isNew || !isDefaultAutomation || isAdmin;
+  const isDefaultAutomation = effectiveAutomation?.is_default === true || isMasterEdit;
+  // For master edit mode, only admins can edit; for regular automations, apply normal rules
+  const canEdit = isMasterEdit ? isAdmin : (isNew || !isDefaultAutomation || isAdmin);
 
   // Mutations
   const { createAutomation, updateAutomation, activateAutomation, pauseAutomation, duplicateAutomation } = useAutomationMutations();
@@ -66,20 +74,20 @@ const WorkflowBuilderPage = ({ t }) => {
   
   // Update local state when automation loads
   useEffect(() => {
-    if (automation) {
+    if (effectiveAutomation) {
       setAutomationData({
-        name: automation.name || '',
-        description: automation.description || '',
-        category: automation.category || 'general',
-        status: automation.status || 'draft',
-        send_time: automation.send_time || '10:00',
-        timezone: automation.timezone || 'America/Chicago',
-        frequency: automation.frequency || 'Daily',
-        filter_config: automation.filter_config || {},
-        nodes: automation.nodes || []
+        name: effectiveAutomation.name || '',
+        description: effectiveAutomation.description || '',
+        category: effectiveAutomation.category || 'general',
+        status: effectiveAutomation.status || 'draft',
+        send_time: effectiveAutomation.send_time || '10:00',
+        timezone: effectiveAutomation.timezone || 'America/Chicago',
+        frequency: effectiveAutomation.frequency || 'Daily',
+        filter_config: effectiveAutomation.filter_config || {},
+        nodes: effectiveAutomation.nodes || []
       });
     }
-  }, [automation]);
+  }, [effectiveAutomation]);
   
   // Handle save
   const handleSave = async (data) => {
@@ -94,11 +102,26 @@ const WorkflowBuilderPage = ({ t }) => {
         const newAutomation = await createAutomation.mutateAsync(data);
         // Navigate to the edit page for the new automation
         navigate(`/${userId}/automations/${newAutomation.id}`, { replace: true });
-      } else if (isAdmin && isDefaultAutomation && automation?.default_key) {
-        // Admin editing a default automation - save to master_automations table
+      } else if (isMasterEdit && isAdmin) {
+        // Admin editing a master automation directly via /automations/master/:defaultKey
+        await updateMasterAutomation.mutateAsync({
+          defaultKey: defaultKey,
+          updates: {
+            name: data.name,
+            description: data.description,
+            category: data.category,
+            send_time: data.send_time,
+            timezone: data.timezone,
+            frequency: data.frequency,
+            filter_config: data.filter_config,
+            nodes: data.nodes
+          }
+        });
+      } else if (isAdmin && isDefaultAutomation && effectiveAutomation?.default_key) {
+        // Admin editing a default automation via user's automation ID - save to master_automations table
         // This will trigger sync to all users via database trigger
         await updateMasterAutomation.mutateAsync({
-          defaultKey: automation.default_key,
+          defaultKey: effectiveAutomation.default_key,
           updates: {
             name: data.name,
             description: data.description,
@@ -146,17 +169,17 @@ const WorkflowBuilderPage = ({ t }) => {
 
   // Check if automationData has been populated from the query
   // Compare updated_at to ensure we have the latest data
-  const isDataSynced = isNew || (automation && lastSyncedAt === automation.updated_at);
+  const isDataSynced = isNew || (effectiveAutomation && lastSyncedAt === effectiveAutomation.updated_at);
 
   // Update lastSyncedAt when we sync data
   useEffect(() => {
-    if (automation?.updated_at) {
-      setLastSyncedAt(automation.updated_at);
+    if (effectiveAutomation?.updated_at) {
+      setLastSyncedAt(effectiveAutomation.updated_at);
     }
-  }, [automation?.updated_at]);
+  }, [effectiveAutomation?.updated_at]);
 
   // Loading state - wait for query AND state sync AND admin check
-  if (!isNew && (isLoading || isAdminLoading || !isDataSynced)) {
+  if (!isNew && (effectiveLoading || isAdminLoading || !isDataSynced)) {
     return (
       <div style={{
         display: 'flex',
@@ -173,7 +196,7 @@ const WorkflowBuilderPage = ({ t }) => {
   }
   
   // Error state
-  if (error) {
+  if (effectiveError) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -245,10 +268,24 @@ const WorkflowBuilderPage = ({ t }) => {
             color: t?.text || '#fafafa',
             margin: 0
           }}>
-            {isNew ? 'Create Automation' : canEdit ? `Edit: ${automation?.name || 'Automation'}` : `View: ${automation?.name || 'Automation'}`}
+            {isNew ? 'Create Automation' : isMasterEdit ? `Edit Master: ${effectiveAutomation?.name || 'Automation'}` : canEdit ? `Edit: ${effectiveAutomation?.name || 'Automation'}` : `View: ${effectiveAutomation?.name || 'Automation'}`}
           </h1>
-          {/* Default badge for default automations */}
-          {isDefaultAutomation && (
+          {/* Master badge for master automations */}
+          {isMasterEdit && (
+            <span style={{
+              padding: '4px 8px',
+              backgroundColor: `${t?.warning || '#f59e0b'}20`,
+              color: t?.warning || '#f59e0b',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: '600',
+              textTransform: 'uppercase'
+            }}>
+              Master Template
+            </span>
+          )}
+          {/* Default badge for default automations (when not in master edit mode) */}
+          {isDefaultAutomation && !isMasterEdit && (
             <span style={{
               padding: '4px 8px',
               backgroundColor: `${t?.primary || '#3b82f6'}20`,
@@ -277,8 +314,8 @@ const WorkflowBuilderPage = ({ t }) => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Status Toggle - always available for users to control on/off */}
-          {!isNew && (
+          {/* Status Toggle - available for user automations (not master edit mode) */}
+          {!isNew && !isMasterEdit && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13px', color: t?.textSecondary || '#a1a1aa' }}>
                 {automationData.status === 'active' ? 'Active' : 'Inactive'}
@@ -365,7 +402,7 @@ const WorkflowBuilderPage = ({ t }) => {
       {/* Workflow Builder - key uses updated_at to force remount when data reloads */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <WorkflowBuilder
-          key={`${automationId || 'new'}-${automation?.updated_at || 'new'}`}
+          key={`${automationId || defaultKey || 'new'}-${effectiveAutomation?.updated_at || 'new'}`}
           t={t}
           automation={automationData}
           onUpdate={setAutomationData}

@@ -698,6 +698,7 @@ const AppLayout = () => {
                   <Route path="dashboard" element={<DashboardPage t={t} />} />
                   <Route path="automations" element={<AutomationsPage t={t} />} />
                   <Route path="automations/new" element={<WorkflowBuilderPage t={t} />} />
+                  <Route path="automations/master/:defaultKey" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="templates" element={<TemplatesPage t={t} />} />
                   <Route path="mass-email" element={<MassEmailPage t={t} />} />
