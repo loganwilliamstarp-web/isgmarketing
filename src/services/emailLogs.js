@@ -356,6 +356,210 @@ export const emailLogsService = {
         bounced: calculateChange(currentStats.total_bounced, previousStats.total_bounced)
       }
     };
+  },
+
+  /**
+   * Get response rate stats (emails with replies)
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Query options
+   */
+  async getResponseRateStats(ownerIds, options = {}) {
+    const { startDate, endDate, automationId } = options;
+    const ownerId = getFirstOwnerId(ownerIds);
+
+    // Use RPC function if available
+    const { data, error } = await supabase
+      .rpc('get_response_rate', {
+        p_owner_id: ownerId,
+        p_start_date: startDate || null,
+        p_end_date: endDate || null,
+        p_automation_id: automationId || null
+      });
+
+    if (error) {
+      // Fallback to manual calculation if RPC not available
+      console.warn('RPC get_response_rate not available, using fallback:', error);
+      return this.calculateResponseRateFallback(ownerIds, options);
+    }
+
+    return data?.[0] || {
+      total_delivered: 0,
+      total_replied: 0,
+      response_rate: 0
+    };
+  },
+
+  /**
+   * Fallback response rate calculation when RPC is not available
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Query options
+   */
+  async calculateResponseRateFallback(ownerIds, options = {}) {
+    const { startDate, endDate, automationId } = options;
+
+    let query = supabase
+      .from('email_logs')
+      .select('id, delivered_at, first_replied_at', { count: 'exact' });
+
+    query = applyOwnerFilter(query, ownerIds);
+
+    if (startDate) {
+      query = query.gte('sent_at', startDate);
+    }
+    if (endDate) {
+      query = query.lte('sent_at', endDate);
+    }
+    if (automationId) {
+      query = query.eq('automation_id', automationId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const emails = data || [];
+    const totalDelivered = emails.filter(e => e.delivered_at).length;
+    const totalReplied = emails.filter(e => e.first_replied_at).length;
+    const responseRate = totalDelivered > 0
+      ? Math.round((totalReplied / totalDelivered) * 10000) / 100
+      : 0;
+
+    return {
+      total_delivered: totalDelivered,
+      total_replied: totalReplied,
+      response_rate: responseRate
+    };
+  },
+
+  /**
+   * Get recent replies
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {number} limit - Max number of replies to return
+   */
+  async getRecentReplies(ownerIds, limit = 10) {
+    let query = supabase
+      .from('email_logs')
+      .select(`
+        id, subject, first_replied_at, reply_count,
+        account:accounts(account_unique_id, name, person_email)
+      `)
+      .not('first_replied_at', 'is', null)
+      .order('first_replied_at', { ascending: false })
+      .limit(limit);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get email log with replies
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {number} emailLogId - Email log ID
+   */
+  async getByIdWithReplies(ownerIds, emailLogId) {
+    const emailLog = await this.getById(ownerIds, emailLogId);
+
+    const { data: replies, error } = await supabase
+      .from('email_replies')
+      .select('*')
+      .eq('email_log_id', emailLogId)
+      .order('received_at', { ascending: true });
+
+    if (error) throw error;
+
+    return {
+      ...emailLog,
+      replies: replies || []
+    };
+  }
+};
+
+// Email Replies Service
+export const emailRepliesService = {
+  /**
+   * Get all replies for an owner
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Query options
+   */
+  async getAll(ownerIds, options = {}) {
+    const { limit = 50, offset = 0, startDate, endDate, accountId } = options;
+
+    let query = supabase
+      .from('email_replies')
+      .select(`
+        *,
+        email_log:email_logs(id, subject, to_email, automation_id),
+        account:accounts(account_unique_id, name, person_email)
+      `)
+      .order('received_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    query = applyOwnerFilter(query, ownerIds);
+
+    if (startDate) {
+      query = query.gte('received_at', startDate);
+    }
+    if (endDate) {
+      query = query.lte('received_at', endDate);
+    }
+    if (accountId) {
+      query = query.eq('account_id', accountId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get a single reply by ID
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {number} replyId - Reply ID
+   */
+  async getById(ownerIds, replyId) {
+    let query = supabase
+      .from('email_replies')
+      .select(`
+        *,
+        email_log:email_logs(*),
+        account:accounts(*)
+      `)
+      .eq('id', replyId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get replies for a specific email log
+   * @param {number} emailLogId - Email log ID
+   */
+  async getByEmailLog(emailLogId) {
+    const { data, error } = await supabase
+      .from('email_replies')
+      .select('*')
+      .eq('email_log_id', emailLogId)
+      .order('received_at', { ascending: true });
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get reply count for an email log
+   * @param {number} emailLogId - Email log ID
+   */
+  async getReplyCount(emailLogId) {
+    const { count, error } = await supabase
+      .from('email_replies')
+      .select('id', { count: 'exact', head: true })
+      .eq('email_log_id', emailLogId);
+
+    if (error) throw error;
+    return count || 0;
   }
 };
 

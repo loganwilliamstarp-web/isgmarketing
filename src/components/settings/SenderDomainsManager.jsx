@@ -269,8 +269,229 @@ const AddDomainModal = ({ isOpen, onClose, onAdd, theme: t }) => {
   );
 };
 
+// Inbound Parse Panel Component
+const InboundParsePanel = ({ domain, onUpdate, theme: t }) => {
+  const [isEnabling, setIsEnabling] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+  const [parseStatus, setParseStatus] = useState(null);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleEnable = async () => {
+    setIsEnabling(true);
+    setError(null);
+    try {
+      const result = await senderDomainsService.enableInboundParse(domain.id);
+      setParseStatus(result.inboundParseConfig);
+      onUpdate(result.domain);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsEnabling(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setIsDisabling(true);
+    setError(null);
+    try {
+      const updatedDomain = await senderDomainsService.disableInboundParse(domain.id);
+      setParseStatus(null);
+      onUpdate(updatedDomain);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  const inboundSubdomain = domain.inbound_subdomain || 'parse';
+  const hostname = `${inboundSubdomain}.${domain.domain}`;
+
+  return (
+    <div style={{
+      padding: '16px',
+      backgroundColor: t.bg,
+      borderRadius: '8px',
+      marginTop: '16px',
+      border: `1px solid ${t.border}`
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div>
+          <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
+            Reply Tracking
+          </div>
+          <div style={{ fontSize: '12px', color: t.textMuted }}>
+            Capture email replies to calculate response rates
+          </div>
+        </div>
+        {domain.inbound_parse_enabled ? (
+          <button
+            onClick={handleDisable}
+            disabled={isDisabling}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: 'transparent',
+              border: `1px solid ${t.danger}`,
+              borderRadius: '6px',
+              color: t.danger,
+              cursor: isDisabling ? 'wait' : 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            {isDisabling ? 'Disabling...' : 'Disable'}
+          </button>
+        ) : (
+          <button
+            onClick={handleEnable}
+            disabled={isEnabling}
+            style={{
+              padding: '6px 14px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '6px',
+              color: '#fff',
+              cursor: isEnabling ? 'wait' : 'pointer',
+              fontSize: '12px',
+              fontWeight: '500'
+            }}
+          >
+            {isEnabling ? 'Enabling...' : 'Enable Reply Tracking'}
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div style={{
+          padding: '10px',
+          backgroundColor: `${t.danger}15`,
+          borderRadius: '6px',
+          marginBottom: '12px',
+          color: t.danger,
+          fontSize: '12px'
+        }}>
+          {error}
+        </div>
+      )}
+
+      {domain.inbound_parse_enabled && (
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px'
+          }}>
+            <span style={{
+              padding: '4px 10px',
+              backgroundColor: `${t.success}20`,
+              color: t.success,
+              borderRadius: '20px',
+              fontSize: '11px',
+              fontWeight: '500'
+            }}>
+              Enabled
+            </span>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>
+              Replies to <strong>reply+*@{hostname}</strong> will be tracked
+            </span>
+          </div>
+
+          {/* MX Record Instructions */}
+          <div style={{
+            padding: '12px',
+            backgroundColor: `${t.warning}10`,
+            borderRadius: '6px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '12px', fontWeight: '500', color: t.text, marginBottom: '8px' }}>
+              Required: Add MX Record
+            </div>
+            <div style={{ fontSize: '11px', color: t.textSecondary, marginBottom: '8px' }}>
+              Add this MX record to your DNS for reply tracking to work:
+            </div>
+            <div style={{
+              padding: '10px',
+              backgroundColor: t.bgCard,
+              borderRadius: '6px',
+              fontSize: '12px'
+            }}>
+              <div style={{ marginBottom: '6px' }}>
+                <span style={{ color: t.textMuted }}>Type:</span>
+                <span style={{ color: t.text, marginLeft: '8px' }}>MX</span>
+              </div>
+              <div style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: t.textMuted }}>Host:</span>
+                <code style={{ color: t.text, backgroundColor: t.bg, padding: '2px 6px', borderRadius: '4px' }}>
+                  {inboundSubdomain}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(inboundSubdomain)}
+                  style={{
+                    padding: '2px 8px',
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '4px',
+                    color: t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '10px'
+                  }}
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <div style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: t.textMuted }}>Value:</span>
+                <code style={{ color: t.text, backgroundColor: t.bg, padding: '2px 6px', borderRadius: '4px' }}>
+                  mx.sendgrid.net
+                </code>
+                <button
+                  onClick={() => copyToClipboard('mx.sendgrid.net')}
+                  style={{
+                    padding: '2px 8px',
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '4px',
+                    color: t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '10px'
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+              <div>
+                <span style={{ color: t.textMuted }}>Priority:</span>
+                <span style={{ color: t.text, marginLeft: '8px' }}>10</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '11px', color: t.textMuted }}>
+            When you send automated emails, recipients can reply directly.
+            Replies will be captured and linked to the original email for response rate tracking.
+          </div>
+        </div>
+      )}
+
+      {!domain.inbound_parse_enabled && (
+        <div style={{ fontSize: '12px', color: t.textMuted }}>
+          Enable reply tracking to capture email responses and measure engagement.
+          Requires adding an MX record to your domain's DNS.
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Domain Details Panel
-const DomainDetailsPanel = ({ domain, onVerify, onDelete, isVerifying, theme: t }) => {
+const DomainDetailsPanel = ({ domain, onVerify, onDelete, onUpdate, isVerifying, theme: t }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const dnsRecords = domain.dns_records || {};
@@ -396,6 +617,11 @@ const DomainDetailsPanel = ({ domain, onVerify, onDelete, isVerifying, theme: t 
             )}
           </div>
         </div>
+      )}
+
+      {/* Inbound Parse / Reply Tracking - only for verified domains */}
+      {domain.status === 'verified' && (
+        <InboundParsePanel domain={domain} onUpdate={onUpdate} theme={t} />
       )}
 
       {/* Delete confirmation */}
@@ -524,6 +750,10 @@ const SenderDomainsManager = ({ theme: t }) => {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleUpdateDomain = (updatedDomain) => {
+    setDomains(prev => prev.map(d => d.id === updatedDomain.id ? updatedDomain : d));
   };
 
   const selectedDomain = domains.find(d => d.id === selectedDomainId);
@@ -694,6 +924,7 @@ const SenderDomainsManager = ({ theme: t }) => {
               domain={selectedDomain}
               onVerify={handleVerifyDomain}
               onDelete={handleDeleteDomain}
+              onUpdate={handleUpdateDomain}
               isVerifying={verifyingDomainId === selectedDomain.id}
               theme={t}
             />

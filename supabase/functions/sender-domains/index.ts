@@ -94,6 +94,18 @@ serve(async (req) => {
         result = await getVerifiedDomains(supabaseAdmin, ownerId)
         break
 
+      case 'enable-inbound-parse':
+        result = await enableInboundParse(supabaseAdmin, ownerId, body.domainId, body.subdomain, sendGridApiKey)
+        break
+
+      case 'disable-inbound-parse':
+        result = await disableInboundParse(supabaseAdmin, ownerId, body.domainId, sendGridApiKey)
+        break
+
+      case 'get-inbound-parse-status':
+        result = await getInboundParseStatus(supabaseAdmin, ownerId, body.domainId, sendGridApiKey)
+        break
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
@@ -431,4 +443,198 @@ function formatValidationResult(results: any) {
   }
 
   return records
+}
+
+// ============================================================================
+// Inbound Parse Functions
+// ============================================================================
+
+async function enableInboundParse(
+  supabase: any,
+  ownerId: string,
+  domainId: string,
+  subdomain: string | undefined,
+  apiKey: string
+) {
+  // Get domain record
+  const { data: domain, error: fetchError } = await supabase
+    .from('sender_domains')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .eq('id', domainId)
+    .single()
+
+  if (fetchError || !domain) {
+    throw new Error('Domain not found')
+  }
+
+  if (domain.status !== 'verified') {
+    throw new Error('Domain must be verified before enabling inbound parse')
+  }
+
+  // Use provided subdomain or default to 'parse'
+  const inboundSubdomain = subdomain || 'parse'
+  const hostname = `${inboundSubdomain}.${domain.domain}`
+
+  // Get the webhook URL from environment or construct it
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const webhookUrl = `${supabaseUrl}/functions/v1/sendgrid-inbound-parse`
+
+  // Configure inbound parse in SendGrid
+  // https://docs.sendgrid.com/api-reference/settings-inbound-parse/create-a-parse-setting
+  const sgResponse = await fetch(`${SENDGRID_API_URL}/user/webhooks/parse/settings`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      hostname: hostname,
+      url: webhookUrl,
+      spam_check: false,
+      send_raw: false
+    })
+  })
+
+  if (!sgResponse.ok) {
+    const sgError = await sgResponse.json()
+    // Check if it's a "hostname already exists" error - that's fine
+    const errorMsg = sgError.errors?.[0]?.message || ''
+    if (!errorMsg.toLowerCase().includes('already exists')) {
+      throw new Error(sgError.errors?.[0]?.message || 'Failed to configure inbound parse in SendGrid')
+    }
+  }
+
+  // Update database
+  const { data, error } = await supabase
+    .from('sender_domains')
+    .update({
+      inbound_parse_enabled: true,
+      inbound_subdomain: inboundSubdomain,
+      updated_at: new Date().toISOString()
+    })
+    .eq('owner_id', ownerId)
+    .eq('id', domainId)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  return {
+    domain: data,
+    inboundParseConfig: {
+      hostname: hostname,
+      webhookUrl: webhookUrl,
+      mxRecord: {
+        type: 'MX',
+        host: inboundSubdomain,
+        value: 'mx.sendgrid.net',
+        priority: 10
+      }
+    }
+  }
+}
+
+async function disableInboundParse(
+  supabase: any,
+  ownerId: string,
+  domainId: string,
+  apiKey: string
+) {
+  // Get domain record
+  const { data: domain, error: fetchError } = await supabase
+    .from('sender_domains')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .eq('id', domainId)
+    .single()
+
+  if (fetchError || !domain) {
+    throw new Error('Domain not found')
+  }
+
+  // Delete from SendGrid if enabled
+  if (domain.inbound_parse_enabled && domain.inbound_subdomain) {
+    const hostname = `${domain.inbound_subdomain}.${domain.domain}`
+
+    try {
+      await fetch(`${SENDGRID_API_URL}/user/webhooks/parse/settings/${hostname}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      })
+    } catch (err) {
+      console.warn('Failed to delete inbound parse from SendGrid:', err)
+    }
+  }
+
+  // Update database
+  const { data, error } = await supabase
+    .from('sender_domains')
+    .update({
+      inbound_parse_enabled: false,
+      updated_at: new Date().toISOString()
+    })
+    .eq('owner_id', ownerId)
+    .eq('id', domainId)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  return { domain: data }
+}
+
+async function getInboundParseStatus(
+  supabase: any,
+  ownerId: string,
+  domainId: string,
+  apiKey: string
+) {
+  // Get domain record
+  const { data: domain, error: fetchError } = await supabase
+    .from('sender_domains')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .eq('id', domainId)
+    .single()
+
+  if (fetchError || !domain) {
+    throw new Error('Domain not found')
+  }
+
+  let sendgridConfig = null
+
+  if (domain.inbound_parse_enabled && domain.inbound_subdomain) {
+    const hostname = `${domain.inbound_subdomain}.${domain.domain}`
+
+    try {
+      const sgResponse = await fetch(`${SENDGRID_API_URL}/user/webhooks/parse/settings/${hostname}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      })
+
+      if (sgResponse.ok) {
+        sendgridConfig = await sgResponse.json()
+      }
+    } catch (err) {
+      console.warn('Failed to get inbound parse status from SendGrid:', err)
+    }
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+
+  return {
+    enabled: domain.inbound_parse_enabled || false,
+    subdomain: domain.inbound_subdomain || 'parse',
+    hostname: domain.inbound_parse_enabled
+      ? `${domain.inbound_subdomain}.${domain.domain}`
+      : null,
+    webhookUrl: `${supabaseUrl}/functions/v1/sendgrid-inbound-parse`,
+    sendgridConfig,
+    mxRecord: {
+      type: 'MX',
+      host: domain.inbound_subdomain || 'parse',
+      value: 'mx.sendgrid.net',
+      priority: 10
+    }
+  }
 }

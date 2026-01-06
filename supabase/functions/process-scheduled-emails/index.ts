@@ -527,42 +527,68 @@ async function processReadyEmails(
         }
       }
 
-      // Send the email
-      const sendResult = await sendEmailViaSendGrid(email, sendgridApiKey, supabase)
+      // Create email_log first to get ID for Reply-To tracking
+      const { data: emailLog, error: logError } = await supabase
+        .from('email_logs')
+        .insert({
+          owner_id: email.owner_id,
+          automation_id: email.automation_id,
+          account_id: email.account_id,
+          template_id: email.template_id,
+          to_email: recipientEmail,
+          to_name: email.recipient_name,
+          from_email: email.from_email || email.template?.from_email || 'noreply@example.com',
+          from_name: email.from_name || email.template?.from_name || 'Marketing',
+          subject: email.subject || email.template?.subject,
+          status: 'Queued',
+          queued_at: new Date().toISOString()
+        })
+        .select('id')
+        .single()
+
+      if (logError || !emailLog) {
+        throw new Error(`Failed to create email log: ${logError?.message || 'Unknown error'}`)
+      }
+
+      // Send the email (pass emailLogId for Reply-To tracking)
+      const sendResult = await sendEmailViaSendGrid(email, sendgridApiKey, supabase, emailLog.id)
 
       if (sendResult.success) {
-        // Log the sent email
-        const { data: emailLog } = await supabase
+        // Update email_log with SendGrid message ID and sent status
+        await supabase
           .from('email_logs')
-          .insert({
-            owner_id: email.owner_id,
-            automation_id: email.automation_id,
-            account_id: email.account_id,
-            template_id: email.template_id,
-            to_email: recipientEmail,
-            to_name: email.recipient_name,
-            from_email: email.from_email || email.template?.from_email || 'noreply@example.com',
-            from_name: email.from_name || email.template?.from_name || 'Marketing',
-            subject: email.subject || email.template?.subject,
+          .update({
             status: 'Sent',
             sent_at: new Date().toISOString(),
-            sendgrid_message_id: sendResult.messageId
+            sendgrid_message_id: sendResult.messageId,
+            reply_to: sendResult.replyTo,
+            custom_message_id: sendResult.customMessageId,
+            updated_at: new Date().toISOString()
           })
-          .select()
-          .single()
+          .eq('id', emailLog.id)
 
         // Update scheduled email as sent
         await supabase
           .from('scheduled_emails')
           .update({
             status: 'Sent',
-            email_log_id: emailLog?.id,
+            email_log_id: emailLog.id,
             updated_at: new Date().toISOString()
           })
           .eq('id', email.id)
 
         sent++
       } else {
+        // Update email_log as failed
+        await supabase
+          .from('email_logs')
+          .update({
+            status: 'Failed',
+            failed_at: new Date().toISOString(),
+            error_message: sendResult.error,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', emailLog.id)
         // Check if we should retry
         const attempts = (email.attempts || 0) + 1
         const maxAttempts = email.max_attempts || 3
@@ -607,8 +633,9 @@ async function processReadyEmails(
 async function sendEmailViaSendGrid(
   email: ScheduledEmail,
   apiKey: string | undefined,
-  supabase: any
-): Promise<{ success: boolean, messageId?: string, error?: string }> {
+  supabase: any,
+  emailLogId: number
+): Promise<{ success: boolean, messageId?: string, replyTo?: string, customMessageId?: string, error?: string }> {
   const template = email.template
   const account = email.account || {}
 
@@ -621,6 +648,22 @@ async function sendEmailViaSendGrid(
 
   // Get email content
   const fromEmail = email.from_email || template?.from_email
+
+  // Get sender domain for inbound parse (reply tracking)
+  let senderDomain: { domain: string, inbound_parse_enabled: boolean, inbound_subdomain: string } | null = null
+  if (fromEmail) {
+    const domainPart = fromEmail.split('@')[1]
+    if (domainPart) {
+      const { data: domainData } = await supabase
+        .from('sender_domains')
+        .select('domain, inbound_parse_enabled, inbound_subdomain')
+        .eq('owner_id', email.owner_id)
+        .eq('domain', domainPart)
+        .eq('status', 'verified')
+        .single()
+      senderDomain = domainData
+    }
+  }
   const fromName = email.from_name || template?.from_name || 'Marketing Team'
   const subject = email.subject || template?.subject
   const recipientEmail = email.recipient_email || account.person_email || account.email
@@ -646,17 +689,29 @@ async function sendEmailViaSendGrid(
   const emailFooter = buildEmailFooter(userSettings, email)
   const htmlContent = baseHtmlContent + emailFooter
 
+  // Build custom Message-ID for reply tracking
+  // Format: <isg-{email_log_id}-{timestamp}@{domain}>
+  // This allows us to match replies via the In-Reply-To header
+  const domainPart = fromEmail.split('@')[1] || 'isgmarketing.com'
+  const customMessageId = `<isg-${emailLogId}-${Date.now()}@${domainPart}>`
+
+  // Reply-To is the sender's actual email so they receive replies directly
+  // We track replies by matching the In-Reply-To header against our custom Message-ID
+  const replyToAddress = fromEmail
+
   // Dry run mode if no API key
   if (!apiKey) {
     console.log(`[DRY RUN] Would send email:`)
     console.log(`  To: ${recipientEmail}`)
     console.log(`  From: ${fromEmail}`)
+    console.log(`  Reply-To: ${replyToAddress}`)
+    console.log(`  Message-ID: ${customMessageId}`)
     console.log(`  Subject: ${finalSubject}`)
-    return { success: true, messageId: `dry-run-${Date.now()}` }
+    return { success: true, messageId: `dry-run-${Date.now()}`, replyTo: replyToAddress }
   }
 
   // Build SendGrid payload
-  const payload = {
+  const payload: Record<string, any> = {
     personalizations: [{
       to: [{
         email: recipientEmail,
@@ -667,11 +722,16 @@ async function sendEmailViaSendGrid(
         scheduled_email_id: email.id,
         automation_id: email.automation_id || '',
         account_id: email.account_id,
-        owner_id: email.owner_id
+        owner_id: email.owner_id,
+        email_log_id: emailLogId.toString()
       }
     }],
     from: {
       email: fromEmail,
+      name: fromName
+    },
+    reply_to: {
+      email: replyToAddress,
       name: fromName
     },
     subject: finalSubject,
@@ -679,6 +739,10 @@ async function sendEmailViaSendGrid(
       { type: 'text/plain', value: textContent || 'Please view this email in HTML format.' },
       { type: 'text/html', value: htmlContent }
     ],
+    // Custom headers for reply tracking
+    headers: {
+      'Message-ID': customMessageId
+    },
     tracking_settings: {
       click_tracking: { enable: true, enable_text: false },
       open_tracking: { enable: true },
@@ -704,7 +768,7 @@ async function sendEmailViaSendGrid(
     if (response.ok || response.status === 202) {
       // SendGrid returns 202 Accepted for successful sends
       const messageId = response.headers.get('X-Message-Id') || `sg-${Date.now()}`
-      return { success: true, messageId }
+      return { success: true, messageId, replyTo: replyToAddress, customMessageId }
     } else {
       const errorBody = await response.text()
       let errorMessage = `SendGrid error: ${response.status}`
