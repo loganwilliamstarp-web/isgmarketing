@@ -11,17 +11,255 @@ import { useMasterAutomations, useMasterAutomationMutations } from '../hooks/use
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
-  <div 
-    style={{ 
-      width, 
-      height, 
-      backgroundColor: 'currentColor', 
-      opacity: 0.1, 
-      borderRadius: '4px' 
-    }} 
+  <div
+    style={{
+      width,
+      height,
+      backgroundColor: 'currentColor',
+      opacity: 0.1,
+      borderRadius: '4px'
+    }}
   />
 );
 
+// Create Master Automation Modal
+const CreateMasterAutomationModal = ({ onSave, onClose, theme: t }) => {
+  const [name, setName] = useState('');
+  const [defaultKey, setDefaultKey] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('welcome');
+  const [sendTime, setSendTime] = useState('09:00');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!name || !defaultKey) return;
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        name,
+        default_key: defaultKey.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
+        description,
+        category,
+        send_time: sendTime,
+        timezone: 'America/New_York',
+        frequency: 'once',
+        version: 1,
+        filter_config: {},
+        nodes: []
+      });
+      onClose();
+    } catch (err) {
+      console.error('Failed to create master automation:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100 }}
+        onClick={onClose}
+      />
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '500px',
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        border: `1px solid ${t.border}`,
+        zIndex: 101,
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
+            Create Master Automation
+          </h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}
+          >
+            x
+          </button>
+        </div>
+
+        <div style={{ padding: '20px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Automation Name *
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Welcome Email - Personal Lines"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Default Key * <span style={{ color: t.textMuted, fontWeight: '400' }}>(unique identifier)</span>
+            </label>
+            <input
+              type="text"
+              value={defaultKey}
+              onChange={(e) => setDefaultKey(e.target.value)}
+              placeholder="e.g., welcome_personal"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of this automation..."
+              rows={2}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px',
+                resize: 'vertical'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              >
+                <option value="welcome">Welcome</option>
+                <option value="renewal">Renewal</option>
+                <option value="cross_sell">Cross-Sell</option>
+                <option value="engagement">Engagement</option>
+                <option value="policy_update">Policy Update</option>
+                <option value="general">General</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                Send Time
+              </label>
+              <input
+                type="time"
+                value={sendTime}
+                onChange={(e) => setSendTime(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  backgroundColor: t.bgInput,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '8px',
+                  color: t.text,
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{
+            padding: '12px',
+            backgroundColor: `${t.warning}15`,
+            border: `1px solid ${t.warning}30`,
+            borderRadius: '8px',
+            fontSize: '13px',
+            color: t.text
+          }}>
+            <strong>Note:</strong> This creates the master automation. You can edit the workflow after creation,
+            then use "Sync to Users" to push it to all user accounts.
+          </div>
+        </div>
+
+        <div style={{
+          padding: '16px 20px',
+          borderTop: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px'
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.bgHover,
+              border: `1px solid ${t.border}`,
+              borderRadius: '8px',
+              color: t.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !defaultKey}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: isSubmitting ? 'wait' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              opacity: isSubmitting || !name || !defaultKey ? 0.6 : 1
+            }}
+          >
+            {isSubmitting ? 'Creating...' : 'Create Master Automation'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
 
 // Master automation row component (for admin viewing master templates)
 const MasterAutomationRow = ({ automation, onEdit, onSync, syncing, theme: t }) => {
@@ -235,6 +473,7 @@ const AutomationsPage = ({ t }) => {
   const navigate = useNavigate();
   const [tab, setTab] = useState('automations');
   const [syncingKey, setSyncingKey] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Check if admin is viewing multiple users (master view mode)
   const { isAdmin } = useAuth();
@@ -266,7 +505,12 @@ const AutomationsPage = ({ t }) => {
   } = useAutomationMutations();
 
   // Mutations for master automations
-  const { syncMasterAutomation } = useMasterAutomationMutations();
+  const { syncMasterAutomation, createMasterAutomation } = useMasterAutomationMutations();
+
+  // Handler for creating master automation
+  const handleCreateMasterAutomation = async (automationData) => {
+    await createMasterAutomation.mutateAsync(automationData);
+  };
 
   // Navigation handlers
   const handleCreateNew = () => {
@@ -326,7 +570,34 @@ const AutomationsPage = ({ t }) => {
               Edit master automation templates that sync to all users
             </p>
           </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: t.primary,
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>+</span> Create Master Automation
+          </button>
         </div>
+
+        {/* Create Modal */}
+        {showCreateModal && (
+          <CreateMasterAutomationModal
+            onSave={handleCreateMasterAutomation}
+            onClose={() => setShowCreateModal(false)}
+            theme={t}
+          />
+        )}
 
         {/* Error state */}
         {masterError && (
