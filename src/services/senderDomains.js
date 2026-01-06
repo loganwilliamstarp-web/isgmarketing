@@ -96,6 +96,37 @@ export const senderDomainsService = {
    */
   async deleteDomain(domainId) {
     await this.callEdgeFunction('delete', { domainId });
+  },
+
+  /**
+   * Enable inbound parse for reply tracking
+   * @param {string} domainId - Domain UUID
+   * @param {string} subdomain - Optional subdomain (default: 'parse')
+   * @returns {Promise<Object>} Domain with inbound parse config
+   */
+  async enableInboundParse(domainId, subdomain = 'parse') {
+    const result = await this.callEdgeFunction('enable-inbound-parse', { domainId, subdomain });
+    return result;
+  },
+
+  /**
+   * Disable inbound parse for a domain
+   * @param {string} domainId - Domain UUID
+   * @returns {Promise<Object>} Updated domain
+   */
+  async disableInboundParse(domainId) {
+    const result = await this.callEdgeFunction('disable-inbound-parse', { domainId });
+    return result.domain;
+  },
+
+  /**
+   * Get inbound parse status and configuration
+   * @param {string} domainId - Domain UUID
+   * @returns {Promise<Object>} Inbound parse status and MX record requirements
+   */
+  async getInboundParseStatus(domainId) {
+    const result = await this.callEdgeFunction('get-inbound-parse-status', { domainId });
+    return result;
   }
 };
 
