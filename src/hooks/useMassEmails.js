@@ -68,14 +68,22 @@ export function useMassEmailBatch(batchId) {
 
 /**
  * Get recipients for a filter config
+ * @param {Object} filterConfig - Filter configuration
+ * @param {Object} options - Options including limit, offset, and allAccounts
+ * @param {boolean} options.allAccounts - If true, fetch all accounts without owner filter (for admin testing)
  */
 export function useMassEmailRecipients(filterConfig, options = {}) {
   const { ownerIds, filterKey } = useEffectiveOwner();
+  const { allAccounts = false, ...restOptions } = options;
 
   return useQuery({
-    queryKey: ['massEmailRecipients', filterKey, filterConfig, options],
-    queryFn: () => massEmailsService.getRecipients(ownerIds, filterConfig, options),
-    enabled: ownerIds.length > 0 && !!filterConfig
+    queryKey: ['massEmailRecipients', allAccounts ? 'all' : filterKey, filterConfig, restOptions],
+    queryFn: () => massEmailsService.getRecipients(
+      allAccounts ? null : ownerIds,
+      filterConfig,
+      { ...restOptions, allAccounts }
+    ),
+    enabled: (allAccounts || ownerIds.length > 0) && !!filterConfig
   });
 }
 
@@ -83,9 +91,17 @@ export function useMassEmailRecipients(filterConfig, options = {}) {
  * Get recipient stats (count and breakdown) in a single query
  * This avoids duplicate geocoding when both are needed
  * @param {Object} filterConfig - Filter configuration
- * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
+ * @param {boolean|Object} options - Either boolean for includeRoleAccounts (legacy) or options object
+ * @param {boolean} options.includeRoleAccounts - Include accounts from users with the same role
+ * @param {boolean} options.allAccounts - If true, fetch all accounts without owner filter (for admin testing)
  */
-export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = false) {
+export function useMassEmailRecipientStats(filterConfig, options = false) {
+  // Support legacy boolean parameter for backwards compatibility
+  const {
+    includeRoleAccounts = typeof options === 'boolean' ? options : false,
+    allAccounts = false
+  } = typeof options === 'object' ? options : {};
+
   const { ownerIds: effectiveOwnerIds, filterKey } = useEffectiveOwner();
   const { data: roleOwnerIds } = useRoleUserIds(includeRoleAccounts);
 
@@ -110,13 +126,18 @@ export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = f
     })),
     search: filterConfig.search,
     notOptedOut: filterConfig.notOptedOut,
-    includeRoleAccounts
+    includeRoleAccounts,
+    allAccounts
   } : null;
 
   return useQuery({
-    queryKey: ['massEmailRecipientStats', filterKey, stableFilterConfig, roleOwnerIds],
-    queryFn: () => massEmailsService.getRecipientStats(roleOwnerIds || effectiveOwnerIds, filterConfig),
-    enabled: effectiveOwnerIds.length > 0 && !!filterConfig && !!roleOwnerIds,
+    queryKey: ['massEmailRecipientStats', allAccounts ? 'all' : filterKey, stableFilterConfig, allAccounts ? null : roleOwnerIds],
+    queryFn: () => massEmailsService.getRecipientStats(
+      allAccounts ? null : (roleOwnerIds || effectiveOwnerIds),
+      filterConfig,
+      { allAccounts }
+    ),
+    enabled: (allAccounts || (effectiveOwnerIds.length > 0 && !!roleOwnerIds)) && !!filterConfig,
     staleTime: 30000, // Keep data fresh for 30 seconds
     gcTime: 60000, // Cache for 1 minute
     placeholderData: (previousData) => previousData // Show previous data while loading
@@ -127,10 +148,12 @@ export function useMassEmailRecipientStats(filterConfig, includeRoleAccounts = f
  * Count recipients for a filter config
  * Uses the combined stats query internally
  * @param {Object} filterConfig - Filter configuration
- * @param {boolean} includeRoleAccounts - Include accounts from users with the same role
+ * @param {boolean|Object} options - Either boolean for includeRoleAccounts (legacy) or options object
+ * @param {boolean} options.includeRoleAccounts - Include accounts from users with the same role
+ * @param {boolean} options.allAccounts - If true, fetch all accounts without owner filter (for admin testing)
  */
-export function useMassEmailRecipientCount(filterConfig, includeRoleAccounts = false) {
-  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig, includeRoleAccounts);
+export function useMassEmailRecipientCount(filterConfig, options = false) {
+  const { data, isLoading, isFetching, error } = useMassEmailRecipientStats(filterConfig, options);
   return {
     data: data?.count,
     isLoading,

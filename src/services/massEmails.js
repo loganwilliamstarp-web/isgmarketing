@@ -215,10 +215,11 @@ export const massEmailsService = {
   /**
    * Get recipients based on filter config with dynamic rules
    * Supports both legacy format (rules array) and new format (groups array with OR logic)
-   * @param {string|string[]} ownerId - Single owner ID or array of owner IDs
+   * @param {string|string[]|null} ownerId - Single owner ID, array of owner IDs, or null for all accounts
+   * @param {boolean} options.allAccounts - If true, fetch all accounts without owner filter (for admin testing)
    */
   async getRecipients(ownerId, filterConfig, options = {}) {
-    const { limit = 100, offset = 0 } = options;
+    const { limit = 100, offset = 0, allAccounts = false } = options;
     const {
       rules = [],
       groups = [],
@@ -231,13 +232,17 @@ export const massEmailsService = {
     let filterGroups = groups.length > 0 ? groups : (rules.length > 0 ? [{ rules }] : []);
 
     // Support multiple owner IDs
-    const ownerIds = Array.isArray(ownerId) ? ownerId : [ownerId];
+    const ownerIds = Array.isArray(ownerId) ? ownerId : (ownerId ? [ownerId] : []);
 
     // Get all accounts first (we'll filter client-side for group OR logic)
     let query = supabase
       .from('accounts')
-      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street, created_at')
-      .in('owner_id', ownerIds);
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street, created_at, owner_id');
+
+    // Apply owner filter unless allAccounts is true (for admin testing master automations)
+    if (!allAccounts && ownerIds.length > 0) {
+      query = query.in('owner_id', ownerIds);
+    }
 
     // Not opted out (applies globally)
     if (notOptedOut) {
@@ -1105,9 +1110,12 @@ export const massEmailsService = {
   /**
    * Get recipient count and location breakdown in a single call
    * This avoids duplicate geocoding when both are needed
-   * @param {string|string[]} ownerId - Single owner ID or array of owner IDs
+   * @param {string|string[]|null} ownerId - Single owner ID, array of owner IDs, or null for all accounts
+   * @param {Object} filterConfig - Filter configuration
+   * @param {Object} options - Options including allAccounts for admin testing
    */
-  async getRecipientStats(ownerId, filterConfig) {
+  async getRecipientStats(ownerId, filterConfig, options = {}) {
+    const { allAccounts = false } = options;
     const {
       rules = [],
       groups = [],
@@ -1139,12 +1147,12 @@ export const massEmailsService = {
 
     if (needsClientSideFilter) {
       // Fetch and filter recipients once, use for both count and breakdown
-      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000, allAccounts });
       count = recipients.length;
     } else {
       // Fast path for no filters or single group with only account_status/state filters
       // Use getRecipients which now handles both formats
-      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000 });
+      recipients = await this.getRecipients(ownerId, filterConfig, { limit: 10000, allAccounts });
       count = recipients.length;
     }
 

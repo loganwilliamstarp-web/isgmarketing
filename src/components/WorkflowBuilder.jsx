@@ -226,14 +226,17 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
   const hasFilters = filterConfig?.groups?.some(g => g.rules?.some(r => r.field && r.operator));
 
   // Fetch potential enrollees based on filter criteria (only when preview modal is open)
+  // When in master edit mode, fetch ALL accounts across the system to test filters properly
   const { data: potentialEnrollees, isLoading: loadingEnrollees } = useMassEmailRecipients(
     showPreviewModal && hasFilters ? filterConfig : null,
-    { limit: 500 }
+    { limit: 500, allAccounts: isMasterEdit }
   );
 
   // Get count of potential enrollees
+  // When in master edit mode, count ALL accounts to show total potential reach
   const { data: enrolleeCount, isLoading: loadingCount } = useMassEmailRecipientCount(
-    hasFilters ? filterConfig : null
+    hasFilters ? filterConfig : null,
+    { allAccounts: isMasterEdit }
   );
 
   const nodeTypes = {
@@ -1281,8 +1284,24 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
               <div>
                 <h2 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>Preview Potential Enrollees</h2>
                 <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0' }}>
-                  Contacts matching your entry criteria who would enter this automation
+                  {isMasterEdit
+                    ? 'Testing filters against ALL accounts in the system (admin view)'
+                    : 'Contacts matching your entry criteria who would enter this automation'}
                 </p>
+                {isMasterEdit && (
+                  <span style={{
+                    display: 'inline-block',
+                    marginTop: '6px',
+                    padding: '4px 8px',
+                    backgroundColor: `${t.warning}20`,
+                    color: t.warning,
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    Admin Test Mode - Showing All Accounts
+                  </span>
+                )}
               </div>
               <button onClick={() => setShowPreviewModal(false)} style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}>×</button>
             </div>
