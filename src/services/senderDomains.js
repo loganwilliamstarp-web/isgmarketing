@@ -40,20 +40,22 @@ export const senderDomainsService = {
   },
 
   /**
-   * Get all sender domains for the current user
+   * Get all sender domains for a user
+   * @param {string} targetOwnerId - Optional owner ID (for impersonation). If not provided, uses authenticated user.
    * @returns {Promise<Array>} List of sender domains
    */
-  async getAll() {
-    const result = await this.callEdgeFunction('list');
+  async getAll(targetOwnerId = null) {
+    const result = await this.callEdgeFunction('list', { targetOwnerId });
     return result.domains || [];
   },
 
   /**
-   * Get verified domains for the current user (for email template from address dropdown)
+   * Get verified domains for a user (for email template from address dropdown)
+   * @param {string} targetOwnerId - Optional owner ID (for impersonation). If not provided, uses authenticated user.
    * @returns {Promise<Array>} List of verified domains with default sender info
    */
-  async getVerifiedDomains() {
-    const result = await this.callEdgeFunction('verified');
+  async getVerifiedDomains(targetOwnerId = null) {
+    const result = await this.callEdgeFunction('verified', { targetOwnerId });
     return result.domains || [];
   },
 

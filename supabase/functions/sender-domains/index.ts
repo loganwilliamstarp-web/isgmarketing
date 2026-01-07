@@ -44,7 +44,7 @@ serve(async (req) => {
       )
     }
 
-    const ownerId = user.id
+    const authenticatedUserId = user.id
 
     // Parse request
     const url = new URL(req.url)
@@ -66,6 +66,19 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+
+    // Check if user is admin (can query other users' data)
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('user_unique_id', authenticatedUserId)
+      .single()
+
+    const isAdmin = userData?.role === 'master_admin' || userData?.role === 'agency_admin'
+
+    // For list and verified actions, allow admins to query a target user's domains
+    // Otherwise, use the authenticated user's ID
+    const ownerId = (isAdmin && body.targetOwnerId) ? body.targetOwnerId : authenticatedUserId
 
     let result
 
