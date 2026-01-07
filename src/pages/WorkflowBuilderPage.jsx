@@ -13,8 +13,8 @@ const WorkflowBuilderPage = ({ t }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isNew = !automationId || automationId === 'new';
   const isMasterEdit = !!defaultKey; // Editing a master automation directly
+  const isNew = !isMasterEdit && (!automationId || automationId === 'new');
 
   // Get template info from navigation state (if using a template)
   const templateInfo = location.state?.templateName || location.state?.templateId;
@@ -408,6 +408,7 @@ const WorkflowBuilderPage = ({ t }) => {
           onUpdate={setAutomationData}
           onSave={handleSave}
           canEdit={canEdit}
+          isMasterEdit={isMasterEdit}
         />
       </div>
     </div>

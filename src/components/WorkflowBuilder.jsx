@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import FilterBuilder, { formatRuleText } from './FilterBuilder';
 import { useMassEmailRecipients, useMassEmailRecipientCount, useTemplates } from '../hooks';
+import { useMasterTemplates } from '../hooks/useAdmin';
 
 // Default dark theme (fallback)
 const defaultTheme = {
@@ -62,7 +63,7 @@ const defaultNodes = [
   }
 ];
 
-const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit = true }) => {
+const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit = true, isMasterEdit = false }) => {
   // Use provided theme or default
   const t = themeProp || defaultTheme;
 
@@ -138,7 +139,13 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
   const [hoveredGroupTooltip, setHoveredGroupTooltip] = useState(null); // { contactId, groupIndex, x, y }
 
   // Fetch email templates for send_email node
-  const { data: templates = [], isLoading: templatesLoading } = useTemplates();
+  // When editing a master automation, only show master templates
+  const { data: regularTemplates = [], isLoading: regularTemplatesLoading } = useTemplates();
+  const { data: masterTemplates = [], isLoading: masterTemplatesLoading } = useMasterTemplates();
+
+  // Use master templates when editing a master automation, otherwise use regular templates
+  const templates = isMasterEdit ? masterTemplates : regularTemplates;
+  const templatesLoading = isMasterEdit ? masterTemplatesLoading : regularTemplatesLoading;
 
   // Get stats from automation data (for workflow node tracking)
   const nodeStats = automation?.nodeStats || {};
@@ -991,15 +998,30 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                 {selectedNodeData.type === 'send_email' && (
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', color: t.textSecondary, marginBottom: '6px' }}>Email Template</label>
+                    {isMasterEdit && (
+                      <p style={{ fontSize: '11px', color: t.warning, marginBottom: '8px', margin: '0 0 8px 0' }}>
+                        Only master templates are shown for master automations
+                      </p>
+                    )}
                     <select
-                      value={selectedNodeData.config?.template || ''}
+                      value={isMasterEdit
+                        ? (selectedNodeData.config?.templateKey || '')
+                        : (selectedNodeData.config?.template || '')}
                       onChange={(e) => {
-                        const selectedTemplate = templates.find(t => t.id === e.target.value);
+                        const templateValue = e.target.value;
+                        // For master edit, find by default_key; otherwise by id
+                        const selectedTemplate = isMasterEdit
+                          ? templates.find(t => t.default_key === templateValue)
+                          : templates.find(t => t.id === templateValue);
+
                         updateNode(selectedNode, {
                           config: {
                             ...selectedNodeData.config,
-                            template: e.target.value,
-                            templateName: selectedTemplate?.name || ''
+                            // Store templateKey for master automations, template (id) for regular
+                            ...(isMasterEdit
+                              ? { templateKey: templateValue, templateName: selectedTemplate?.name || '' }
+                              : { template: templateValue, templateName: selectedTemplate?.name || '' }
+                            )
                           },
                           subtitle: selectedTemplate?.name || 'Select template...'
                         });
@@ -1018,7 +1040,10 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                         {templatesLoading ? 'Loading templates...' : 'Select template...'}
                       </option>
                       {templates.map(template => (
-                        <option key={template.id} value={template.id}>
+                        <option
+                          key={isMasterEdit ? template.default_key : template.id}
+                          value={isMasterEdit ? template.default_key : template.id}
+                        >
                           {template.name}
                         </option>
                       ))}
