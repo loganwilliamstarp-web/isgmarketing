@@ -33,10 +33,11 @@ export function useEffectiveOwner() {
 
   // Create a unique filter key for query caching
   // This ensures queries are re-fetched when the filter changes
-  const filterKey = scopeFilter.active
-    ? `${scopeFilter.filterType}:${scopeFilter.filterValue}`
-    : impersonating.active
-      ? `impersonate:${impersonating.targetUserId}`
+  // IMPORTANT: Priority must match getEffectiveOwnerIds() - impersonation first, then scope filter
+  const filterKey = impersonating.active
+    ? `impersonate:${impersonating.targetUserId}`
+    : scopeFilter.active
+      ? `${scopeFilter.filterType}:${scopeFilter.filterValue}`
       : `user:${userId}`;
 
   return {
