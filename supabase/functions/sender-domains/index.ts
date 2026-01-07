@@ -261,6 +261,27 @@ async function verifyDomain(
     throw new Error('Domain is missing SendGrid authentication ID')
   }
 
+  // First, get the current domain info from SendGrid to get full DNS records
+  const domainInfoResponse = await fetch(
+    `${SENDGRID_API_URL}/whitelabel/domains/${domain.sendgrid_domain_id}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+
+  let currentDnsRecords = domain.dns_records || {}
+  if (domainInfoResponse.ok) {
+    const domainInfo = await domainInfoResponse.json()
+    if (domainInfo.dns) {
+      // Get the full DNS records with host/data from the domain info
+      currentDnsRecords = formatDnsRecords(domainInfo.dns)
+    }
+  }
+
   // Validate with SendGrid
   const sgResponse = await fetch(
     `${SENDGRID_API_URL}/whitelabel/domains/${domain.sendgrid_domain_id}/validate`,
@@ -280,9 +301,12 @@ async function verifyDomain(
 
   const sgResult = await sgResponse.json()
 
+  // Merge validation results with current DNS records (to preserve host/data)
+  const mergedRecords = mergeValidationWithDnsRecords(currentDnsRecords, sgResult.validation_results)
+
   // Update database
   const updates: any = {
-    dns_records: formatValidationResult(sgResult.validation_results),
+    dns_records: mergedRecords,
     last_check_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }
@@ -409,40 +433,30 @@ function formatDnsRecords(dns: any) {
   return records
 }
 
-function formatValidationResult(results: any) {
-  const records: any = {}
+// Merge validation results with existing DNS records to preserve host/data values
+function mergeValidationWithDnsRecords(dnsRecords: any, validationResults: any) {
+  const merged: any = {}
 
-  if (results.mail_cname) {
-    records.mail_cname = {
-      type: 'CNAME',
-      host: results.mail_cname.host || '',
-      data: results.mail_cname.data || '',
-      valid: results.mail_cname.valid || false,
-      reason: results.mail_cname.reason
+  const recordKeys = ['mail_cname', 'dkim1', 'dkim2']
+
+  for (const key of recordKeys) {
+    const existing = dnsRecords[key]
+    const validation = validationResults?.[key]
+
+    if (existing || validation) {
+      merged[key] = {
+        type: 'CNAME',
+        // Prefer existing host/data, fall back to validation results
+        host: existing?.host || validation?.host || '',
+        data: existing?.data || validation?.data || '',
+        // Use validation result for valid status
+        valid: validation?.valid || false,
+        reason: validation?.reason
+      }
     }
   }
 
-  if (results.dkim1) {
-    records.dkim1 = {
-      type: 'CNAME',
-      host: results.dkim1.host || '',
-      data: results.dkim1.data || '',
-      valid: results.dkim1.valid || false,
-      reason: results.dkim1.reason
-    }
-  }
-
-  if (results.dkim2) {
-    records.dkim2 = {
-      type: 'CNAME',
-      host: results.dkim2.host || '',
-      data: results.dkim2.data || '',
-      valid: results.dkim2.valid || false,
-      reason: results.dkim2.reason
-    }
-  }
-
-  return records
+  return merged
 }
 
 // ============================================================================
