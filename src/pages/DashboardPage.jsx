@@ -391,42 +391,6 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview }) => (
   </div>
 );
 
-// Performance comparison bar
-const PerformanceBar = ({ label, you, avg, theme: t }) => (
-  <div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-      <span style={{ fontSize: '12px', color: t.textSecondary }}>{label}</span>
-      <span style={{ fontSize: '12px', color: t.textMuted }}>{you}% vs {avg}%</span>
-    </div>
-    <div style={{ display: 'flex', gap: '4px', height: '24px' }}>
-      <div style={{ 
-        width: `${Math.min(you, 100)}%`, 
-        backgroundColor: t.primary, 
-        borderRadius: '4px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingRight: '6px',
-        minWidth: '30px'
-      }}>
-        <span style={{ fontSize: '10px', color: '#fff', fontWeight: '600' }}>{you}%</span>
-      </div>
-      <div style={{ 
-        width: `${Math.min(avg, 100)}%`, 
-        backgroundColor: '#14b8a6', 
-        borderRadius: '4px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingRight: '6px',
-        minWidth: '30px'
-      }}>
-        <span style={{ fontSize: '10px', color: '#fff', fontWeight: '600' }}>{avg}%</span>
-      </div>
-    </div>
-  </div>
-);
-
 // Main Dashboard Page Component
 const DashboardPage = ({ t }) => {
   const { userId } = useParams();
@@ -436,13 +400,6 @@ const DashboardPage = ({ t }) => {
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
   const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
   const { data: chartData, isLoading: chartLoading } = useEmailPerformanceChart(30);
-
-  // Calculate comparison stats (mock for now - would come from aggregate query)
-  const comparisonStats = [
-    { label: 'Open Rate', you: stats?.openRate || 0, avg: 32 },
-    { label: 'Click Rate', you: stats?.clickRate || 0, avg: 8 },
-    { label: 'Response Rate', you: stats?.responseRate || 0, avg: 5 },
-  ];
 
   // Format numbers
   const formatNumber = (num) => {
@@ -477,7 +434,7 @@ const DashboardPage = ({ t }) => {
       )}
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
         <StatCard
           label="Emails Sent"
           value={formatNumber(stats?.emailsSent)}
@@ -490,18 +447,27 @@ const DashboardPage = ({ t }) => {
         <StatCard
           label="Open Rate"
           value={formatPercent(stats?.openRate)}
-          change={stats?.openRateChange ? `${stats.openRateChange > 0 ? '+' : ''}${stats.openRateChange}%` : null}
+          change="vs 32% avg"
           icon="📬"
-          positive={stats?.openRateChange > 0}
+          positive={(stats?.openRate || 0) > 32}
           isLoading={statsLoading}
           theme={t}
         />
         <StatCard
           label="Click Rate"
           value={formatPercent(stats?.clickRate)}
-          change={stats?.clickRateChange ? `${stats.clickRateChange > 0 ? '+' : ''}${stats.clickRateChange}%` : null}
+          change="vs 8% avg"
           icon="🖱️"
-          positive={stats?.clickRateChange > 0}
+          positive={(stats?.clickRate || 0) > 8}
+          isLoading={statsLoading}
+          theme={t}
+        />
+        <StatCard
+          label="Response Rate"
+          value={formatPercent(stats?.responseRate)}
+          change="vs 5% avg"
+          icon="💬"
+          positive={(stats?.responseRate || 0) > 5}
           isLoading={statsLoading}
           theme={t}
         />
@@ -578,125 +544,77 @@ const DashboardPage = ({ t }) => {
           </div>
         </div>
 
-        {/* Performance Comparison */}
+        {/* Recent Email Activity */}
         <div style={{
           padding: '20px',
           backgroundColor: t.bgCard,
           borderRadius: '12px',
           border: `1px solid ${t.border}`
         }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '4px' }}>
-            Performance Comparison
-          </h3>
-          <p style={{ fontSize: '12px', color: t.textSecondary, marginBottom: '16px' }}>
-            Your metrics compared to industry averages
-          </p>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {statsLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i}>
-                  <Skeleton height="12px" width="100px" />
-                  <div style={{ marginTop: '8px' }}><Skeleton height="24px" /></div>
-                </div>
-              ))
-            ) : (
-              comparisonStats.map((metric, i) => (
-                <PerformanceBar 
-                  key={i} 
-                  label={metric.label} 
-                  you={metric.you} 
-                  avg={metric.avg} 
-                  theme={t} 
-                />
-              ))
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
+              Recent Email Activity
+            </h3>
+            <Link
+              to={`/${userId}/timeline`}
+              style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
+            >
+              View all →
+            </Link>
           </div>
-          
-          <div style={{ display: 'flex', gap: '16px', marginTop: '16px', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: t.primary, borderRadius: '2px' }} />
-              <span style={{ fontSize: '11px', color: t.textSecondary }}>You</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: '#14b8a6', borderRadius: '2px' }} />
-              <span style={{ fontSize: '11px', color: t.textSecondary }}>Industry Avg</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Recent Activity Section */}
-      <div style={{
-        marginTop: '20px',
-        padding: '20px',
-        backgroundColor: t.bgCard,
-        borderRadius: '12px',
-        border: `1px solid ${t.border}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
-            Recent Email Activity
-          </h3>
-          <Link
-            to={`/${userId}/timeline`}
-            style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
-          >
-            View all →
-          </Link>
-        </div>
-        
-        {chartLoading ? (
-          <Skeleton height="200px" />
-        ) : chartData?.length > 0 ? (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'flex-end', 
-            gap: '4px', 
-            height: '200px',
-            padding: '20px 0'
-          }}>
-            {chartData.slice(-14).map((day, i) => {
-              const maxSent = Math.max(...chartData.map(d => d.sent || 0), 1);
-              const height = ((day.sent || 0) / maxSent) * 150;
-              return (
-                <div 
-                  key={i} 
-                  style={{ 
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <div 
-                    style={{ 
-                      width: '100%',
-                      height: `${height}px`,
-                      backgroundColor: t.primary,
-                      borderRadius: '4px 4px 0 0',
-                      minHeight: '4px'
+          {chartLoading ? (
+            <Skeleton height="200px" />
+          ) : chartData?.length > 0 ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: '4px',
+              height: '200px',
+              padding: '20px 0'
+            }}>
+              {chartData.slice(-14).map((day, i) => {
+                const maxSent = Math.max(...chartData.map(d => d.sent || 0), 1);
+                const height = ((day.sent || 0) / maxSent) * 150;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '4px'
                     }}
-                    title={`${day.sent || 0} sent on ${day.date}`}
-                  />
-                  <span style={{ fontSize: '9px', color: t.textMuted }}>
-                    {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div style={{ 
-            padding: '40px 20px', 
-            textAlign: 'center', 
-            color: t.textMuted,
-            fontSize: '14px'
-          }}>
-            No email activity data yet
-          </div>
-        )}
+                  >
+                    <div
+                      style={{
+                        width: '100%',
+                        height: `${height}px`,
+                        backgroundColor: t.primary,
+                        borderRadius: '4px 4px 0 0',
+                        minHeight: '4px'
+                      }}
+                      title={`${day.sent || 0} sent on ${day.date}`}
+                    />
+                    <span style={{ fontSize: '9px', color: t.textMuted }}>
+                      {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{
+              padding: '40px 20px',
+              textAlign: 'center',
+              color: t.textMuted,
+              fontSize: '14px'
+            }}>
+              No email activity data yet
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Email Preview Modal */}
