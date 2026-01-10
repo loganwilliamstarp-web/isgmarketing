@@ -66,11 +66,7 @@ const ComparisonStatCard = ({ label, value, industryAvg, icon, isLoading, theme:
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-            <span style={{ fontSize: '28px', fontWeight: '700', color: t.text }}>{value}%</span>
-            <span style={{ fontSize: '11px', color: t.textMuted }}>vs {industryAvg}%</span>
-          </div>
-          <div style={{ display: 'flex', gap: '3px', height: '20px' }}>
+          <div style={{ display: 'flex', gap: '3px', height: '24px', marginTop: '8px' }}>
             <div style={{
               width: `${Math.max(Math.min(numValue, 100), 5)}%`,
               backgroundColor: t.primary,
