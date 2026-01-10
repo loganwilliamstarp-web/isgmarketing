@@ -145,14 +145,22 @@ const SettingsPage = ({ t }) => {
     }
   };
 
-  // Save all settings
-  const handleSaveSettings = async () => {
+  // Save email settings (only email-related fields)
+  const handleSaveEmailSettings = async () => {
     setIsSaving(true);
     setSaveMessage(null);
     try {
-      await updateSettings.mutateAsync(formData);
-      setSaveMessage({ type: 'success', text: 'Settings saved successfully!' });
+      // Only send email-related fields to avoid column mismatch errors
+      const emailSettings = {
+        sending_domain: formData.sending_domain,
+        default_from_name: formData.default_from_name,
+        default_from_email: formData.default_from_email,
+        reply_to_email: formData.reply_to_email
+      };
+      await updateSettings.mutateAsync(emailSettings);
+      setSaveMessage({ type: 'success', text: 'Email settings saved successfully!' });
     } catch (err) {
+      console.error('Failed to save email settings:', err);
       setSaveMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
     } finally {
       setIsSaving(false);
@@ -527,7 +535,7 @@ const SettingsPage = ({ t }) => {
               />
 
               <button
-                onClick={handleSaveSettings}
+                onClick={handleSaveEmailSettings}
                 disabled={isSaving}
                 style={{
                   padding: '12px 24px',
@@ -541,7 +549,7 @@ const SettingsPage = ({ t }) => {
                   opacity: isSaving ? 0.7 : 1
                 }}
               >
-                {isSaving ? '💾 Saving...' : '💾 Save Configuration'}
+                {isSaving ? 'Saving...' : 'Save Configuration'}
               </button>
             </div>
           )}

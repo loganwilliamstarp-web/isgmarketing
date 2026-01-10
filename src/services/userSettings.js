@@ -112,6 +112,7 @@ export const userSettingsService = {
   /**
    * Update agency info for all users in a profile (agency)
    * Used by agency admins to update settings for their entire agency
+   * Creates user_settings records for users who don't have one yet
    */
   async updateAgencyInfoByProfile(profileName, agencyInfo) {
     const { agency_name, agency_address, agency_phone, agency_website } = agencyInfo;
@@ -126,18 +127,25 @@ export const userSettingsService = {
     if (!users || users.length === 0) return null;
 
     const userIds = users.map(u => u.user_unique_id);
+    const now = new Date().toISOString();
 
-    // Update all user_settings for these users
+    // Upsert all user_settings for these users (creates if not exists, updates if exists)
+    const upsertData = userIds.map(userId => ({
+      user_id: userId,
+      agency_name,
+      agency_address,
+      agency_phone,
+      agency_website,
+      created_at: now,
+      updated_at: now
+    }));
+
     const { data, error } = await supabase
       .from('user_settings')
-      .update({
-        agency_name,
-        agency_address,
-        agency_phone,
-        agency_website,
-        updated_at: new Date().toISOString()
+      .upsert(upsertData, {
+        onConflict: 'user_id',
+        ignoreDuplicates: false
       })
-      .in('user_id', userIds)
       .select();
 
     if (error) throw error;
