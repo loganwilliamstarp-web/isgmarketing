@@ -325,39 +325,39 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
 
               for (const policy of accountPolicies) {
-              // Check policy type filter
-              if (rule.policyType) {
-                const policyTypes = rule.policyType.split(',').map((t: string) => t.toLowerCase().trim())
-                if (!policyTypes.some((t: string) => policy.policy_lob?.toLowerCase().includes(t))) {
-                  continue
+                // Check policy type filter
+                if (rule.policyType) {
+                  const policyTypes = rule.policyType.split(',').map((t: string) => t.toLowerCase().trim())
+                  if (!policyTypes.some((t: string) => policy.policy_lob?.toLowerCase().includes(t))) {
+                    continue
+                  }
+                }
+
+                // Check policy term filter
+                if (rule.policyTerm) {
+                  const termValue = rule.policyTerm.toLowerCase().trim()
+                  const policyTerm = (policy.policy_term || '').toLowerCase().trim()
+                  // Match "6 months", "6 month", "12 months", "12 month", etc.
+                  if (!policyTerm.includes(termValue.replace(' months', '').replace(' month', ''))) {
+                    continue
+                  }
+                }
+
+                if (policy[dateField]) {
+                  triggerDates.push({
+                    field: rule.field,
+                    date: new Date(policy[dateField]),
+                    daysBeforeTrigger: rule.daysBeforeTrigger || 0
+                  })
                 }
               }
-
-              // Check policy term filter
-              if (rule.policyTerm) {
-                const termValue = rule.policyTerm.toLowerCase().trim()
-                const policyTerm = (policy.policy_term || '').toLowerCase().trim()
-                // Match "6 months", "6 month", "12 months", "12 month", etc.
-                if (!policyTerm.includes(termValue.replace(' months', '').replace(' month', ''))) {
-                  continue
-                }
-              }
-
-              if (policy[dateField]) {
-                triggerDates.push({
-                  field: rule.field,
-                  date: new Date(policy[dateField]),
-                  daysBeforeTrigger: rule.daysBeforeTrigger || 0
-                })
-              }
+            } else if (rule.field === 'account_created' && account.created_at) {
+              triggerDates.push({
+                field: rule.field,
+                date: new Date(account.created_at),
+                daysBeforeTrigger: rule.daysBeforeTrigger || 0
+              })
             }
-          } else if (rule.field === 'account_created' && account.created_at) {
-            triggerDates.push({
-              field: rule.field,
-              date: new Date(account.created_at),
-              daysBeforeTrigger: rule.daysBeforeTrigger || 0
-            })
-          }
 
           for (const triggerDate of triggerDates) {
             for (const emailStep of emailSchedule) {
