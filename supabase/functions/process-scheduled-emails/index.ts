@@ -185,6 +185,16 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const sendTime = automation.send_time || '09:00'
       const timezone = automation.timezone || 'America/Chicago'
 
+      // Get user settings for from_email and from_name
+      const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('from_email, from_name')
+        .eq('user_id', automation.owner_id)
+        .single()
+
+      const defaultFromEmail = userSettings?.from_email || null
+      const defaultFromName = userSettings?.from_name || null
+
       // Get all accounts that match base criteria
       let accountsQuery = supabase
         .from('accounts')
@@ -273,7 +283,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
       const { data: templates } = await supabase
         .from('email_templates')
-        .select('id, from_email, from_name, subject')
+        .select('id, subject')
         .in('id', templateIds)
 
       const templateMap: Record<string, any> = {}
@@ -341,8 +351,8 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               trigger_field: 'activation',
               node_id: emailStep.nodeId,
               requires_verification: false, // No verification needed for immediate sends
-              from_email: template.from_email,
-              from_name: template.from_name,
+              from_email: defaultFromEmail,
+              from_name: defaultFromName,
               subject: template.subject
             })
 
@@ -441,8 +451,8 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
                   trigger_field: triggerDate.field,
                   node_id: emailStep.nodeId,
                   requires_verification: true,
-                  from_email: template.from_email,
-                  from_name: template.from_name,
+                  from_email: defaultFromEmail,
+                  from_name: defaultFromName,
                   subject: template.subject
                 })
 
