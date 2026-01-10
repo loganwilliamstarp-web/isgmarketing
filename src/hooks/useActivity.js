@@ -1,23 +1,18 @@
 // src/hooks/useActivity.js
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { activityLogService } from '../services/activityLog';
-import { useParams } from 'react-router-dom';
-
-const useOwnerId = () => {
-  const { userId } = useParams();
-  return userId;
-};
+import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
  * Get recent activity
  */
 export function useRecentActivity(options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['activity', ownerId, options],
-    queryFn: () => activityLogService.getRecent(ownerId, options),
-    enabled: !!ownerId
+    queryKey: ['activity', filterKey, options],
+    queryFn: () => activityLogService.getRecent(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -25,12 +20,12 @@ export function useRecentActivity(options = {}) {
  * Get activity for an account
  */
 export function useAccountActivity(accountId, limit = 20) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['activity', ownerId, 'account', accountId],
-    queryFn: () => activityLogService.getByAccount(ownerId, accountId, limit),
-    enabled: !!ownerId && !!accountId,
+    queryKey: ['activity', filterKey, 'account', accountId],
+    queryFn: () => activityLogService.getByAccount(ownerIds, accountId, limit),
+    enabled: ownerIds.length > 0 && !!accountId,
     staleTime: 30000, // Cache for 30 seconds
   });
 }
@@ -39,12 +34,12 @@ export function useAccountActivity(accountId, limit = 20) {
  * Get activity for an automation
  */
 export function useAutomationActivity(automationId, limit = 50) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['activity', ownerId, 'automation', automationId],
-    queryFn: () => activityLogService.getByAutomation(ownerId, automationId, limit),
-    enabled: !!ownerId && !!automationId
+    queryKey: ['activity', filterKey, 'automation', automationId],
+    queryFn: () => activityLogService.getByAutomation(ownerIds, automationId, limit),
+    enabled: ownerIds.length > 0 && !!automationId
   });
 }
 
@@ -52,12 +47,12 @@ export function useAutomationActivity(automationId, limit = 50) {
  * Get activity by event type
  */
 export function useActivityByType(eventType, options = {}) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['activity', ownerId, 'type', eventType, options],
-    queryFn: () => activityLogService.getByType(ownerId, eventType, options),
-    enabled: !!ownerId && !!eventType
+    queryKey: ['activity', filterKey, 'type', eventType, options],
+    queryFn: () => activityLogService.getByType(ownerIds, eventType, options),
+    enabled: ownerIds.length > 0 && !!eventType
   });
 }
 
@@ -65,12 +60,12 @@ export function useActivityByType(eventType, options = {}) {
  * Get activity stats
  */
 export function useActivityStats(days = 7) {
-  const ownerId = useOwnerId();
-  
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
   return useQuery({
-    queryKey: ['activity', ownerId, 'stats', days],
-    queryFn: () => activityLogService.getStats(ownerId, days),
-    enabled: !!ownerId
+    queryKey: ['activity', filterKey, 'stats', days],
+    queryFn: () => activityLogService.getStats(ownerIds, days),
+    enabled: ownerIds.length > 0
   });
 }
 
@@ -78,13 +73,13 @@ export function useActivityStats(days = 7) {
  * Activity log mutations
  */
 export function useActivityMutations() {
-  const ownerId = useOwnerId();
+  const { ownerIds, filterKey } = useEffectiveOwner();
   const queryClient = useQueryClient();
 
   const logActivity = useMutation({
-    mutationFn: (activity) => activityLogService.log(ownerId, activity),
+    mutationFn: (activity) => activityLogService.log(ownerIds, activity),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['activity', ownerId] });
+      queryClient.invalidateQueries({ queryKey: ['activity'] });
     }
   });
 
