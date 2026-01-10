@@ -51,12 +51,53 @@ export const senderDomainsService = {
 
   /**
    * Get verified domains for a user (for email template from address dropdown)
-   * @param {string} targetOwnerId - Optional owner ID (for impersonation). If not provided, uses authenticated user.
+   * Queries database directly since app uses Salesforce auth (not Supabase auth)
+   * @param {string} targetOwnerId - Owner ID to look up domains for
    * @returns {Promise<Array>} List of verified domains with default sender info
    */
   async getVerifiedDomains(targetOwnerId = null) {
-    const result = await this.callEdgeFunction('verified', { targetOwnerId });
-    return result.domains || [];
+    if (!targetOwnerId) {
+      return [];
+    }
+
+    // Get the user's email domain to match against verified sender domains
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('user_unique_id', targetOwnerId)
+      .single();
+
+    if (userError || !userData?.email) {
+      console.log('getVerifiedDomains: No user email found for ownerId:', targetOwnerId);
+      return [];
+    }
+
+    // Extract domain from user's email (e.g., "john@isgdfw.com" -> "isgdfw.com")
+    const userEmailDomain = userData.email.split('@')[1]?.toLowerCase();
+
+    if (!userEmailDomain) {
+      console.log('getVerifiedDomains: Could not extract domain from email:', userData.email);
+      return [];
+    }
+
+    console.log('getVerifiedDomains: Looking for verified domains matching:', userEmailDomain);
+
+    // Get verified domains that match the user's email domain
+    // Match either exact domain OR subdomains (e.g., mail.isgdfw.com matches isgdfw.com)
+    const { data, error } = await supabase
+      .from('sender_domains')
+      .select('id, domain, default_from_email, default_from_name')
+      .eq('status', 'verified')
+      .or(`domain.eq.${userEmailDomain},domain.ilike.%.${userEmailDomain}`)
+      .order('domain');
+
+    if (error) {
+      console.error('getVerifiedDomains error:', error);
+      return [];
+    }
+
+    console.log('getVerifiedDomains: Found domains:', data?.length || 0, data?.map(d => d.domain));
+    return data || [];
   },
 
   /**
