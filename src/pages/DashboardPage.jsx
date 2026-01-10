@@ -252,7 +252,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
             </div>
           ) : htmlContent ? (
             <div
-              dangerouslySetInnerHTML={{ __html: htmlContent + footerHtml }}
+              dangerouslySetInnerHTML={{ __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` + htmlContent + footerHtml }}
               style={{
                 fontFamily: 'Arial, sans-serif',
                 fontSize: '14px',

@@ -883,7 +883,15 @@ async function sendEmailViaSendGrid(
 
   // Build email footer with signature, company info, and unsubscribe
   const emailFooter = buildEmailFooter(userSettings, email)
-  const htmlContent = baseHtmlContent + emailFooter
+
+  // Wrap in proper HTML email structure with paragraph styling
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
+      <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
+      ${baseHtmlContent}
+      ${emailFooter}
+    </div>
+  `.trim()
 
   // Build custom Message-ID for reply tracking
   // Format: <isg-{email_log_id}-{timestamp}@{domain}>
