@@ -156,12 +156,31 @@ async function listDomains(supabase: any, ownerId: string) {
 }
 
 async function getVerifiedDomains(supabase: any, ownerId: string) {
-  // Any verified domain in the system can be used by any user
-  // This allows agencies to share verified domains across the platform
+  // Get the user's email domain to match against verified sender domains
+  const { data: userData } = await supabase
+    .from('users')
+    .select('email')
+    .eq('user_unique_id', ownerId)
+    .single()
+
+  if (!userData?.email) {
+    return { domains: [] }
+  }
+
+  // Extract domain from user's email (e.g., "john@smithinsurance.com" -> "smithinsurance.com")
+  const userEmailDomain = userData.email.split('@')[1]?.toLowerCase()
+
+  if (!userEmailDomain) {
+    return { domains: [] }
+  }
+
+  // Get verified domains that match the user's email domain
+  // This allows all users with @smithinsurance.com emails to use verified smithinsurance.com domains
   const { data, error } = await supabase
     .from('sender_domains')
     .select('id, domain, default_from_email, default_from_name')
     .eq('status', 'verified')
+    .ilike('domain', `%${userEmailDomain}`)
     .order('domain')
 
   if (error) throw error
