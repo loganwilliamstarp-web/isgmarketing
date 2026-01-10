@@ -59,15 +59,18 @@ serve(async (req) => {
 
     // Parse request to determine action
     let action = 'process' // default action
+    let automationId: string | null = null
     try {
       const body = await req.json()
       action = body.action || 'process'
+      automationId = body.automationId || null
     } catch {
       // No body or invalid JSON, use default action
     }
 
     const results = {
       action,
+      automationId,
       verified: 0,
       cancelled: 0,
       sent: 0,
@@ -78,8 +81,9 @@ serve(async (req) => {
     }
 
     // Step 0: Daily refresh - find new qualifying accounts for active automations
-    if (action === 'refresh' || action === 'daily') {
-      const refreshResult = await runDailyRefresh(supabaseClient)
+    // If automationId is provided, only refresh that specific automation
+    if (action === 'refresh' || action === 'daily' || action === 'activate') {
+      const refreshResult = await runDailyRefresh(supabaseClient, automationId)
       results.refreshed = refreshResult.automationsProcessed
       results.newScheduled = refreshResult.totalAdded
       results.cancelled += refreshResult.totalRemoved
@@ -124,7 +128,7 @@ serve(async (req) => {
 // DAILY REFRESH - Find new qualifying accounts
 // ============================================================================
 
-async function runDailyRefresh(supabase: any): Promise<{
+async function runDailyRefresh(supabase: any, specificAutomationId: string | null = null): Promise<{
   automationsProcessed: number,
   totalAdded: number,
   totalRemoved: number,
@@ -135,11 +139,20 @@ async function runDailyRefresh(supabase: any): Promise<{
   let totalAdded = 0
   let totalRemoved = 0
 
-  // Get all active automations
-  const { data: automations, error } = await supabase
+  // Get automations to process
+  let query = supabase
     .from('automations')
     .select('*')
-    .in('status', ['Active', 'active'])
+
+  if (specificAutomationId) {
+    // Only process the specified automation (for activation)
+    query = query.eq('id', specificAutomationId)
+  } else {
+    // Daily refresh - only active automations
+    query = query.in('status', ['Active', 'active'])
+  }
+
+  const { data: automations, error } = await query
 
   if (error) {
     errors.push(`Failed to get active automations: ${error.message}`)
@@ -192,7 +205,7 @@ async function runDailyRefresh(supabase: any): Promise<{
       const accountIds = accounts.map((a: any) => a.account_unique_id)
       const { data: policies } = await supabase
         .from('policies')
-        .select('account_id, policy_lob, expiration_date, effective_date, policy_status')
+        .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term')
         .in('account_id', accountIds)
         .eq('policy_status', 'Active')
 
@@ -216,11 +229,15 @@ async function runDailyRefresh(supabase: any): Promise<{
 
       const newEmails: any[] = []
 
+      // Calculate 1 year from now for pre-schedule cap
+      const oneYearFromNow = new Date(today)
+      oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
+
       for (const account of accounts) {
         const accountPolicies = (policies || []).filter((p: any) => p.account_id === account.account_unique_id)
 
         for (const rule of dateTriggerRules) {
-          const triggerDates: { date: Date, field: string }[] = []
+          const triggerDates: { date: Date, field: string, daysBeforeTrigger: number }[] = []
 
           if (rule.field === 'policy_expiration' || rule.field === 'policy_effective') {
             const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
@@ -234,29 +251,51 @@ async function runDailyRefresh(supabase: any): Promise<{
                 }
               }
 
+              // Check policy term filter
+              if (rule.policyTerm) {
+                const termValue = rule.policyTerm.toLowerCase().trim()
+                const policyTerm = (policy.policy_term || '').toLowerCase().trim()
+                // Match "6 months", "6 month", "12 months", "12 month", etc.
+                if (!policyTerm.includes(termValue.replace(' months', '').replace(' month', ''))) {
+                  continue
+                }
+              }
+
               if (policy[dateField]) {
                 triggerDates.push({
                   field: rule.field,
-                  date: new Date(policy[dateField])
+                  date: new Date(policy[dateField]),
+                  daysBeforeTrigger: rule.daysBeforeTrigger || 0
                 })
               }
             }
           } else if (rule.field === 'account_created' && account.created_at) {
             triggerDates.push({
               field: rule.field,
-              date: new Date(account.created_at)
+              date: new Date(account.created_at),
+              daysBeforeTrigger: rule.daysBeforeTrigger || 0
             })
           }
 
           for (const triggerDate of triggerDates) {
             for (const emailStep of emailSchedule) {
-              const sendDate = new Date(triggerDate.date)
+              // Calculate first qualification date (trigger date - days before trigger)
+              // Then add workflow delays for subsequent emails
+              const firstQualificationDate = new Date(triggerDate.date)
+              firstQualificationDate.setDate(firstQualificationDate.getDate() - triggerDate.daysBeforeTrigger)
+
+              // Send date = first qualification date + workflow delay offset
+              const sendDate = new Date(firstQualificationDate)
               sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
 
               const [hours, minutes] = sendTime.split(':').map(Number)
               sendDate.setHours(hours, minutes, 0, 0)
 
+              // Skip if send date is in the past
               if (sendDate < today) continue
+
+              // Skip if send date is more than 1 year in the future
+              if (sendDate > oneYearFromNow) continue
 
               const qualificationValue = triggerDate.date.toISOString().split('T')[0]
               const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
@@ -884,16 +923,68 @@ function extractDateTriggerRules(filterConfig: any): any[] {
   const groups = filterConfig?.groups || []
 
   for (const group of groups) {
-    for (const rule of (group.rules || [])) {
+    const groupRules = group.rules || []
+
+    // Find all date-based rules in this group for the same field
+    const dateRulesByField: Record<string, any[]> = {}
+
+    for (const rule of groupRules) {
       if (['policy_expiration', 'policy_effective', 'account_created'].includes(rule.field)) {
         if (['in_next_days', 'in_last_days', 'less_than_days_future', 'more_than_days_future'].includes(rule.operator)) {
-          rules.push({
-            field: rule.field,
-            operator: rule.operator,
-            value: parseInt(rule.value, 10),
-            policyType: group.rules?.find((r: any) => r.field === 'active_policy_type' || r.field === 'policy_type')?.value
-          })
+          if (!dateRulesByField[rule.field]) {
+            dateRulesByField[rule.field] = []
+          }
+          dateRulesByField[rule.field].push(rule)
         }
+      }
+    }
+
+    // For each field, calculate the "days before trigger" for first email
+    for (const [field, fieldRules] of Object.entries(dateRulesByField)) {
+      // The INNER bound (more_than_days_future) is when the email journey STARTS
+      // The OUTER bound (less_than_days_future) is just for preview/pool visibility
+      //
+      // e.g., "more_than_days_future: 80" AND "less_than_days_future: 90"
+      // - Days 90-81: Account is visible in preview (in the window)
+      // - Day 80: First email sends (hits the inner bound, journey starts!)
+      // - Days 79-0: Subsequent emails based on workflow delays
+      //
+      // So first email date = trigger_date - inner_bound (more_than value)
+
+      let daysBeforeTrigger = 0
+
+      for (const rule of fieldRules) {
+        const value = parseInt(rule.value, 10) || 0
+
+        if (rule.operator === 'in_next_days') {
+          // "in next 30 days" → send at day 30 before trigger
+          daysBeforeTrigger = Math.max(daysBeforeTrigger, value)
+        } else if (rule.operator === 'more_than_days_future') {
+          // "more than 80 days from now" → this is when email journey STARTS
+          // First email sends when they hit this threshold
+          daysBeforeTrigger = Math.max(daysBeforeTrigger, value)
+        } else if (rule.operator === 'less_than_days_future') {
+          // "less than 90 days from now" → outer bound, just for preview
+          // Only use this if there's no inner bound defined
+          if (daysBeforeTrigger === 0) {
+            daysBeforeTrigger = value
+          }
+        } else if (rule.operator === 'in_last_days') {
+          // "in last 30 days" → trigger date is in the past, send X days after trigger
+          daysBeforeTrigger = -value // negative means days AFTER the trigger date
+        }
+      }
+
+      // Only add rule if we have a valid send date
+      if (daysBeforeTrigger !== 0) {
+        rules.push({
+          field,
+          daysBeforeTrigger,
+          policyType: groupRules.find((r: any) => r.field === 'active_policy_type' || r.field === 'policy_type')?.value,
+          policyTerm: groupRules.find((r: any) => r.field === 'policy_term')?.value,
+          // Keep original rules for reference
+          originalRules: fieldRules
+        })
       }
     }
   }

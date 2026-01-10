@@ -226,7 +226,21 @@ export const automationsService = {
 
     // Handle schedule generation/cleanup based on status change
     try {
-      await automationSchedulerService.handleStatusChange(automationId, status);
+      if (status === 'active' || status === 'Active') {
+        // Call edge function to pre-schedule emails for this automation
+        const response = await supabase.functions.invoke('process-scheduled-emails', {
+          body: { action: 'activate', automationId }
+        });
+
+        if (response.error) {
+          console.warn('Failed to generate automation schedule:', response.error);
+        } else {
+          console.log('Automation schedule generated:', response.data);
+        }
+      } else {
+        // Use client-side cleanup for deactivation (cancel pending emails)
+        await automationSchedulerService.cleanupAutomationSchedule(automationId);
+      }
     } catch (err) {
       console.warn('Failed to handle automation schedule:', err.message);
       // Don't throw - the status update succeeded
