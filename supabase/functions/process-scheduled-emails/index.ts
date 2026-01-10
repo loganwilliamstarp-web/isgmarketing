@@ -1071,80 +1071,60 @@ function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
  * @param time - Time string like "10:00"
  * @param timezone - IANA timezone like "America/Chicago"
  * @returns ISO string in UTC
+ *
+ * Example: 10:00 AM America/Chicago = 16:00 UTC (in winter, CST = UTC-6)
  */
 function getScheduledDateTimeUTC(date: Date, time: string, timezone: string): string {
   const [hours, minutes] = time.split(':').map(Number)
 
-  // Create a date string in the target timezone format
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(hours).padStart(2, '0')
-  const minute = String(minutes).padStart(2, '0')
+  // Get the timezone offset in hours (positive = behind UTC, e.g. Chicago = 6)
+  const offsetHours = getTimezoneOffsetHours(timezone, date)
 
-  // Format: "2026-01-15T10:00:00"
-  const localDateTimeStr = `${year}-${month}-${day}T${hour}:${minute}:00`
+  // Create a UTC date by adding the offset to the local time
+  // If it's 10:00 AM in Chicago (UTC-6), UTC time is 10:00 + 6 = 16:00
+  const utcHours = hours + offsetHours
 
-  // Use Intl.DateTimeFormat to get the UTC offset for this timezone at this date/time
-  try {
-    // Create date assuming it's in the target timezone, then convert to UTC
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
+  // Create the UTC date
+  const utcDate = new Date(Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    utcHours,
+    minutes,
+    0,
+    0
+  ))
 
-    // Get timezone offset by comparing local time to UTC
-    // Create a date at the specified local time
-    const testDate = new Date(localDateTimeStr + 'Z') // Parse as UTC first
-    const utcParts = formatter.formatToParts(testDate)
-
-    // Get the timezone offset for the target timezone
-    const tzOffset = getTimezoneOffset(timezone, new Date(localDateTimeStr))
-
-    // Create the final UTC date by subtracting the offset
-    const utcDate = new Date(localDateTimeStr)
-    utcDate.setMinutes(utcDate.getMinutes() - utcDate.getTimezoneOffset() + tzOffset)
-
-    return utcDate.toISOString()
-  } catch (e) {
-    // Fallback: just use the date with time as UTC
-    console.warn(`Failed to convert timezone ${timezone}, using UTC:`, e)
-    return new Date(localDateTimeStr + 'Z').toISOString()
-  }
+  return utcDate.toISOString()
 }
 
 /**
- * Get timezone offset in minutes for a given timezone at a specific date
+ * Get timezone offset in hours for a given timezone at a specific date
+ * Returns positive number for timezones behind UTC (e.g., 6 for Chicago in winter)
  */
-function getTimezoneOffset(timezone: string, date: Date): number {
-  // Common US timezone offsets (standard time)
-  // Note: This doesn't account for DST perfectly, but it's close enough
+function getTimezoneOffsetHours(timezone: string, date: Date): number {
+  // Common US timezone offsets in hours behind UTC (standard time)
   const offsets: Record<string, number> = {
-    'America/New_York': -300,      // EST: UTC-5
-    'America/Chicago': -360,       // CST: UTC-6
-    'America/Denver': -420,        // MST: UTC-7
-    'America/Los_Angeles': -480,   // PST: UTC-8
-    'America/Phoenix': -420,       // MST (no DST)
-    'Pacific/Honolulu': -600,      // HST: UTC-10
-    'America/Anchorage': -540,     // AKST: UTC-9
+    'America/New_York': 5,       // EST: UTC-5
+    'America/Chicago': 6,        // CST: UTC-6
+    'America/Denver': 7,         // MST: UTC-7
+    'America/Los_Angeles': 8,    // PST: UTC-8
+    'America/Phoenix': 7,        // MST (no DST)
+    'Pacific/Honolulu': 10,      // HST: UTC-10
+    'America/Anchorage': 9,      // AKST: UTC-9
     'UTC': 0,
   }
 
   // Check for DST (rough approximation for US timezones)
+  // DST is roughly March to November
   const month = date.getMonth()
-  const isDST = month >= 2 && month <= 10 // March through November (roughly)
+  const isDST = month >= 2 && month <= 10 // March (2) through November (10)
 
-  let offset = offsets[timezone] || -360 // Default to CST
+  let offset = offsets[timezone] ?? 6 // Default to CST
 
   // Adjust for DST (except Phoenix and Honolulu which don't observe DST)
   if (isDST && timezone !== 'America/Phoenix' && timezone !== 'Pacific/Honolulu' && timezone !== 'UTC') {
-    offset += 60 // DST adds 1 hour (60 minutes)
+    offset -= 1 // DST moves 1 hour closer to UTC
   }
 
   return offset
