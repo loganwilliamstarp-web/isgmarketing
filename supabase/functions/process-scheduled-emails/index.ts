@@ -1104,7 +1104,7 @@ function getScheduledDateTimeUTC(date: Date, time: string, timezone: string): st
  */
 function getTimezoneOffsetHours(timezone: string, date: Date): number {
   // Common US timezone offsets in hours behind UTC (standard time)
-  const offsets: Record<string, number> = {
+  const standardOffsets: Record<string, number> = {
     'America/New_York': 5,       // EST: UTC-5
     'America/Chicago': 6,        // CST: UTC-6
     'America/Denver': 7,         // MST: UTC-7
@@ -1115,19 +1115,63 @@ function getTimezoneOffsetHours(timezone: string, date: Date): number {
     'UTC': 0,
   }
 
-  // Check for DST (rough approximation for US timezones)
-  // DST is roughly March to November
-  const month = date.getMonth()
-  const isDST = month >= 2 && month <= 10 // March (2) through November (10)
+  let offset = standardOffsets[timezone] ?? 6 // Default to CST
 
-  let offset = offsets[timezone] ?? 6 // Default to CST
+  // Check if the scheduled date falls within DST
+  // US DST: Second Sunday in March to First Sunday in November
+  const isDST = isDateInDST(date)
 
   // Adjust for DST (except Phoenix and Honolulu which don't observe DST)
   if (isDST && timezone !== 'America/Phoenix' && timezone !== 'Pacific/Honolulu' && timezone !== 'UTC') {
-    offset -= 1 // DST moves 1 hour closer to UTC
+    offset -= 1 // DST moves 1 hour closer to UTC (e.g., Chicago becomes UTC-5 instead of UTC-6)
   }
 
   return offset
+}
+
+/**
+ * Check if a date falls within US Daylight Saving Time
+ * DST starts: Second Sunday in March at 2:00 AM
+ * DST ends: First Sunday in November at 2:00 AM
+ */
+function isDateInDST(date: Date): boolean {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+
+  // Quick check: Jan, Feb, Dec are never DST
+  if (month < 2 || month > 10) return false
+
+  // Quick check: Apr-Oct are always DST
+  if (month > 2 && month < 10) return true
+
+  // March: DST starts on second Sunday
+  if (month === 2) {
+    const secondSunday = getSecondSundayOfMonth(year, 2)
+    return date.getDate() >= secondSunday
+  }
+
+  // November: DST ends on first Sunday
+  if (month === 10) {
+    const firstSunday = getFirstSundayOfMonth(year, 10)
+    return date.getDate() < firstSunday
+  }
+
+  return false
+}
+
+function getSecondSundayOfMonth(year: number, month: number): number {
+  const firstDay = new Date(year, month, 1).getDay()
+  // Days until first Sunday (0 if first day is Sunday)
+  const daysUntilFirstSunday = firstDay === 0 ? 0 : 7 - firstDay
+  // Second Sunday = first Sunday + 7
+  return 1 + daysUntilFirstSunday + 7
+}
+
+function getFirstSundayOfMonth(year: number, month: number): number {
+  const firstDay = new Date(year, month, 1).getDay()
+  // Days until first Sunday (0 if first day is Sunday)
+  const daysUntilFirstSunday = firstDay === 0 ? 0 : 7 - firstDay
+  return 1 + daysUntilFirstSunday
 }
 
 function extractDateTriggerRules(filterConfig: any): any[] {
