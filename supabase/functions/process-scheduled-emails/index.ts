@@ -26,8 +26,8 @@ interface ScheduledEmail {
   batch_id: string | null
   account_id: string
   template_id: string
-  recipient_email: string
-  recipient_name: string
+  to_email: string
+  to_name: string
   from_email: string
   from_name: string
   subject: string
@@ -201,12 +201,32 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       if (!accounts || accounts.length === 0) continue
 
       // Get policies for these accounts (needed for date-based and policy type filters)
+      // Batch the query to avoid URL length limits (max ~100 IDs per query)
       const accountIds = accounts.map((a: any) => a.account_unique_id)
-      const { data: policies } = await supabase
-        .from('policies')
-        .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term')
-        .in('account_id', accountIds)
-        .eq('policy_status', 'Active')
+      const POLICY_BATCH_SIZE = 100
+      let allPolicies: any[] = []
+
+      for (let i = 0; i < accountIds.length; i += POLICY_BATCH_SIZE) {
+        const batchIds = accountIds.slice(i, i + POLICY_BATCH_SIZE)
+        const { data: batchPolicies, error: batchError } = await supabase
+          .from('policies')
+          .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term')
+          .in('account_id', batchIds)
+          .eq('policy_status', 'Active')
+
+        if (batchError) {
+          console.log(`[${automation.name}] Policies batch error:`, batchError.message)
+        } else if (batchPolicies) {
+          allPolicies = allPolicies.concat(batchPolicies)
+        }
+      }
+
+      const policies = allPolicies
+      console.log(`[${automation.name}] Policies query: found ${policies?.length || 0} policies for ${accountIds.length} account IDs (in ${Math.ceil(accountIds.length / POLICY_BATCH_SIZE)} batches)`)
+      // Debug: log sample policies
+      if (policies && policies.length > 0) {
+        console.log(`[${automation.name}] Sample policies:`, JSON.stringify(policies.slice(0, 3)))
+      }
 
       // Get all template keys used in nodes (for master automation synced nodes)
       const templateKeys: string[] = []
@@ -234,6 +254,14 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
       // Build email schedule from workflow nodes (with templateKey resolution)
       const emailSchedule = buildEmailSchedule(nodes, templateIdMap)
+
+      // Debug logging (before filteredAccounts is defined)
+      console.log(`[${automation.name}] Nodes:`, JSON.stringify(nodes?.map((n: any) => ({ id: n.id, type: n.type, config: n.config }))))
+      console.log(`[${automation.name}] Template keys to resolve:`, templateKeys)
+      console.log(`[${automation.name}] Template ID map:`, templateIdMap)
+      console.log(`[${automation.name}] Email schedule:`, JSON.stringify(emailSchedule))
+      console.log(`[${automation.name}] Accounts found:`, accounts?.length || 0)
+      console.log(`[${automation.name}] Filter config:`, JSON.stringify(filterConfig))
 
       // Fetch template details for admin review
       const templateIds = [...new Set(emailSchedule.map(e => e.templateId).filter(Boolean))]
@@ -264,6 +292,9 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
       // Filter accounts based on non-date filter rules (policy type, etc.)
       const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig)
+      console.log(`[${automation.name}] Filtered accounts:`, filteredAccounts?.length || 0)
+      console.log(`[${automation.name}] Date trigger rules:`, dateTriggerRules?.length || 0)
+      console.log(`[${automation.name}] Date trigger rules detail:`, JSON.stringify(dateTriggerRules))
 
       // Handle non-date-based automations (immediate/activation-based)
       if (dateTriggerRules.length === 0) {
@@ -295,8 +326,8 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               automation_id: automation.id,
               account_id: account.account_unique_id,
               template_id: emailStep.templateId,
-              recipient_email: account.person_email || account.email,
-              recipient_name: account.primary_contact_first_name
+              to_email: account.person_email || account.email,
+              to_name: account.primary_contact_first_name
                 ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                 : account.name,
               scheduled_for: sendDate.toISOString(),
@@ -391,8 +422,8 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
                   automation_id: automation.id,
                   account_id: account.account_unique_id,
                   template_id: emailStep.templateId,
-                  recipient_email: account.person_email || account.email,
-                  recipient_name: account.primary_contact_first_name
+                  to_email: account.person_email || account.email,
+                  to_name: account.primary_contact_first_name
                     ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                     : account.name,
                   scheduled_for: sendDate.toISOString(),
@@ -413,16 +444,40 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
         }
       }
 
+      console.log(`[${automation.name}] New emails to insert:`, newEmails.length)
+      if (newEmails.length === 0 && filteredAccounts.length > 0) {
+        // Debug: check first few filtered accounts to see why no emails
+        const debugAccounts = filteredAccounts.slice(0, 3)
+        for (const account of debugAccounts) {
+          const accountPolicies = (policies || []).filter((p: any) => p.account_id === account.account_unique_id)
+          console.log(`[${automation.name}] Debug account ${account.name}:`, {
+            policies: accountPolicies.map((p: any) => ({
+              lob: p.policy_lob,
+              exp: p.expiration_date,
+              term: p.policy_term
+            }))
+          })
+        }
+      }
+
       // Insert new emails in batches
+      console.log(`[${automation.name}] About to insert ${newEmails.length} emails in batches of ${BATCH_SIZE}`)
+      if (newEmails.length > 0) {
+        console.log(`[${automation.name}] Sample email to insert:`, JSON.stringify(newEmails[0]))
+      }
       for (let i = 0; i < newEmails.length; i += BATCH_SIZE) {
         const batch = newEmails.slice(i, i + BATCH_SIZE)
-        const { error: insertError } = await supabase
+        console.log(`[${automation.name}] Inserting batch ${i / BATCH_SIZE + 1} with ${batch.length} emails`)
+        const { error: insertError, data: insertedData } = await supabase
           .from('scheduled_emails')
           .insert(batch)
+          .select('id')
 
         if (insertError) {
+          console.log(`[${automation.name}] INSERT ERROR:`, insertError.message, insertError.details, insertError.hint)
           errors.push(`Batch insert error for ${automation.name}: ${insertError.message}`)
         } else {
+          console.log(`[${automation.name}] Successfully inserted ${insertedData?.length || 0} emails`)
           totalAdded += batch.length
         }
       }
@@ -520,7 +575,7 @@ async function verifyAccountQualifies(
   }
 
   // Check if email address is valid
-  const recipientEmail = email.recipient_email || account.person_email || account.email
+  const recipientEmail = email.to_email || account.person_email || account.email
   if (!recipientEmail || !recipientEmail.includes('@')) {
     return { qualifies: false, reason: 'Invalid or missing email address' }
   }
@@ -622,7 +677,7 @@ async function processReadyEmails(
         .eq('id', email.id)
 
       // Final deduplication check
-      const recipientEmail = email.recipient_email || email.account?.person_email || email.account?.email
+      const recipientEmail = email.to_email || email.account?.person_email || email.account?.email
       if (email.template_id && recipientEmail) {
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -658,7 +713,7 @@ async function processReadyEmails(
           account_id: email.account_id,
           template_id: email.template_id,
           to_email: recipientEmail,
-          to_name: email.recipient_name,
+          to_name: email.to_name,
           from_email: email.from_email || email.template?.from_email || 'noreply@example.com',
           from_name: email.from_name || email.template?.from_name || 'Marketing',
           subject: email.subject || email.template?.subject,
@@ -788,8 +843,8 @@ async function sendEmailViaSendGrid(
   }
   const fromName = email.from_name || template?.from_name || 'Marketing Team'
   const subject = email.subject || template?.subject
-  const recipientEmail = email.recipient_email || account.person_email || account.email
-  const recipientName = email.recipient_name || account.name
+  const recipientEmail = email.to_email || account.person_email || account.email
+  const recipientName = email.to_name || account.name
 
   // Validate required fields
   if (!fromEmail) {
@@ -919,7 +974,7 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
     '{{full_name}}': [account.primary_contact_first_name, account.primary_contact_last_name].filter(Boolean).join(' ') || account.name || '',
     '{{name}}': account.name || '',
     '{{company_name}}': account.name || '',
-    '{{email}}': account.person_email || account.email || email.recipient_email || '',
+    '{{email}}': account.person_email || account.email || email.to_email || '',
     '{{phone}}': account.phone || '',
 
     // Address fields
@@ -930,8 +985,8 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
     '{{postal_code}}': account.billing_postal_code || '',
 
     // Recipient fields
-    '{{recipient_name}}': email.recipient_name || '',
-    '{{recipient_email}}': email.recipient_email || '',
+    '{{recipient_name}}': email.to_name || '',
+    '{{recipient_email}}': email.to_email || '',
 
     // Date fields
     '{{today}}': new Date().toLocaleDateString('en-US'),
@@ -959,7 +1014,7 @@ function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
   const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
 
   // Build unsubscribe URL with email ID for tracking
-  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${email.id}&email=${encodeURIComponent(email.recipient_email)}`
+  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${email.id}&email=${encodeURIComponent(email.to_email)}`
 
   let footer = ''
 
@@ -1129,15 +1184,18 @@ function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: 
     return accounts // No filters, return all accounts
   }
 
+  // Debug: log first few accounts for troubleshooting
+  let debugCount = 0
+
   return accounts.filter(account => {
     const accountPolicies = policies.filter((p: any) => p.account_id === account.account_unique_id)
 
     // Check if account matches ANY group (OR between groups)
-    return groups.some((group: any) => {
+    const matchesAnyGroup = groups.some((group: any, groupIdx: number) => {
       const rules = group.rules || []
 
       // Check if account matches ALL rules in this group (AND within group)
-      return rules.every((rule: any) => {
+      const matchesAllRules = rules.every((rule: any, ruleIdx: number) => {
         // Skip date-based rules - they're handled separately
         if (['policy_expiration', 'policy_effective', 'account_created'].includes(rule.field)) {
           if (['in_next_days', 'in_last_days', 'less_than_days_future', 'more_than_days_future'].includes(rule.operator)) {
@@ -1155,11 +1213,15 @@ function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: 
 
           case 'active_policy_type':
           case 'policy_type':
-            // Check if account has a policy of the specified type
-            return accountPolicies.some((p: any) => {
-              const policyLob = (p.policy_lob || '').toLowerCase()
-              return matchValue(policyLob, value, rule.operator)
-            })
+            // Get all policy types for this account
+            const policyTypes = accountPolicies.map((p: any) => (p.policy_lob || '').toLowerCase()).join(',')
+
+            // For negative operators, if no policies exist, consider it a match
+            if (accountPolicies.length === 0) {
+              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
+            }
+
+            return matchValue(policyTypes, value, rule.operator)
 
           case 'policy_term':
             // Check if account has a policy with the specified term
@@ -1188,41 +1250,67 @@ function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: 
             return matchValue(fieldValue, value, rule.operator)
         }
       })
+
+      // Debug log for first few accounts
+      if (debugCount < 3 && !matchesAllRules) {
+        console.log(`[Filter Debug] Account ${account.name} failed group ${groupIdx}`)
+        console.log(`  Policies: ${accountPolicies.map((p: any) => p.policy_lob).join(', ')}`)
+      }
+
+      return matchesAllRules
     })
+
+    if (debugCount < 3) {
+      console.log(`[Filter Debug] Account ${account.name}: matchesAnyGroup=${matchesAnyGroup}, policies=${accountPolicies.length}`)
+      debugCount++
+    }
+
+    return matchesAnyGroup
   })
 }
 
 /**
  * Match a value against a filter value based on operator
+ * For policy type checks, actualValue may be comma-separated list of policy types
  */
 function matchValue(actualValue: string, filterValue: string, operator: string): boolean {
+  // Handle comma-separated actual values (e.g., account has multiple policy types)
+  const actualValues = actualValue.split(',').map(v => v.trim().toLowerCase())
+  // Handle comma-separated filter values
+  const filterValues = filterValue.split(',').map(v => v.trim().toLowerCase())
+
   switch (operator) {
     case 'equals':
     case 'is':
-      return actualValue === filterValue
+      // Check if any actual value matches any filter value
+      return actualValues.some(av => filterValues.some(fv => av === fv || av.includes(fv)))
     case 'not_equals':
     case 'is_not':
-      return actualValue !== filterValue
+      // None of the actual values should match any filter value
+      return !actualValues.some(av => filterValues.some(fv => av === fv || av.includes(fv)))
+    case 'is_any':
+      // Check if ANY of the filter values match ANY actual value
+      return filterValues.some(fv => actualValues.some(av => av === fv || av.includes(fv)))
+    case 'is_not_any':
+      // NONE of the filter values should match any actual value
+      return !filterValues.some(fv => actualValues.some(av => av === fv || av.includes(fv)))
     case 'contains':
-      return actualValue.includes(filterValue)
+      return actualValues.some(av => filterValues.some(fv => av.includes(fv)))
     case 'not_contains':
-      return !actualValue.includes(filterValue)
+      return !actualValues.some(av => filterValues.some(fv => av.includes(fv)))
     case 'starts_with':
-      return actualValue.startsWith(filterValue)
+      return actualValues.some(av => filterValues.some(fv => av.startsWith(fv)))
     case 'ends_with':
-      return actualValue.endsWith(filterValue)
+      return actualValues.some(av => filterValues.some(fv => av.endsWith(fv)))
     case 'is_empty':
       return actualValue === ''
     case 'is_not_empty':
       return actualValue !== ''
     case 'in':
-      // Value is comma-separated list
-      const inValues = filterValue.split(',').map(v => v.trim().toLowerCase())
-      return inValues.includes(actualValue)
+      return actualValues.some(av => filterValues.includes(av))
     case 'not_in':
-      const notInValues = filterValue.split(',').map(v => v.trim().toLowerCase())
-      return !notInValues.includes(actualValue)
+      return !actualValues.some(av => filterValues.includes(av))
     default:
-      return actualValue === filterValue
+      return actualValues.some(av => filterValues.some(fv => av === fv))
   }
 }
