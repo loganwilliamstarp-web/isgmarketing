@@ -1007,9 +1007,24 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                       </p>
                     )}
                     <select
-                      value={isMasterEdit
-                        ? (selectedNodeData.config?.templateKey || '')
-                        : (selectedNodeData.config?.template || '')}
+                      value={(() => {
+                        if (isMasterEdit) {
+                          // For master edit, use templateKey directly
+                          return selectedNodeData.config?.templateKey || '';
+                        }
+                        // For user automations:
+                        // First check if there's a direct template ID match
+                        if (selectedNodeData.config?.template) {
+                          return selectedNodeData.config.template;
+                        }
+                        // If the node was synced from master, it has templateKey instead
+                        // Find the user's template with matching default_key
+                        if (selectedNodeData.config?.templateKey) {
+                          const matchingTemplate = templates.find(t => t.default_key === selectedNodeData.config.templateKey);
+                          return matchingTemplate?.id || '';
+                        }
+                        return '';
+                      })()}
                       onChange={(e) => {
                         const templateValue = e.target.value;
                         // For master edit, find by default_key; otherwise by id

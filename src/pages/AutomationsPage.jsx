@@ -348,11 +348,13 @@ const MasterAutomationRow = ({ automation, onEdit, onSync, syncing, theme: t }) 
 };
 
 // Automation row component
-const AutomationRow = ({ automation, onEdit, onToggle, hasVerifiedDomain, theme: t }) => {
+const AutomationRow = ({ automation, onEdit, onToggle, onDelete, hasVerifiedDomain, theme: t }) => {
   const stats = automation.stats || {};
   const isActive = automation.status === 'active';
   // Can only activate if has verified domain (can always pause)
   const canToggle = isActive || hasVerifiedDomain;
+  // Can only delete non-default automations
+  const canDelete = automation.is_default !== true;
 
   return (
     <tr
@@ -448,20 +450,38 @@ const AutomationRow = ({ automation, onEdit, onToggle, hasVerifiedDomain, theme:
         {stats.activeEnrollments || 0}
       </td>
       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(automation.id); }}
-          style={{
-            padding: '6px 12px',
-            backgroundColor: t.bgHover,
-            border: `1px solid ${t.border}`,
-            borderRadius: '6px',
-            color: t.textSecondary,
-            cursor: 'pointer',
-            fontSize: '12px'
-          }}
-        >
-          Edit
-        </button>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(automation.id); }}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: t.bgHover,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: t.textSecondary,
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            Edit
+          </button>
+          {canDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(automation.id, automation.name); }}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: 'transparent',
+                border: `1px solid ${t.danger}40`,
+                borderRadius: '6px',
+                color: t.danger,
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -501,7 +521,8 @@ const AutomationsPage = ({ t }) => {
   // Mutations for user automations
   const {
     activateAutomation,
-    pauseAutomation
+    pauseAutomation,
+    deleteAutomation
   } = useAutomationMutations();
 
   // Mutations for master automations
@@ -545,6 +566,18 @@ const AutomationsPage = ({ t }) => {
       }
     } catch (err) {
       console.error(`Failed to ${action} automation:`, err);
+    }
+  };
+
+  const handleDeleteAutomation = async (automationId, automationName) => {
+    if (!window.confirm(`Are you sure you want to delete "${automationName}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteAutomation.mutateAsync(automationId);
+    } catch (err) {
+      console.error('Failed to delete automation:', err);
+      alert('Failed to delete automation. Please try again.');
     }
   };
 
@@ -935,6 +968,7 @@ const AutomationsPage = ({ t }) => {
                       automation={automation}
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
+                      onDelete={handleDeleteAutomation}
                       hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />
@@ -1022,6 +1056,7 @@ const AutomationsPage = ({ t }) => {
                       automation={automation}
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
+                      onDelete={handleDeleteAutomation}
                       hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />

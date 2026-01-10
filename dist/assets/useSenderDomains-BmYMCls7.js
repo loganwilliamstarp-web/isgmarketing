@@ -1,1 +1,0 @@
-import{u as e}from"./query-BgC-0ePs.js";import"./index-laD0T8Yw.js";import{s as r}from"./senderDomains-D32G31A3.js";function o(){return e({queryKey:["sender-domains","verified"],queryFn:()=>r.getVerifiedDomains(),staleTime:5*60*1e3})}export{o as u};

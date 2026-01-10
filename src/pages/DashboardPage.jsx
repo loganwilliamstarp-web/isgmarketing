@@ -246,8 +246,8 @@ const DashboardPage = ({ t }) => {
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
               Upcoming Scheduled Emails
             </h3>
-            <Link 
-              to={`/${userId}/scheduled`}
+            <Link
+              to={`/${userId}/automations`}
               style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
             >
               View all →
@@ -355,8 +355,8 @@ const DashboardPage = ({ t }) => {
           <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
             Recent Email Activity
           </h3>
-          <Link 
-            to={`/${userId}/activity`}
+          <Link
+            to={`/${userId}/timeline`}
             style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
           >
             View all →

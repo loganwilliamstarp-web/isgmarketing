@@ -209,11 +209,41 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
         .in('account_id', accountIds)
         .eq('policy_status', 'Active')
 
-      // Build email schedule from workflow nodes
-      const emailSchedule = buildEmailSchedule(nodes)
+      // Get all template keys used in nodes (for master automation synced nodes)
+      const templateKeys: string[] = []
+      for (const node of nodes) {
+        if (node.type === 'send_email' && node.config?.templateKey && !node.config?.template) {
+          templateKeys.push(node.config.templateKey)
+        }
+      }
+
+      // Build templateKey -> templateId map for this user's templates
+      const templateIdMap: Record<string, string> = {}
+      if (templateKeys.length > 0) {
+        const { data: userTemplates } = await supabase
+          .from('email_templates')
+          .select('id, default_key')
+          .eq('owner_id', automation.owner_id)
+          .in('default_key', templateKeys)
+
+        ;(userTemplates || []).forEach((t: any) => {
+          if (t.default_key) {
+            templateIdMap[t.default_key] = t.id
+          }
+        })
+      }
+
+      // Build email schedule from workflow nodes (with templateKey resolution)
+      const emailSchedule = buildEmailSchedule(nodes, templateIdMap)
 
       // Fetch template details for admin review
-      const templateIds = [...new Set(emailSchedule.map(e => e.templateId))]
+      const templateIds = [...new Set(emailSchedule.map(e => e.templateId).filter(Boolean))]
+      if (templateIds.length === 0) {
+        // No valid templates found, skip this automation
+        errors.push(`No templates found for automation ${automation.name} - check templateKey mappings`)
+        continue
+      }
+
       const { data: templates } = await supabase
         .from('email_templates')
         .select('id, from_email, from_name, subject')
@@ -992,16 +1022,23 @@ function extractDateTriggerRules(filterConfig: any): any[] {
   return rules
 }
 
-function buildEmailSchedule(nodes: any[]): { nodeId: string, templateId: string, daysOffset: number }[] {
+function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> = {}): { nodeId: string, templateId: string, daysOffset: number }[] {
   const schedule: { nodeId: string, templateId: string, daysOffset: number }[] = []
   let currentDelay = 0
 
   const processNodes = (nodeList: any[]) => {
     for (const node of nodeList) {
-      if (node.type === 'send_email' && node.config?.template) {
+      // Check for template ID (direct UUID) or templateKey (from master automation sync)
+      let templateId = node.config?.template
+      if (!templateId && node.config?.templateKey) {
+        // Look up template ID from the map (resolved from default_key)
+        templateId = templateIdMap[node.config.templateKey]
+      }
+
+      if (node.type === 'send_email' && templateId) {
         schedule.push({
           nodeId: node.id,
-          templateId: node.config.template,
+          templateId: templateId,
           daysOffset: currentDelay
         })
       } else if (node.type === 'delay') {
