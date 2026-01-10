@@ -180,10 +180,10 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const filterConfig = automation.filter_config || { groups: [] }
       const dateTriggerRules = extractDateTriggerRules(filterConfig)
 
-      // Get trigger node for timing
+      // Get send time from automation settings
       const nodes = automation.nodes || []
-      const triggerNode = nodes.find((n: any) => n.type === 'trigger')
-      const sendTime = triggerNode?.config?.time || '09:00'
+      const sendTime = automation.send_time || '09:00'
+      const timezone = automation.timezone || 'America/Chicago'
 
       // Get all accounts that match base criteria
       let accountsQuery = supabase
@@ -305,12 +305,13 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
             const sendDate = new Date(today)
             sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
 
-            const [hours, minutes] = sendTime.split(':').map(Number)
-            sendDate.setHours(hours, minutes, 0, 0)
+            // Convert to proper timezone-aware UTC time
+            let scheduledForUTC = getScheduledDateTimeUTC(sendDate, sendTime, timezone)
 
             // If first email (no delay) and time has passed today, send tomorrow
-            if (emailStep.daysOffset === 0 && sendDate < new Date()) {
+            if (emailStep.daysOffset === 0 && new Date(scheduledForUTC) < new Date()) {
               sendDate.setDate(sendDate.getDate() + 1)
+              scheduledForUTC = getScheduledDateTimeUTC(sendDate, sendTime, timezone)
             }
 
             // Use 'immediate' as qualification value for non-date-based automations
@@ -334,7 +335,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               to_name: account.primary_contact_first_name
                 ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                 : account.name,
-              scheduled_for: sendDate.toISOString(),
+              scheduled_for: scheduledForUTC,
               status: 'Pending',
               qualification_value: qualificationValue,
               trigger_field: 'activation',
@@ -405,14 +406,14 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
                 const sendDate = new Date(firstQualificationDate)
                 sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
 
-                const [hours, minutes] = sendTime.split(':').map(Number)
-                sendDate.setHours(hours, minutes, 0, 0)
+                // Convert to proper timezone-aware UTC time
+                const scheduledForUTC = getScheduledDateTimeUTC(sendDate, sendTime, timezone)
 
                 // Skip if send date is in the past
-                if (sendDate < today) continue
+                if (new Date(scheduledForUTC) < new Date()) continue
 
                 // Skip if send date is more than 1 year in the future
-                if (sendDate > oneYearFromNow) continue
+                if (new Date(scheduledForUTC) > oneYearFromNow) continue
 
                 const qualificationValue = triggerDate.date.toISOString().split('T')[0]
                 const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
@@ -434,7 +435,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
                   to_name: account.primary_contact_first_name
                     ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                     : account.name,
-                  scheduled_for: sendDate.toISOString(),
+                  scheduled_for: scheduledForUTC,
                   status: 'Pending',
                   qualification_value: qualificationValue,
                   trigger_field: triggerDate.field,
@@ -1063,6 +1064,91 @@ function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Convert a date + time in a specific timezone to a UTC ISO string
+ * @param date - The date (year, month, day)
+ * @param time - Time string like "10:00"
+ * @param timezone - IANA timezone like "America/Chicago"
+ * @returns ISO string in UTC
+ */
+function getScheduledDateTimeUTC(date: Date, time: string, timezone: string): string {
+  const [hours, minutes] = time.split(':').map(Number)
+
+  // Create a date string in the target timezone format
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(hours).padStart(2, '0')
+  const minute = String(minutes).padStart(2, '0')
+
+  // Format: "2026-01-15T10:00:00"
+  const localDateTimeStr = `${year}-${month}-${day}T${hour}:${minute}:00`
+
+  // Use Intl.DateTimeFormat to get the UTC offset for this timezone at this date/time
+  try {
+    // Create date assuming it's in the target timezone, then convert to UTC
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+
+    // Get timezone offset by comparing local time to UTC
+    // Create a date at the specified local time
+    const testDate = new Date(localDateTimeStr + 'Z') // Parse as UTC first
+    const utcParts = formatter.formatToParts(testDate)
+
+    // Get the timezone offset for the target timezone
+    const tzOffset = getTimezoneOffset(timezone, new Date(localDateTimeStr))
+
+    // Create the final UTC date by subtracting the offset
+    const utcDate = new Date(localDateTimeStr)
+    utcDate.setMinutes(utcDate.getMinutes() - utcDate.getTimezoneOffset() + tzOffset)
+
+    return utcDate.toISOString()
+  } catch (e) {
+    // Fallback: just use the date with time as UTC
+    console.warn(`Failed to convert timezone ${timezone}, using UTC:`, e)
+    return new Date(localDateTimeStr + 'Z').toISOString()
+  }
+}
+
+/**
+ * Get timezone offset in minutes for a given timezone at a specific date
+ */
+function getTimezoneOffset(timezone: string, date: Date): number {
+  // Common US timezone offsets (standard time)
+  // Note: This doesn't account for DST perfectly, but it's close enough
+  const offsets: Record<string, number> = {
+    'America/New_York': -300,      // EST: UTC-5
+    'America/Chicago': -360,       // CST: UTC-6
+    'America/Denver': -420,        // MST: UTC-7
+    'America/Los_Angeles': -480,   // PST: UTC-8
+    'America/Phoenix': -420,       // MST (no DST)
+    'Pacific/Honolulu': -600,      // HST: UTC-10
+    'America/Anchorage': -540,     // AKST: UTC-9
+    'UTC': 0,
+  }
+
+  // Check for DST (rough approximation for US timezones)
+  const month = date.getMonth()
+  const isDST = month >= 2 && month <= 10 // March through November (roughly)
+
+  let offset = offsets[timezone] || -360 // Default to CST
+
+  // Adjust for DST (except Phoenix and Honolulu which don't observe DST)
+  if (isDST && timezone !== 'America/Phoenix' && timezone !== 'Pacific/Honolulu' && timezone !== 'UTC') {
+    offset += 60 // DST adds 1 hour (60 minutes)
+  }
+
+  return offset
+}
 
 function extractDateTriggerRules(filterConfig: any): any[] {
   const rules: any[] = []
