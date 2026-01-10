@@ -9,22 +9,40 @@ export const FILTER_FIELDS = [
     { value: 'lead', label: 'Lead' }
   ]},
   { value: 'policy_type', label: 'Policy Type', type: 'select', options: [
-    { value: 'Auto', label: 'Auto' },
-    { value: 'Home', label: 'Home' },
+    { value: 'Personal Auto', label: 'Personal Auto' },
+    { value: 'Homeowners', label: 'Homeowners' },
     { value: 'Renters', label: 'Renters' },
+    { value: 'Personal Umbrella', label: 'Personal Umbrella' },
     { value: 'Life', label: 'Life' },
-    { value: 'Umbrella', label: 'Umbrella' },
-    { value: 'Commercial', label: 'Commercial' },
-    { value: 'Health', label: 'Health' }
+    { value: 'Boat', label: 'Boat' },
+    { value: 'Travel Trailer', label: 'Travel Trailer' },
+    { value: 'Motorcycle', label: 'Motorcycle' },
+    { value: 'Dwelling Fire', label: 'Dwelling Fire' },
+    { value: 'Flood', label: 'Flood' },
+    { value: 'Business Owners', label: 'Business Owners' },
+    { value: 'Commercial Auto', label: 'Commercial Auto' },
+    { value: 'Commercial Property', label: 'Commercial Property' },
+    { value: 'Commercial Umbrella', label: 'Commercial Umbrella' },
+    { value: 'General Liability', label: 'General Liability' },
+    { value: 'Workers Compensation', label: 'Workers Compensation' }
   ]},
   { value: 'active_policy_type', label: 'Has Active Policy', type: 'select', options: [
-    { value: 'Auto', label: 'Auto' },
-    { value: 'Home', label: 'Home' },
+    { value: 'Personal Auto', label: 'Personal Auto' },
+    { value: 'Homeowners', label: 'Homeowners' },
     { value: 'Renters', label: 'Renters' },
+    { value: 'Personal Umbrella', label: 'Personal Umbrella' },
     { value: 'Life', label: 'Life' },
-    { value: 'Umbrella', label: 'Umbrella' },
-    { value: 'Commercial', label: 'Commercial' },
-    { value: 'Health', label: 'Health' }
+    { value: 'Boat', label: 'Boat' },
+    { value: 'Travel Trailer', label: 'Travel Trailer' },
+    { value: 'Motorcycle', label: 'Motorcycle' },
+    { value: 'Dwelling Fire', label: 'Dwelling Fire' },
+    { value: 'Flood', label: 'Flood' },
+    { value: 'Business Owners', label: 'Business Owners' },
+    { value: 'Commercial Auto', label: 'Commercial Auto' },
+    { value: 'Commercial Property', label: 'Commercial Property' },
+    { value: 'Commercial Umbrella', label: 'Commercial Umbrella' },
+    { value: 'General Liability', label: 'General Liability' },
+    { value: 'Workers Compensation', label: 'Workers Compensation' }
   ]},
   { value: 'policy_status', label: 'Policy Status', type: 'select', options: [
     { value: 'active', label: 'Active' },
@@ -117,12 +135,12 @@ export const QUICK_FILTERS = [
   { label: 'New Customers (90 days)', filter: { field: 'account_created', operator: 'in_last_days', value: '90' } },
   { label: 'Active Customers', filter: { field: 'account_status', operator: 'is', value: 'customer' } },
   { label: 'Cross-Sell: Auto Only', filters: [
-    { field: 'active_policy_type', operator: 'is', value: 'Auto' },
-    { field: 'active_policy_type', operator: 'is_not', value: 'Home' }
+    { field: 'active_policy_type', operator: 'is', value: 'Personal Auto' },
+    { field: 'active_policy_type', operator: 'is_not_any', value: 'Homeowners,Renters' }
   ]},
   { label: 'Cross-Sell: Home Only', filters: [
-    { field: 'active_policy_type', operator: 'is', value: 'Home' },
-    { field: 'active_policy_type', operator: 'is_not', value: 'Auto' }
+    { field: 'active_policy_type', operator: 'is_any', value: 'Homeowners,Renters' },
+    { field: 'active_policy_type', operator: 'is_not', value: 'Personal Auto' }
   ]},
   { label: 'Prior Customers', filter: { field: 'account_status', operator: 'is', value: 'prior_customer' } },
   { label: 'Prospects', filter: { field: 'account_status', operator: 'is', value: 'prospect' } },
