@@ -92,12 +92,24 @@ export function useScheduledEmailMutations() {
     onSuccess: invalidateScheduled
   });
 
+  const sendNow = useMutation({
+    mutationFn: (scheduledEmailId) => scheduledEmailsService.sendNow(ownerIds, scheduledEmailId),
+    onSuccess: () => {
+      invalidateScheduled();
+      // Also invalidate email logs and activity since we just sent an email
+      queryClient.invalidateQueries({ queryKey: ['emailLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['activity'] });
+      queryClient.invalidateQueries({ queryKey: ['quickStats'] });
+    }
+  });
+
   return {
     scheduleEmail,
     scheduleBatch,
     cancelScheduled,
     reschedule,
-    deleteScheduled
+    deleteScheduled,
+    sendNow
   };
 }
 

@@ -338,6 +338,46 @@ export const scheduledEmailsService = {
   },
 
   /**
+   * Send a scheduled email immediately
+   * Updates the scheduled_for to now and triggers the edge function
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {string} scheduledEmailId - The scheduled email ID to send
+   */
+  async sendNow(ownerIds, scheduledEmailId) {
+    // First update the scheduled email to be ready to send
+    let query = supabase
+      .from('scheduled_emails')
+      .update({
+        scheduled_for: new Date().toISOString(),
+        requires_verification: false,
+        status: 'Pending',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', scheduledEmailId)
+      .eq('status', 'Pending'); // Only allow sending pending emails
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query.select().single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Scheduled email not found or not in Pending status');
+
+    // Trigger the edge function to send immediately
+    const { data: functionData, error: functionError } = await supabase.functions.invoke(
+      'process-scheduled-emails',
+      {
+        body: { action: 'send', scheduledEmailId }
+      }
+    );
+
+    if (functionError) {
+      console.error('Error triggering send:', functionError);
+      throw new Error('Failed to trigger immediate send');
+    }
+
+    return { scheduledEmail: data, sendResult: functionData };
+  },
+
+  /**
    * Delete a scheduled email
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */

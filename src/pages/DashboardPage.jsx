@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDashboard, useQuickStats, useUpcomingEmails, useEmailPerformanceChart } from '../hooks';
+import { useDashboard, useQuickStats, useUpcomingEmails, useEmailPerformanceChart, useScheduledEmailMutations } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
 
@@ -354,7 +354,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
 };
 
 // Scheduled email item
-const ScheduledEmailItem = ({ email, theme: t, userId, onPreview }) => (
+const ScheduledEmailItem = ({ email, theme: t, userId, onPreview, onSendNow, onCancel, isSending }) => (
   <div style={{
     padding: '14px',
     backgroundColor: t.bg,
@@ -426,25 +426,33 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview }) => (
           </svg>
         </button>
         <button
+          onClick={() => onSendNow(email.id)}
+          disabled={isSending}
           title="Send Now"
           style={{
             padding: '6px 10px',
-            backgroundColor: t.bgHover,
-            border: `1px solid ${t.border}`,
+            backgroundColor: isSending ? t.primary : t.bgHover,
+            border: `1px solid ${isSending ? t.primary : t.border}`,
             borderRadius: '6px',
-            color: t.textSecondary,
-            cursor: 'pointer',
+            color: isSending ? '#fff' : t.textSecondary,
+            cursor: isSending ? 'not-allowed' : 'pointer',
             fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            opacity: isSending ? 0.7 : 1
           }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
+          {isSending ? (
+            <span style={{ fontSize: '12px' }}>...</span>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          )}
         </button>
         <button
+          onClick={() => onCancel(email.id)}
           title="Cancel"
           style={{
             padding: '6px 10px',
@@ -464,11 +472,38 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview }) => (
 const DashboardPage = ({ t }) => {
   const { userId } = useParams();
   const [previewEmail, setPreviewEmail] = useState(null);
+  const [sendingEmailId, setSendingEmailId] = useState(null);
 
   // Fetch dashboard data using hooks
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
   const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
   const { data: chartData, isLoading: chartLoading } = useEmailPerformanceChart(30);
+  const { sendNow, cancelScheduled } = useScheduledEmailMutations();
+
+  // Handle send now
+  const handleSendNow = async (emailId) => {
+    if (sendingEmailId) return; // Prevent double-click
+    setSendingEmailId(emailId);
+    try {
+      await sendNow.mutateAsync(emailId);
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      alert('Failed to send email: ' + error.message);
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
+  // Handle cancel
+  const handleCancel = async (emailId) => {
+    if (!confirm('Are you sure you want to cancel this scheduled email?')) return;
+    try {
+      await cancelScheduled.mutateAsync(emailId);
+    } catch (error) {
+      console.error('Failed to cancel email:', error);
+      alert('Failed to cancel email: ' + error.message);
+    }
+  };
 
   // Format numbers
   const formatNumber = (num) => {
@@ -594,6 +629,9 @@ const DashboardPage = ({ t }) => {
                   theme={t}
                   userId={userId}
                   onPreview={setPreviewEmail}
+                  onSendNow={handleSendNow}
+                  onCancel={handleCancel}
+                  isSending={sendingEmailId === email.id}
                 />
               ))
             ) : (

@@ -64,10 +64,12 @@ serve(async (req) => {
     // Parse request to determine action
     let action = 'process' // default action
     let automationId: string | null = null
+    let scheduledEmailId: string | null = null
     try {
       const body = await req.json()
       action = body.action || 'process'
       automationId = body.automationId || null
+      scheduledEmailId = body.scheduledEmailId || null
     } catch {
       // No body or invalid JSON, use default action
     }
@@ -104,7 +106,7 @@ serve(async (req) => {
 
     // Step 2: Process ready-to-send emails
     if (action === 'process' || action === 'send' || action === 'daily') {
-      const sendResult = await processReadyEmails(supabaseClient, sendgridApiKey)
+      const sendResult = await processReadyEmails(supabaseClient, sendgridApiKey, scheduledEmailId)
       results.sent = sendResult.sent
       results.failed = sendResult.failed
       results.errors.push(...sendResult.errors)
@@ -657,14 +659,15 @@ async function verifyAccountQualifies(
 
 async function processReadyEmails(
   supabase: any,
-  sendgridApiKey: string | undefined
+  sendgridApiKey: string | undefined,
+  specificEmailId: string | null = null
 ): Promise<{ sent: number, failed: number, errors: string[] }> {
   const errors: string[] = []
   let sent = 0
   let failed = 0
 
-  // Get ready emails (verified or no verification required)
-  const { data: emails, error } = await supabase
+  // Build query for ready emails
+  let query = supabase
     .from('scheduled_emails')
     .select(`
       *,
@@ -672,10 +675,20 @@ async function processReadyEmails(
       template:email_templates(*)
     `)
     .eq('status', 'Pending')
-    .lte('scheduled_for', new Date().toISOString())
-    .or('requires_verification.is.null,requires_verification.eq.false')
-    .order('scheduled_for')
-    .limit(MAX_EMAILS_PER_RUN)
+
+  // If specific email ID provided, only process that one (for "Send Now" feature)
+  if (specificEmailId) {
+    query = query.eq('id', specificEmailId)
+  } else {
+    // Normal batch processing - get emails ready to send
+    query = query
+      .lte('scheduled_for', new Date().toISOString())
+      .or('requires_verification.is.null,requires_verification.eq.false')
+      .order('scheduled_for')
+      .limit(MAX_EMAILS_PER_RUN)
+  }
+
+  const { data: emails, error } = await query
 
   if (error) {
     errors.push(`Failed to get ready emails: ${error.message}`)
