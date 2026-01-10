@@ -319,6 +319,10 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
             if (existingKeys.has(uniqueKey)) continue
 
+            // Skip accounts without email addresses
+            const accountEmail = account.person_email || account.email
+            if (!accountEmail) continue
+
             const template = templateMap[emailStep.templateId] || {}
 
             newEmails.push({
@@ -326,7 +330,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               automation_id: automation.id,
               account_id: account.account_unique_id,
               template_id: emailStep.templateId,
-              to_email: account.person_email || account.email,
+              to_email: accountEmail,
               to_name: account.primary_contact_first_name
                 ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                 : account.name,
@@ -415,6 +419,10 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
                 if (existingKeys.has(uniqueKey)) continue
 
+                // Skip accounts without email addresses
+                const accountEmail = account.person_email || account.email
+                if (!accountEmail) continue
+
                 const template = templateMap[emailStep.templateId] || {}
 
                 newEmails.push({
@@ -422,7 +430,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
                   automation_id: automation.id,
                   account_id: account.account_unique_id,
                   template_id: emailStep.templateId,
-                  to_email: account.person_email || account.email,
+                  to_email: accountEmail,
                   to_name: account.primary_contact_first_name
                     ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
                     : account.name,
