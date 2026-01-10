@@ -156,33 +156,11 @@ async function listDomains(supabase: any, ownerId: string) {
 }
 
 async function getVerifiedDomains(supabase: any, ownerId: string) {
-  // First, get the user's profile_name to find domains from same organization
-  const { data: userData } = await supabase
-    .from('users')
-    .select('profile_name')
-    .eq('user_unique_id', ownerId)
-    .single()
-
-  const profileName = userData?.profile_name
-
-  // If user has a profile, get all user IDs in that profile
-  let ownerIds = [ownerId]
-  if (profileName) {
-    const { data: profileUsers } = await supabase
-      .from('users')
-      .select('user_unique_id')
-      .eq('profile_name', profileName)
-
-    if (profileUsers && profileUsers.length > 0) {
-      ownerIds = profileUsers.map((u: any) => u.user_unique_id)
-    }
-  }
-
-  // Get verified domains from any user in the same profile/organization
+  // Any verified domain in the system can be used by any user
+  // This allows agencies to share verified domains across the platform
   const { data, error } = await supabase
     .from('sender_domains')
     .select('id, domain, default_from_email, default_from_name')
-    .in('owner_id', ownerIds)
     .eq('status', 'verified')
     .order('domain')
 
