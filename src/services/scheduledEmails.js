@@ -14,7 +14,7 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts(account_unique_id, name, person_email),
+        account:accounts!scheduled_emails_account_id_fkey(account_unique_id, name, person_email),
         template:email_templates(id, name),
         automation:automations(id, name)
       `)
@@ -40,16 +40,20 @@ export const scheduledEmailsService = {
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async getUpcoming(ownerIds, limit = 10) {
+    // Get emails scheduled from start of today (not current time) to include same-day emails
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     let query = supabase
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts(account_unique_id, name, person_email, primary_contact_first_name, primary_contact_last_name, phone, billing_street, billing_city, billing_state, billing_postal_code),
+        account:accounts!scheduled_emails_account_id_fkey(account_unique_id, name, person_email, primary_contact_first_name, primary_contact_last_name, phone, billing_street, billing_city, billing_state, billing_postal_code),
         template:email_templates(id, name, subject, html_content, text_content),
         automation:automations(id, name)
       `)
       .eq('status', 'Pending')
-      .gte('scheduled_for', new Date().toISOString())
+      .gte('scheduled_for', startOfToday.toISOString())
       .order('scheduled_for', { ascending: true })
       .limit(limit);
     query = applyOwnerFilter(query, ownerIds);
@@ -90,7 +94,7 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts(*),
+        account:accounts!scheduled_emails_account_id_fkey(*),
         template:email_templates(*),
         automation:automations(id, name)
       `)
