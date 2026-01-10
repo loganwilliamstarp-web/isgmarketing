@@ -4,16 +4,85 @@ import { supabase } from '../lib/supabase';
 export const userSettingsService = {
   /**
    * Get settings for a user
+   * Includes agency info fallback from profile if user doesn't have their own
    */
   async get(userId) {
+    // First get the user's own settings
     const { data, error } = await supabase
       .from('user_settings')
       .select('*')
       .eq('user_id', userId)
       .single();
-    
+
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+
+    // If user has settings with agency info, return as-is
+    if (data?.agency_name) {
+      return data;
+    }
+
+    // Otherwise, try to get agency info from another user in the same profile
+    const agencyInfo = await this.getAgencyInfoByUserId(userId);
+
+    if (agencyInfo) {
+      return {
+        ...data,
+        agency_name: data?.agency_name || agencyInfo.agency_name,
+        agency_address: data?.agency_address || agencyInfo.agency_address,
+        agency_phone: data?.agency_phone || agencyInfo.agency_phone,
+        agency_website: data?.agency_website || agencyInfo.agency_website
+      };
+    }
+
     return data;
+  },
+
+  /**
+   * Get agency info from any user in the same profile
+   * Used as fallback when a user doesn't have their own agency info set
+   */
+  async getAgencyInfoByUserId(userId) {
+    // First get the user's profile
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('profile_name')
+      .eq('user_unique_id', userId)
+      .single();
+
+    if (userError || !userData?.profile_name) return null;
+
+    // Get agency info from any user_settings record in this profile that has agency info
+    const { data: settings, error: settingsError } = await supabase
+      .from('user_settings')
+      .select('agency_name, agency_address, agency_phone, agency_website, user_id')
+      .not('agency_name', 'is', null)
+      .limit(1);
+
+    if (settingsError || !settings || settings.length === 0) return null;
+
+    // Filter to only users in the same profile
+    // We need to join with users table to check profile
+    const { data: profileUsers, error: profileError } = await supabase
+      .from('users')
+      .select('user_unique_id')
+      .eq('profile_name', userData.profile_name);
+
+    if (profileError || !profileUsers) return null;
+
+    const profileUserIds = profileUsers.map(u => u.user_unique_id);
+
+    // Get agency info from user_settings for users in this profile
+    const { data: agencySettings, error: agencyError } = await supabase
+      .from('user_settings')
+      .select('agency_name, agency_address, agency_phone, agency_website')
+      .in('user_id', profileUserIds)
+      .not('agency_name', 'is', null)
+      .limit(1)
+      .single();
+
+    if (agencyError && agencyError.code !== 'PGRST116') return null;
+
+    return agencySettings;
   },
 
   /**
