@@ -45,6 +45,7 @@ export const scheduledEmailsService = {
       .select(`
         *,
         account:accounts(account_unique_id, name, person_email),
+        template:email_templates(id, name, subject),
         automation:automations(id, name)
       `)
       .eq('status', 'Pending')

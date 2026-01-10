@@ -60,19 +60,19 @@ const ScheduledEmailItem = ({ email, theme: t, userId }) => (
             minute: '2-digit'
           })}
         </div>
-        <Link 
+        <Link
           to={`/${userId}/clients/${email.account_id}`}
-          style={{ 
-            fontSize: '14px', 
-            fontWeight: '600', 
+          style={{
+            fontSize: '14px',
+            fontWeight: '600',
             color: t.text,
             textDecoration: 'none'
           }}
         >
-          {email.accounts?.name || 'Unknown Account'}
+          {email.account?.name || 'Unknown Account'}
         </Link>
         <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px' }}>
-          {email.email_templates?.subject || 'No subject'}
+          {email.template?.subject || email.subject || 'No subject'}
         </div>
         <span style={{
           display: 'inline-block',
@@ -83,7 +83,7 @@ const ScheduledEmailItem = ({ email, theme: t, userId }) => (
           fontSize: '11px',
           color: t.textSecondary
         }}>
-          {email.email_templates?.name || 'Unknown Template'}
+          {email.template?.name || email.automation?.name || 'Unknown Template'}
         </span>
       </div>
       <div style={{ display: 'flex', gap: '6px' }}>
