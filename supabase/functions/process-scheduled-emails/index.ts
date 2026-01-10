@@ -986,10 +986,15 @@ async function sendEmailViaSendGrid(
 // ============================================================================
 
 function applyMergeFields(content: string, email: ScheduledEmail, account: Record<string, any>): string {
+  // Extract first/last name from account.name if dedicated fields aren't available
+  const nameParts = (account.name || '').trim().split(/\s+/)
+  const derivedFirstName = nameParts[0] || ''
+  const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
+
   const mergeFields: Record<string, string> = {
     // Account fields
-    '{{first_name}}': account.primary_contact_first_name || '',
-    '{{last_name}}': account.primary_contact_last_name || '',
+    '{{first_name}}': account.primary_contact_first_name || derivedFirstName,
+    '{{last_name}}': account.primary_contact_last_name || derivedLastName,
     '{{full_name}}': [account.primary_contact_first_name, account.primary_contact_last_name].filter(Boolean).join(' ') || account.name || '',
     '{{name}}': account.name || '',
     '{{company_name}}': account.name || '',

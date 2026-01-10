@@ -81,9 +81,15 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   const applyMergeFields = (content) => {
     if (!content) return '';
     const acc = account || {};
+
+    // Extract first/last name from account.name if dedicated fields aren't available
+    const nameParts = (acc.name || '').trim().split(/\s+/);
+    const derivedFirstName = nameParts[0] || '';
+    const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
     const mergeFields = {
-      '{{first_name}}': acc.primary_contact_first_name || '',
-      '{{last_name}}': acc.primary_contact_last_name || '',
+      '{{first_name}}': acc.primary_contact_first_name || derivedFirstName,
+      '{{last_name}}': acc.primary_contact_last_name || derivedLastName,
       '{{full_name}}': [acc.primary_contact_first_name, acc.primary_contact_last_name].filter(Boolean).join(' ') || acc.name || '',
       '{{name}}': acc.name || '',
       '{{company_name}}': acc.name || '',
