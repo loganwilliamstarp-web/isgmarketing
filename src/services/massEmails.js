@@ -267,14 +267,14 @@ export const massEmailsService = {
     if (error) throw error;
 
     // Filter to only include accounts with valid emails
-    let allAccounts = accounts.filter(account => {
+    let filteredAccounts = accounts.filter(account => {
       const email = account.person_email || account.email;
       return email && email.includes('@');
     });
 
     // If no filter groups, return all accounts
     if (filterGroups.length === 0) {
-      return allAccounts;
+      return filteredAccounts;
     }
 
     // Check if we need policy data for any group
@@ -287,8 +287,8 @@ export const massEmailsService = {
 
     // Fetch policies once if needed
     let policyMap = {};
-    if (needsPolicyFilter && allAccounts.length > 0) {
-      const accountIds = allAccounts.map(a => a.account_unique_id);
+    if (needsPolicyFilter && filteredAccounts.length > 0) {
+      const accountIds = filteredAccounts.map(a => a.account_unique_id);
       const { data: policies, error: policyError } = await supabase
         .from('policies')
         .select('account_id, policy_lob, expiration_date, effective_date, policy_status')
@@ -306,8 +306,8 @@ export const massEmailsService = {
 
     // Always fetch last email sent dates for display and filtering
     let lastEmailMap = {};
-    if (allAccounts.length > 0) {
-      const accountIds = allAccounts.map(a => a.account_unique_id);
+    if (filteredAccounts.length > 0) {
+      const accountIds = filteredAccounts.map(a => a.account_unique_id);
       // Get the most recent email sent to each account
       const { data: emailLogs, error: emailError } = await supabase
         .from('email_logs')
@@ -334,9 +334,9 @@ export const massEmailsService = {
 
     // Pre-geocode all locations if needed
     let geocodeResults = {};
-    if (needsLocationFilter && allAccounts.length > 0) {
+    if (needsLocationFilter && filteredAccounts.length > 0) {
       const locationMap = {};
-      allAccounts.forEach(account => {
+      filteredAccounts.forEach(account => {
         const zip = (account.billing_postal_code || '').trim();
         const city = (account.billing_city || '').trim();
         const state = (account.billing_state || '').trim();
@@ -355,7 +355,7 @@ export const massEmailsService = {
       const uniqueLocations = [...new Set(Object.values(locationMap))];
       geocodeResults = await batchGeocode(uniqueLocations);
       // Attach location keys to accounts for later use
-      allAccounts.forEach(account => {
+      filteredAccounts.forEach(account => {
         account._locationKey = locationMap[account.account_unique_id];
       });
     }
@@ -1082,7 +1082,7 @@ export const massEmailsService = {
     const matchingAccountIds = new Set();
     const matchingAccounts = [];
 
-    for (const account of allAccounts) {
+    for (const account of filteredAccounts) {
       // Find all matching group indices
       const matchedGroupIndices = [];
       filterGroups.forEach((group, idx) => {
