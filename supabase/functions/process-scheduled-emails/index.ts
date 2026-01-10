@@ -786,6 +786,23 @@ async function processReadyEmails(
           })
           .eq('id', email.id)
 
+        // Log activity for email sent
+        await supabase
+          .from('activity_log')
+          .insert({
+            owner_id: email.owner_id,
+            event_type: 'email_sent',
+            event_category: 'email',
+            title: 'Email sent',
+            description: `Email "${email.subject || email.template?.subject}" sent to ${recipientEmail}`,
+            email_log_id: emailLog.id,
+            account_id: email.account_id,
+            automation_id: email.automation_id,
+            actor_type: 'system',
+            severity: 'info',
+            created_at: new Date().toISOString()
+          })
+
         sent++
       } else {
         // Update email_log as failed
