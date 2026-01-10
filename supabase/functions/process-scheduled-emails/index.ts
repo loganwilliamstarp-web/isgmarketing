@@ -1050,11 +1050,12 @@ function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
 
   let footer = ''
 
-  // 1. User signature (if exists)
+  // 1. User signature (if exists) - reset p margins to avoid double spacing
   if (userSettings?.signature_html) {
     footer += `
-      <div style="margin-top: 30px; font-family: Arial, sans-serif;">
-        ${userSettings.signature_html}
+      <div style="margin-top: 20px; font-family: Arial, sans-serif;">
+        <style>.email-sig p { margin: 0; }</style>
+        <div class="email-sig">${userSettings.signature_html}</div>
       </div>
     `
   }

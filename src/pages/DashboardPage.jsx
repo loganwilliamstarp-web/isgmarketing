@@ -120,9 +120,9 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
 
     let footer = '';
 
-    // Add signature
+    // Add signature (reset p margins inside signature to avoid double spacing)
     if (userSettings.signature_html) {
-      footer += `<div style="margin-top: 30px; font-family: Arial, sans-serif;">${userSettings.signature_html}</div>`;
+      footer += `<div style="margin-top: 20px; font-family: Arial, sans-serif;"><style>.email-sig p { margin: 0; }</style><div class="email-sig">${userSettings.signature_html}</div></div>`;
     }
 
     // Add agency footer
