@@ -164,6 +164,7 @@ async function getVerifiedDomains(supabase: any, ownerId: string) {
     .single()
 
   if (!userData?.email) {
+    console.log('getVerifiedDomains: No user email found for ownerId:', ownerId)
     return { domains: [] }
   }
 
@@ -171,19 +172,27 @@ async function getVerifiedDomains(supabase: any, ownerId: string) {
   const userEmailDomain = userData.email.split('@')[1]?.toLowerCase()
 
   if (!userEmailDomain) {
+    console.log('getVerifiedDomains: Could not extract domain from email:', userData.email)
     return { domains: [] }
   }
 
+  console.log('getVerifiedDomains: Looking for verified domains matching:', userEmailDomain, 'for user:', ownerId)
+
   // Get verified domains that match the user's email domain
-  // This allows all users with @smithinsurance.com emails to use verified smithinsurance.com domains
+  // Match either exact domain OR subdomains (e.g., em123.isgdfw.com matches isgdfw.com)
   const { data, error } = await supabase
     .from('sender_domains')
     .select('id, domain, default_from_email, default_from_name')
     .eq('status', 'verified')
-    .ilike('domain', `%${userEmailDomain}`)
+    .or(`domain.eq.${userEmailDomain},domain.ilike.%.${userEmailDomain}`)
     .order('domain')
 
-  if (error) throw error
+  console.log('getVerifiedDomains: Found domains:', data?.length || 0, data?.map((d: any) => d.domain))
+
+  if (error) {
+    console.error('getVerifiedDomains error:', error)
+    throw error
+  }
   return { domains: data || [] }
 }
 
