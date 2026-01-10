@@ -49,40 +49,48 @@ export const userSettingsService = {
       .eq('user_unique_id', userId)
       .single();
 
-    if (userError || !userData?.profile_name) return null;
+    if (userError || !userData?.profile_name) {
+      console.log('getAgencyInfoByUserId: No profile found for user', userId);
+      return null;
+    }
 
-    // Get agency info from any user_settings record in this profile that has agency info
-    const { data: settings, error: settingsError } = await supabase
-      .from('user_settings')
-      .select('agency_name, agency_address, agency_phone, agency_website, user_id')
-      .not('agency_name', 'is', null)
-      .limit(1);
+    console.log('getAgencyInfoByUserId: Looking for agency info in profile', userData.profile_name);
 
-    if (settingsError || !settings || settings.length === 0) return null;
-
-    // Filter to only users in the same profile
-    // We need to join with users table to check profile
+    // Get all users in the same profile
     const { data: profileUsers, error: profileError } = await supabase
       .from('users')
       .select('user_unique_id')
       .eq('profile_name', userData.profile_name);
 
-    if (profileError || !profileUsers) return null;
+    if (profileError || !profileUsers || profileUsers.length === 0) {
+      console.log('getAgencyInfoByUserId: No users found in profile');
+      return null;
+    }
 
     const profileUserIds = profileUsers.map(u => u.user_unique_id);
+    console.log('getAgencyInfoByUserId: Found', profileUserIds.length, 'users in profile');
 
-    // Get agency info from user_settings for users in this profile
+    // Get agency info from user_settings for any user in this profile that has agency_name set
     const { data: agencySettings, error: agencyError } = await supabase
       .from('user_settings')
       .select('agency_name, agency_address, agency_phone, agency_website')
       .in('user_id', profileUserIds)
       .not('agency_name', 'is', null)
-      .limit(1)
-      .single();
+      .neq('agency_name', '')
+      .limit(1);
 
-    if (agencyError && agencyError.code !== 'PGRST116') return null;
+    if (agencyError) {
+      console.log('getAgencyInfoByUserId: Error fetching agency settings', agencyError);
+      return null;
+    }
 
-    return agencySettings;
+    if (!agencySettings || agencySettings.length === 0) {
+      console.log('getAgencyInfoByUserId: No agency settings found for profile users');
+      return null;
+    }
+
+    console.log('getAgencyInfoByUserId: Found agency info', agencySettings[0]);
+    return agencySettings[0];
   },
 
   /**
