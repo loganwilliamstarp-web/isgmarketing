@@ -62,6 +62,8 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
     try {
       // Convert plain text back to HTML when saving
       const bodyHtml = plainTextToHtml(body);
+      console.log('Template save - body_text:', JSON.stringify(body));
+      console.log('Template save - body_html:', bodyHtml);
       await onSave({
         name,
         subject,
