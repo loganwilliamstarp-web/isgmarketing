@@ -70,11 +70,11 @@ serve(async (req) => {
     // Check if user is admin (can query other users' data)
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('role')
+      .select('marketing_cloud_agency_admin')
       .eq('user_unique_id', authenticatedUserId)
       .single()
 
-    const isAdmin = userData?.role === 'master_admin' || userData?.role === 'agency_admin'
+    const isAdmin = userData?.marketing_cloud_agency_admin === true
 
     // For list and verified actions, allow admins to query a target user's domains
     // Otherwise, use the authenticated user's ID
