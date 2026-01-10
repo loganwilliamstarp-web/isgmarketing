@@ -246,7 +246,7 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview }) => (
             textDecoration: 'none'
           }}
         >
-          {email.account?.name || 'Unknown Account'}
+          {email.to_name || email.account?.name || 'Unknown Account'}
         </Link>
         <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px' }}>
           {email.template?.subject || email.subject || 'No subject'}

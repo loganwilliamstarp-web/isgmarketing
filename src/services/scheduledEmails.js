@@ -14,7 +14,6 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts!scheduled_emails_account_id_fkey(account_unique_id, name, person_email),
         template:email_templates(id, name),
         automation:automations(id, name)
       `)
@@ -48,7 +47,6 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts!scheduled_emails_account_id_fkey(account_unique_id, name, person_email, primary_contact_first_name, primary_contact_last_name, phone, billing_street, billing_city, billing_state, billing_postal_code),
         template:email_templates(id, name, subject, html_content, text_content),
         automation:automations(id, name)
       `)
@@ -58,6 +56,8 @@ export const scheduledEmailsService = {
       .limit(limit);
     query = applyOwnerFilter(query, ownerIds);
     const { data, error } = await query;
+
+    console.log('getUpcoming query result:', { data, error, ownerIds, startOfToday: startOfToday.toISOString() });
 
     if (error) throw error;
     return data;
@@ -94,7 +94,6 @@ export const scheduledEmailsService = {
       .from('scheduled_emails')
       .select(`
         *,
-        account:accounts!scheduled_emails_account_id_fkey(*),
         template:email_templates(*),
         automation:automations(id, name)
       `)
