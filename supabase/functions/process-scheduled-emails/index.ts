@@ -180,11 +180,6 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const filterConfig = automation.filter_config || { groups: [] }
       const dateTriggerRules = extractDateTriggerRules(filterConfig)
 
-      if (dateTriggerRules.length === 0) {
-        // No date-based triggers - skip this automation
-        continue
-      }
-
       // Get trigger node for timing
       const nodes = automation.nodes || []
       const triggerNode = nodes.find((n: any) => n.type === 'trigger')
@@ -205,7 +200,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
       if (!accounts || accounts.length === 0) continue
 
-      // Get policies for these accounts
+      // Get policies for these accounts (needed for date-based and policy type filters)
       const accountIds = accounts.map((a: any) => a.account_unique_id)
       const { data: policies } = await supabase
         .from('policies')
@@ -267,16 +262,69 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const oneYearFromNow = new Date(today)
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
 
-      for (const account of accounts) {
-        const accountPolicies = (policies || []).filter((p: any) => p.account_id === account.account_unique_id)
+      // Filter accounts based on non-date filter rules (policy type, etc.)
+      const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig)
 
-        for (const rule of dateTriggerRules) {
-          const triggerDates: { date: Date, field: string, daysBeforeTrigger: number }[] = []
+      // Handle non-date-based automations (immediate/activation-based)
+      if (dateTriggerRules.length === 0) {
+        // No date triggers - schedule emails starting from today for all matching accounts
+        for (const account of filteredAccounts) {
+          for (const emailStep of emailSchedule) {
+            // Calculate send date based on workflow delay from today
+            const sendDate = new Date(today)
+            sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
 
-          if (rule.field === 'policy_expiration' || rule.field === 'policy_effective') {
-            const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
+            const [hours, minutes] = sendTime.split(':').map(Number)
+            sendDate.setHours(hours, minutes, 0, 0)
 
-            for (const policy of accountPolicies) {
+            // If first email (no delay) and time has passed today, send tomorrow
+            if (emailStep.daysOffset === 0 && sendDate < new Date()) {
+              sendDate.setDate(sendDate.getDate() + 1)
+            }
+
+            // Use 'immediate' as qualification value for non-date-based automations
+            const qualificationValue = 'immediate'
+            const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
+
+            if (existingKeys.has(uniqueKey)) continue
+
+            const template = templateMap[emailStep.templateId] || {}
+
+            newEmails.push({
+              owner_id: account.owner_id,
+              automation_id: automation.id,
+              account_id: account.account_unique_id,
+              template_id: emailStep.templateId,
+              recipient_email: account.person_email || account.email,
+              recipient_name: account.primary_contact_first_name
+                ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
+                : account.name,
+              scheduled_for: sendDate.toISOString(),
+              status: 'Pending',
+              qualification_value: qualificationValue,
+              trigger_field: 'activation',
+              node_id: emailStep.nodeId,
+              requires_verification: false, // No verification needed for immediate sends
+              from_email: template.from_email,
+              from_name: template.from_name,
+              subject: template.subject
+            })
+
+            existingKeys.add(uniqueKey)
+          }
+        }
+      } else {
+        // Date-based automation - process with trigger dates
+        for (const account of filteredAccounts) {
+          const accountPolicies = (policies || []).filter((p: any) => p.account_id === account.account_unique_id)
+
+          for (const rule of dateTriggerRules) {
+            const triggerDates: { date: Date, field: string, daysBeforeTrigger: number }[] = []
+
+            if (rule.field === 'policy_expiration' || rule.field === 'policy_effective') {
+              const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
+
+              for (const policy of accountPolicies) {
               // Check policy type filter
               if (rule.policyType) {
                 const policyTypes = rule.policyType.split(',').map((t: string) => t.toLowerCase().trim())
@@ -1067,4 +1115,113 @@ function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> 
   processNodes(workflowNodes)
 
   return schedule
+}
+
+/**
+ * Filter accounts based on non-date filter rules in the filter config
+ * Handles filters like customer_status, policy_type, etc.
+ */
+function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: any): any[] {
+  const groups = filterConfig?.groups || []
+
+  if (groups.length === 0) {
+    return accounts // No filters, return all accounts
+  }
+
+  return accounts.filter(account => {
+    const accountPolicies = policies.filter((p: any) => p.account_id === account.account_unique_id)
+
+    // Check if account matches ANY group (OR between groups)
+    return groups.some((group: any) => {
+      const rules = group.rules || []
+
+      // Check if account matches ALL rules in this group (AND within group)
+      return rules.every((rule: any) => {
+        // Skip date-based rules - they're handled separately
+        if (['policy_expiration', 'policy_effective', 'account_created'].includes(rule.field)) {
+          if (['in_next_days', 'in_last_days', 'less_than_days_future', 'more_than_days_future'].includes(rule.operator)) {
+            return true // Skip date rules, they're handled in the scheduling logic
+          }
+        }
+
+        const value = (rule.value || '').toLowerCase().trim()
+
+        switch (rule.field) {
+          case 'customer_status':
+          case 'account_status':
+            const accountStatus = (account.customer_status || account.account_status || '').toLowerCase()
+            return matchValue(accountStatus, value, rule.operator)
+
+          case 'active_policy_type':
+          case 'policy_type':
+            // Check if account has a policy of the specified type
+            return accountPolicies.some((p: any) => {
+              const policyLob = (p.policy_lob || '').toLowerCase()
+              return matchValue(policyLob, value, rule.operator)
+            })
+
+          case 'policy_term':
+            // Check if account has a policy with the specified term
+            return accountPolicies.some((p: any) => {
+              const policyTerm = (p.policy_term || '').toLowerCase()
+              return matchValue(policyTerm, value, rule.operator)
+            })
+
+          case 'state':
+          case 'billing_state':
+            const state = (account.billing_state || account.state || '').toLowerCase()
+            return matchValue(state, value, rule.operator)
+
+          case 'city':
+          case 'billing_city':
+            const city = (account.billing_city || account.city || '').toLowerCase()
+            return matchValue(city, value, rule.operator)
+
+          case 'has_email':
+            const hasEmail = !!(account.person_email || account.email)
+            return rule.operator === 'equals' ? hasEmail === (value === 'true') : hasEmail !== (value === 'true')
+
+          default:
+            // For unknown fields, try to match against account properties
+            const fieldValue = (account[rule.field] || '').toString().toLowerCase()
+            return matchValue(fieldValue, value, rule.operator)
+        }
+      })
+    })
+  })
+}
+
+/**
+ * Match a value against a filter value based on operator
+ */
+function matchValue(actualValue: string, filterValue: string, operator: string): boolean {
+  switch (operator) {
+    case 'equals':
+    case 'is':
+      return actualValue === filterValue
+    case 'not_equals':
+    case 'is_not':
+      return actualValue !== filterValue
+    case 'contains':
+      return actualValue.includes(filterValue)
+    case 'not_contains':
+      return !actualValue.includes(filterValue)
+    case 'starts_with':
+      return actualValue.startsWith(filterValue)
+    case 'ends_with':
+      return actualValue.endsWith(filterValue)
+    case 'is_empty':
+      return actualValue === ''
+    case 'is_not_empty':
+      return actualValue !== ''
+    case 'in':
+      // Value is comma-separated list
+      const inValues = filterValue.split(',').map(v => v.trim().toLowerCase())
+      return inValues.includes(actualValue)
+    case 'not_in':
+      const notInValues = filterValue.split(',').map(v => v.trim().toLowerCase())
+      return !notInValues.includes(actualValue)
+    default:
+      return actualValue === filterValue
+  }
 }
