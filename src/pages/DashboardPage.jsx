@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDashboard, useQuickStats, useUpcomingEmails, useEmailPerformanceChart } from '../hooks';
+import { accountsService } from '../services/accounts';
+import { userSettingsService } from '../services/userSettings';
 
 // Loading skeleton component
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -43,25 +45,55 @@ const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t })
 
 // Email Preview Modal
 const EmailPreviewModal = ({ email, theme: t, onClose }) => {
+  const [account, setAccount] = useState(null);
+  const [userSettings, setUserSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!email) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch account data
+        if (email.account_id) {
+          const accountData = await accountsService.getById(email.account_id);
+          setAccount(accountData);
+        }
+        // Fetch user settings for signature and agency info
+        if (email.owner_id) {
+          const settings = await userSettingsService.get(email.owner_id);
+          setUserSettings(settings);
+        }
+      } catch (err) {
+        console.error('Error fetching preview data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [email]);
+
   if (!email) return null;
 
   // Apply merge fields to content
   const applyMergeFields = (content) => {
     if (!content) return '';
-    const account = email.account || {};
+    const acc = account || {};
     const mergeFields = {
-      '{{first_name}}': account.primary_contact_first_name || '',
-      '{{last_name}}': account.primary_contact_last_name || '',
-      '{{full_name}}': [account.primary_contact_first_name, account.primary_contact_last_name].filter(Boolean).join(' ') || account.name || '',
-      '{{name}}': account.name || '',
-      '{{company_name}}': account.name || '',
-      '{{email}}': account.person_email || email.to_email || '',
-      '{{phone}}': account.phone || '',
-      '{{address}}': account.billing_street || '',
-      '{{city}}': account.billing_city || '',
-      '{{state}}': account.billing_state || '',
-      '{{zip}}': account.billing_postal_code || '',
-      '{{postal_code}}': account.billing_postal_code || '',
+      '{{first_name}}': acc.primary_contact_first_name || '',
+      '{{last_name}}': acc.primary_contact_last_name || '',
+      '{{full_name}}': [acc.primary_contact_first_name, acc.primary_contact_last_name].filter(Boolean).join(' ') || acc.name || '',
+      '{{name}}': acc.name || '',
+      '{{company_name}}': acc.name || '',
+      '{{email}}': acc.person_email || email.to_email || '',
+      '{{phone}}': acc.phone || '',
+      '{{address}}': acc.billing_street || '',
+      '{{city}}': acc.billing_city || '',
+      '{{state}}': acc.billing_state || '',
+      '{{zip}}': acc.billing_postal_code || '',
+      '{{postal_code}}': acc.billing_postal_code || '',
       '{{recipient_name}}': email.to_name || '',
       '{{recipient_email}}': email.to_email || '',
       '{{today}}': new Date().toLocaleDateString('en-US'),
@@ -76,8 +108,42 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
     return result;
   };
 
+  // Build email footer with signature and agency info
+  const buildFooter = () => {
+    if (!userSettings) return '';
+
+    let footer = '';
+
+    // Add signature
+    if (userSettings.signature_html) {
+      footer += `<div style="margin-top: 30px; font-family: Arial, sans-serif;">${userSettings.signature_html}</div>`;
+    }
+
+    // Add agency footer
+    if (userSettings.agency_name || userSettings.agency_address || userSettings.agency_phone) {
+      footer += `
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 12px; color: #666; font-family: Arial, sans-serif;">
+          ${userSettings.agency_name ? `<strong>${userSettings.agency_name}</strong><br>` : ''}
+          ${userSettings.agency_address ? `${userSettings.agency_address}<br>` : ''}
+          ${userSettings.agency_phone ? `${userSettings.agency_phone}` : ''}
+          ${userSettings.agency_website ? ` | <a href="${userSettings.agency_website}" style="color: #666;">${userSettings.agency_website}</a>` : ''}
+        </div>
+      `;
+    }
+
+    // Add unsubscribe link (preview placeholder)
+    footer += `
+      <div style="margin-top: 20px; text-align: center; font-size: 11px; color: #999; font-family: Arial, sans-serif;">
+        <a href="#" style="color: #999;">Unsubscribe</a> from these emails
+      </div>
+    `;
+
+    return footer;
+  };
+
   const subject = applyMergeFields(email.template?.subject || email.subject || 'No subject');
   const htmlContent = applyMergeFields(email.template?.body_html || '');
+  const footerHtml = buildFooter();
 
   return (
     <div style={{
@@ -136,12 +202,12 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
           <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px', fontSize: '13px' }}>
             <span style={{ color: t.textSecondary }}>From:</span>
             <span style={{ color: t.text }}>
-              {email.from_name || 'Unknown'} &lt;{email.from_email || 'unknown@email.com'}&gt;
+              {email.from_name || userSettings?.from_name || 'Unknown'} &lt;{email.from_email || userSettings?.from_email || 'unknown@email.com'}&gt;
             </span>
 
             <span style={{ color: t.textSecondary }}>To:</span>
             <span style={{ color: t.text }}>
-              {email.to_name || email.account?.name || 'Unknown'} &lt;{email.to_email || email.account?.person_email || 'unknown@email.com'}&gt;
+              {email.to_name || account?.name || 'Unknown'} &lt;{email.to_email || account?.person_email || 'unknown@email.com'}&gt;
             </span>
 
             <span style={{ color: t.textSecondary }}>Subject:</span>
@@ -168,9 +234,18 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
           padding: '20px',
           backgroundColor: '#ffffff'
         }}>
-          {htmlContent ? (
+          {loading ? (
+            <div style={{
+              color: t.textMuted,
+              textAlign: 'center',
+              padding: '40px',
+              fontSize: '14px'
+            }}>
+              Loading preview...
+            </div>
+          ) : htmlContent ? (
             <div
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+              dangerouslySetInnerHTML={{ __html: htmlContent + footerHtml }}
               style={{
                 fontFamily: 'Arial, sans-serif',
                 fontSize: '14px',
