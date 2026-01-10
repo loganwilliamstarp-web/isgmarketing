@@ -877,8 +877,8 @@ async function sendEmailViaSendGrid(
   }
 
   // Apply merge fields to template content
-  const baseHtmlContent = applyMergeFields(template.html_content || '', email, account)
-  const textContent = applyMergeFields(template.text_content || '', email, account)
+  const baseHtmlContent = applyMergeFields(template.body_html || '', email, account)
+  const textContent = applyMergeFields(template.body_text || '', email, account)
   const finalSubject = applyMergeFields(subject || 'No Subject', email, account)
 
   // Build email footer with signature, company info, and unsubscribe
