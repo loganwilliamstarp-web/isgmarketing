@@ -359,54 +359,55 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
               })
             }
 
-          for (const triggerDate of triggerDates) {
-            for (const emailStep of emailSchedule) {
-              // Calculate first qualification date (trigger date - days before trigger)
-              // Then add workflow delays for subsequent emails
-              const firstQualificationDate = new Date(triggerDate.date)
-              firstQualificationDate.setDate(firstQualificationDate.getDate() - triggerDate.daysBeforeTrigger)
+            for (const triggerDate of triggerDates) {
+              for (const emailStep of emailSchedule) {
+                // Calculate first qualification date (trigger date - days before trigger)
+                // Then add workflow delays for subsequent emails
+                const firstQualificationDate = new Date(triggerDate.date)
+                firstQualificationDate.setDate(firstQualificationDate.getDate() - triggerDate.daysBeforeTrigger)
 
-              // Send date = first qualification date + workflow delay offset
-              const sendDate = new Date(firstQualificationDate)
-              sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
+                // Send date = first qualification date + workflow delay offset
+                const sendDate = new Date(firstQualificationDate)
+                sendDate.setDate(sendDate.getDate() + emailStep.daysOffset)
 
-              const [hours, minutes] = sendTime.split(':').map(Number)
-              sendDate.setHours(hours, minutes, 0, 0)
+                const [hours, minutes] = sendTime.split(':').map(Number)
+                sendDate.setHours(hours, minutes, 0, 0)
 
-              // Skip if send date is in the past
-              if (sendDate < today) continue
+                // Skip if send date is in the past
+                if (sendDate < today) continue
 
-              // Skip if send date is more than 1 year in the future
-              if (sendDate > oneYearFromNow) continue
+                // Skip if send date is more than 1 year in the future
+                if (sendDate > oneYearFromNow) continue
 
-              const qualificationValue = triggerDate.date.toISOString().split('T')[0]
-              const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
+                const qualificationValue = triggerDate.date.toISOString().split('T')[0]
+                const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
 
-              if (existingKeys.has(uniqueKey)) continue
+                if (existingKeys.has(uniqueKey)) continue
 
-              const template = templateMap[emailStep.templateId] || {}
+                const template = templateMap[emailStep.templateId] || {}
 
-              newEmails.push({
-                owner_id: account.owner_id,
-                automation_id: automation.id,
-                account_id: account.account_unique_id,
-                template_id: emailStep.templateId,
-                recipient_email: account.person_email || account.email,
-                recipient_name: account.primary_contact_first_name
-                  ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
-                  : account.name,
-                scheduled_for: sendDate.toISOString(),
-                status: 'Pending',
-                qualification_value: qualificationValue,
-                trigger_field: triggerDate.field,
-                node_id: emailStep.nodeId,
-                requires_verification: true,
-                from_email: template.from_email,
-                from_name: template.from_name,
-                subject: template.subject
-              })
+                newEmails.push({
+                  owner_id: account.owner_id,
+                  automation_id: automation.id,
+                  account_id: account.account_unique_id,
+                  template_id: emailStep.templateId,
+                  recipient_email: account.person_email || account.email,
+                  recipient_name: account.primary_contact_first_name
+                    ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
+                    : account.name,
+                  scheduled_for: sendDate.toISOString(),
+                  status: 'Pending',
+                  qualification_value: qualificationValue,
+                  trigger_field: triggerDate.field,
+                  node_id: emailStep.nodeId,
+                  requires_verification: true,
+                  from_email: template.from_email,
+                  from_name: template.from_name,
+                  subject: template.subject
+                })
 
-              existingKeys.add(uniqueKey)
+                existingKeys.add(uniqueKey)
+              }
             }
           }
         }
