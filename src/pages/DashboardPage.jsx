@@ -43,6 +43,63 @@ const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t })
   </div>
 );
 
+// Stat card with comparison bar
+const ComparisonStatCard = ({ label, value, industryAvg, icon, isLoading, theme: t }) => {
+  const numValue = parseFloat(value) || 0;
+  const isAboveAvg = numValue > industryAvg;
+
+  return (
+    <div style={{
+      padding: '20px',
+      backgroundColor: t.bgCard,
+      borderRadius: '12px',
+      border: `1px solid ${t.border}`
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+        <span style={{ color: t.textSecondary, fontSize: '13px' }}>{label}</span>
+        <span style={{ fontSize: '20px' }}>{icon}</span>
+      </div>
+      {isLoading ? (
+        <>
+          <Skeleton height="28px" width="60px" />
+          <div style={{ marginTop: '8px' }}><Skeleton height="20px" /></div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+            <span style={{ fontSize: '28px', fontWeight: '700', color: t.text }}>{value}%</span>
+            <span style={{ fontSize: '11px', color: t.textMuted }}>vs {industryAvg}%</span>
+          </div>
+          <div style={{ display: 'flex', gap: '3px', height: '20px' }}>
+            <div style={{
+              width: `${Math.max(Math.min(numValue, 100), 5)}%`,
+              backgroundColor: t.primary,
+              borderRadius: '3px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '24px'
+            }}>
+              <span style={{ fontSize: '9px', color: '#fff', fontWeight: '600' }}>{numValue}%</span>
+            </div>
+            <div style={{
+              width: `${Math.max(Math.min(industryAvg, 100), 5)}%`,
+              backgroundColor: '#14b8a6',
+              borderRadius: '3px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '24px'
+            }}>
+              <span style={{ fontSize: '9px', color: '#fff', fontWeight: '600' }}>{industryAvg}%</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // Email Preview Modal
 const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   const [account, setAccount] = useState(null);
@@ -444,30 +501,27 @@ const DashboardPage = ({ t }) => {
           isLoading={statsLoading}
           theme={t}
         />
-        <StatCard
+        <ComparisonStatCard
           label="Open Rate"
-          value={formatPercent(stats?.openRate)}
-          change="vs 32% avg"
+          value={Math.round(stats?.openRate || 0)}
+          industryAvg={32}
           icon="📬"
-          positive={(stats?.openRate || 0) > 32}
           isLoading={statsLoading}
           theme={t}
         />
-        <StatCard
+        <ComparisonStatCard
           label="Click Rate"
-          value={formatPercent(stats?.clickRate)}
-          change="vs 8% avg"
+          value={Math.round(stats?.clickRate || 0)}
+          industryAvg={8}
           icon="🖱️"
-          positive={(stats?.clickRate || 0) > 8}
           isLoading={statsLoading}
           theme={t}
         />
-        <StatCard
+        <ComparisonStatCard
           label="Response Rate"
-          value={formatPercent(stats?.responseRate)}
-          change="vs 5% avg"
+          value={Math.round(stats?.responseRate || 0)}
+          industryAvg={5}
           icon="💬"
-          positive={(stats?.responseRate || 0) > 5}
           isLoading={statsLoading}
           theme={t}
         />
