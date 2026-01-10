@@ -147,8 +147,9 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
     return footer;
   };
 
-  const subject = applyMergeFields(email.template?.subject || email.subject || 'No subject');
-  const htmlContent = applyMergeFields(email.template?.body_html || '');
+  // Use scheduled email's own body first (populated during sync), fallback to template
+  const subject = applyMergeFields(email.subject || email.template?.subject || 'No subject');
+  const htmlContent = applyMergeFields(email.body_html || email.template?.body_html || '');
   const footerHtml = buildFooter();
 
   return (
