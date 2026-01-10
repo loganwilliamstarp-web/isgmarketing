@@ -77,7 +77,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   };
 
   const subject = applyMergeFields(email.template?.subject || email.subject || 'No subject');
-  const htmlContent = applyMergeFields(email.template?.html_content || '');
+  const htmlContent = applyMergeFields(email.template?.body_html || '');
 
   return (
     <div style={{
