@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDashboard, useQuickStats, useUpcomingEmails, useEmailPerformanceChart, useScheduledEmailMutations, useRecentActivity } from '../hooks';
+import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useRecentActivity } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
 
@@ -483,7 +483,6 @@ const DashboardPage = ({ t }) => {
   // Fetch dashboard data using hooks
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
   const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
-  const { data: chartData, isLoading: chartLoading } = useEmailPerformanceChart(30);
   const { data: recentActivity, isLoading: activityLoading } = useRecentActivity({ category: 'email', limit: 10 });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
 
@@ -655,7 +654,7 @@ const DashboardPage = ({ t }) => {
           </div>
         </div>
 
-        {/* Recent Email Activity */}
+        {/* Recent Activity */}
         <div style={{
           padding: '20px',
           backgroundColor: t.bgCard,
@@ -664,7 +663,7 @@ const DashboardPage = ({ t }) => {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
-              Recent Email Activity
+              Recent Activity
             </h3>
             <Link
               to={`/${userId}/timeline`}
@@ -674,46 +673,74 @@ const DashboardPage = ({ t }) => {
             </Link>
           </div>
 
-          {chartLoading ? (
-            <Skeleton height="200px" />
-          ) : chartData?.length > 0 ? (
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              gap: '4px',
-              height: '200px',
-              padding: '20px 0'
-            }}>
-              {chartData.slice(-14).map((day, i) => {
-                const maxSent = Math.max(...chartData.map(d => d.sent || 0), 1);
-                const height = ((day.sent || 0) / maxSent) * 150;
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '100%',
-                        height: `${height}px`,
-                        backgroundColor: t.primary,
-                        borderRadius: '4px 4px 0 0',
-                        minHeight: '4px'
-                      }}
-                      title={`${day.sent || 0} sent on ${day.date}`}
-                    />
-                    <span style={{ fontSize: '9px', color: t.textMuted }}>
-                      {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)}
-                    </span>
+          {activityLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <Skeleton width="32px" height="32px" />
+                  <div style={{ flex: 1 }}>
+                    <Skeleton height="14px" width="200px" />
+                    <div style={{ marginTop: '4px' }}><Skeleton height="12px" width="150px" /></div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
+            </div>
+          ) : recentActivity?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {recentActivity.map((activity) => (
+                <div
+                  key={activity.id}
+                  style={{
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start',
+                    padding: '10px',
+                    backgroundColor: t.bg,
+                    borderRadius: '8px',
+                    border: `1px solid ${t.border}`
+                  }}
+                >
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: activity.event_type === 'email_sent' ? `${t.success}20` :
+                      activity.event_type === 'email_opened' ? `${t.primary}20` :
+                      activity.event_type === 'email_clicked' ? `${t.warning}20` :
+                      activity.event_type === 'email_bounced' ? `${t.danger}20` : t.bgHover,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px'
+                  }}>
+                    {activity.event_type === 'email_sent' ? '📤' :
+                     activity.event_type === 'email_opened' ? '👀' :
+                     activity.event_type === 'email_clicked' ? '🔗' :
+                     activity.event_type === 'email_bounced' ? '⚠️' : '📧'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                      {activity.title}
+                    </div>
+                    {activity.description && (
+                      <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {activity.description}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                      {new Date(activity.created_at).toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                      {activity.account?.name && (
+                        <span> • {activity.account.name}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div style={{
@@ -722,112 +749,11 @@ const DashboardPage = ({ t }) => {
               color: t.textMuted,
               fontSize: '14px'
             }}>
-              No email activity data yet
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
+              No recent activity yet
             </div>
           )}
         </div>
-      </div>
-
-      {/* Recent Activity Feed */}
-      <div style={{
-        marginTop: '24px',
-        padding: '20px',
-        backgroundColor: t.bgCard,
-        borderRadius: '12px',
-        border: `1px solid ${t.border}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
-            Recent Activity
-          </h3>
-          <Link
-            to={`/${userId}/timeline`}
-            style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
-          >
-            View all →
-          </Link>
-        </div>
-
-        {activityLoading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {[1, 2, 3].map(i => (
-              <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <Skeleton width="32px" height="32px" />
-                <div style={{ flex: 1 }}>
-                  <Skeleton height="14px" width="200px" />
-                  <div style={{ marginTop: '4px' }}><Skeleton height="12px" width="150px" /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : recentActivity?.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {recentActivity.map((activity) => (
-              <div
-                key={activity.id}
-                style={{
-                  display: 'flex',
-                  gap: '12px',
-                  alignItems: 'flex-start',
-                  padding: '10px',
-                  backgroundColor: t.bg,
-                  borderRadius: '8px',
-                  border: `1px solid ${t.border}`
-                }}
-              >
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: activity.event_type === 'email_sent' ? `${t.success}20` :
-                    activity.event_type === 'email_opened' ? `${t.primary}20` :
-                    activity.event_type === 'email_clicked' ? `${t.warning}20` :
-                    activity.event_type === 'email_bounced' ? `${t.danger}20` : t.bgHover,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px'
-                }}>
-                  {activity.event_type === 'email_sent' ? '📤' :
-                   activity.event_type === 'email_opened' ? '👀' :
-                   activity.event_type === 'email_clicked' ? '🔗' :
-                   activity.event_type === 'email_bounced' ? '⚠️' : '📧'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
-                    {activity.title}
-                  </div>
-                  {activity.description && (
-                    <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {activity.description}
-                    </div>
-                  )}
-                  <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-                    {new Date(activity.created_at).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit'
-                    })}
-                    {activity.account?.name && (
-                      <span> • {activity.account.name}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{
-            padding: '40px 20px',
-            textAlign: 'center',
-            color: t.textMuted,
-            fontSize: '14px'
-          }}>
-            <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
-            No recent activity yet
-          </div>
-        )}
       </div>
 
       {/* Email Preview Modal */}
