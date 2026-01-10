@@ -38,12 +38,13 @@ const ImpersonationBanner = () => {
           return;
         }
 
-        // Get verified sender domains for this user
+        // Get verified sender domains that match the user's email domain
+        // Match either exact domain OR subdomains (e.g., mail.isgdfw.com matches isgdfw.com)
         const { data: domains, error: domainsError } = await supabase
           .from('sender_domains')
           .select('domain, status')
-          .eq('owner_id', impersonating.targetUserId)
-          .eq('status', 'verified');
+          .eq('status', 'verified')
+          .or(`domain.eq.${emailDomain},domain.ilike.%.${emailDomain}`);
 
         if (domainsError) {
           console.error('Error fetching sender domains:', domainsError);
@@ -51,10 +52,8 @@ const ImpersonationBanner = () => {
           return;
         }
 
-        // Check if any verified domain matches the user's email domain
-        const hasMatchingDomain = domains?.some(
-          d => d.domain?.toLowerCase() === emailDomain
-        );
+        // Check if any verified domain was found matching the user's email domain
+        const hasMatchingDomain = domains && domains.length > 0;
 
         if (!hasMatchingDomain) {
           setDomainWarning({

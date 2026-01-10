@@ -51,9 +51,10 @@ export const userSettingsService = {
   },
 
   /**
-   * Update user settings
+   * Update user settings (creates record if it doesn't exist)
    */
   async update(userId, updates) {
+    // First try to update existing record
     const { data, error } = await supabase
       .from('user_settings')
       .update({
@@ -63,7 +64,24 @@ export const userSettingsService = {
       .eq('user_id', userId)
       .select()
       .single();
-    
+
+    // If no row was found, create one
+    if (error && error.code === 'PGRST116') {
+      const { data: newData, error: insertError } = await supabase
+        .from('user_settings')
+        .insert({
+          user_id: userId,
+          ...updates,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      return newData;
+    }
+
     if (error) throw error;
     return data;
   },
