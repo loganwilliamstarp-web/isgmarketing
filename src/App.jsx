@@ -21,6 +21,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const WorkflowBuilderPage = lazy(() => import('./pages/WorkflowBuilderPage'));
 const MassEmailPage = lazy(() => import('./pages/MassEmailPage'));
 const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
+const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -708,6 +709,7 @@ const AppLayout = () => {
                   <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="templates" element={<TemplatesPage t={t} />} />
                   <Route path="mass-email" element={<MassEmailPage t={t} />} />
+                  <Route path="scheduled-emails" element={<ScheduledEmailsPage t={t} />} />
                   <Route path="accounts" element={<ClientsPage t={t} />} />
                   <Route path="accounts/:accountId" element={<ClientProfilePage t={t} />} />
                   <Route path="settings" element={<SettingsPage t={t} />} />

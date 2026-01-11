@@ -375,7 +375,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
             .select(`
               *,
               account:accounts(*),
-              template:email_templates(name, subject, body_html, body_text)
+              template:email_templates(*)
             `)
             .eq('id', activity.email_log_id)
             .single()
@@ -383,6 +383,8 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
         if (!error && data) {
           setEmailData(data);
           setAccount(data.account);
+        } else if (error) {
+          console.error('Error fetching email log:', error);
         }
       } catch (err) {
         console.error('Error fetching email data:', err);
@@ -435,13 +437,26 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
     return result;
   };
 
-  // Get the body content - prefer template body_html
+  // Get the body content - check multiple sources
   const getBodyContent = () => {
+    // First check if email_log has body_html directly (direct emails)
+    if (emailData?.body_html) {
+      return applyMergeFields(emailData.body_html);
+    }
+    // Then check template body_html (automation emails)
     if (emailData?.template?.body_html) {
       return applyMergeFields(emailData.template.body_html);
     }
-    if (emailData?.body_html) {
-      return emailData.body_html;
+    return null;
+  };
+
+  // Get plain text content as fallback
+  const getTextContent = () => {
+    if (emailData?.body_text) {
+      return applyMergeFields(emailData.body_text);
+    }
+    if (emailData?.template?.body_text) {
+      return applyMergeFields(emailData.template.body_text);
     }
     return null;
   };
@@ -601,7 +616,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 color: '#333'
               }}
             />
-          ) : emailData?.template?.body_text || emailData?.body_text ? (
+          ) : getTextContent() ? (
             <div style={{
               fontFamily: 'Arial, sans-serif',
               fontSize: '14px',
@@ -609,7 +624,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
               color: '#333',
               whiteSpace: 'pre-wrap'
             }}>
-              {applyMergeFields(emailData.template?.body_text || emailData.body_text)}
+              {getTextContent()}
             </div>
           ) : (
             <div style={{
@@ -901,7 +916,7 @@ const DashboardPage = ({ t }) => {
               Upcoming Scheduled Emails
             </h3>
             <Link
-              to={`/${userId}/automations`}
+              to={`/${userId}/scheduled-emails`}
               style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
             >
               View all →
@@ -965,7 +980,7 @@ const DashboardPage = ({ t }) => {
               Recent Email Activity
             </h3>
             <Link
-              to={`/${userId}/email-logs`}
+              to={`/${userId}/timeline`}
               style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
             >
               View all →
