@@ -12,7 +12,10 @@ export function useUserSettings() {
   return useQuery({
     queryKey: ['userSettings', filterKey],
     queryFn: () => userSettingsService.get(ownerId),
-    enabled: !!ownerId
+    enabled: !!ownerId,
+    // Ensure fresh data on mount to fix agency info not loading on refresh
+    staleTime: 0,
+    refetchOnMount: true
   });
 }
 

@@ -16,8 +16,8 @@ export const userSettingsService = {
 
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
 
-    // If user has settings with agency info, return as-is
-    if (data?.agency_name) {
+    // If user has settings with agency info (non-empty string), return as-is
+    if (data?.agency_name && data.agency_name.trim() !== '') {
       return data;
     }
 
@@ -25,12 +25,13 @@ export const userSettingsService = {
     const agencyInfo = await this.getAgencyInfoByUserId(userId);
 
     if (agencyInfo) {
+      // Merge agency info into settings (or create minimal object if no settings exist)
       return {
-        ...data,
-        agency_name: data?.agency_name || agencyInfo.agency_name,
-        agency_address: data?.agency_address || agencyInfo.agency_address,
-        agency_phone: data?.agency_phone || agencyInfo.agency_phone,
-        agency_website: data?.agency_website || agencyInfo.agency_website
+        ...(data || {}),
+        agency_name: agencyInfo.agency_name,
+        agency_address: agencyInfo.agency_address,
+        agency_phone: agencyInfo.agency_phone,
+        agency_website: agencyInfo.agency_website
       };
     }
 
