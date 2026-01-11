@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useEmailLogs } from '../hooks';
+import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useEmailActivityFeed } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
 
@@ -483,7 +483,7 @@ const DashboardPage = ({ t }) => {
   // Fetch dashboard data using hooks
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
   const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
-  const { data: recentEmails, isLoading: emailsActivityLoading } = useEmailLogs({ limit: 10 });
+  const { data: emailActivity, isLoading: activityLoading } = useEmailActivityFeed({ limit: 15 });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
 
   // Handle send now
@@ -673,7 +673,7 @@ const DashboardPage = ({ t }) => {
             </Link>
           </div>
 
-          {emailsActivityLoading ? (
+          {activityLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[1, 2, 3].map(i => (
                 <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -685,23 +685,21 @@ const DashboardPage = ({ t }) => {
                 </div>
               ))}
             </div>
-          ) : recentEmails?.length > 0 ? (
+          ) : emailActivity?.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {recentEmails.map((email) => {
-                const statusIcon = email.status === 'Sent' ? '📤' :
-                  email.status === 'Delivered' ? '✅' :
-                  email.status === 'Opened' ? '👀' :
-                  email.status === 'Clicked' ? '🔗' :
-                  email.status === 'Bounced' ? '⚠️' :
-                  email.status === 'Failed' ? '❌' : '📧';
-                const statusColor = email.status === 'Sent' || email.status === 'Delivered' ? t.success :
-                  email.status === 'Opened' ? t.primary :
-                  email.status === 'Clicked' ? t.warning :
-                  email.status === 'Bounced' || email.status === 'Failed' ? t.danger : t.textSecondary;
+              {emailActivity.map((activity) => {
+                const typeConfig = {
+                  sent: { icon: '📤', label: 'Sent', color: t.success },
+                  opened: { icon: '👀', label: 'Opened', color: t.primary },
+                  clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
+                  replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
+                };
+                const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
+
                 return (
                   <Link
-                    key={email.id}
-                    to={`/${userId}/email-logs/${email.id}`}
+                    key={activity.id}
+                    to={activity.email_log_id ? `/${userId}/email-logs/${activity.email_log_id}` : `/${userId}/email-logs`}
                     style={{
                       display: 'flex',
                       gap: '12px',
@@ -717,37 +715,46 @@ const DashboardPage = ({ t }) => {
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      backgroundColor: `${statusColor}20`,
+                      backgroundColor: `${config.color}20`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '14px'
                     }}>
-                      {statusIcon}
+                      {config.icon}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
-                        {email.subject || 'No subject'}
+                        {activity.subject || 'No subject'}
                       </div>
                       <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        To: {email.to_name || email.to_email}
+                        {activity.type === 'replied'
+                          ? `From: ${activity.from_email}`
+                          : `To: ${activity.to_name || activity.to_email}`}
+                        {activity.snippet && ` - ${activity.snippet}`}
                       </div>
-                      <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: statusColor, fontWeight: '500' }}>{email.status}</span>
+                      <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ color: config.color, fontWeight: '500' }}>{config.label}</span>
                         <span>•</span>
                         <span>
-                          {new Date(email.sent_at || email.created_at).toLocaleString('en-US', {
+                          {new Date(activity.timestamp).toLocaleString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             hour: 'numeric',
                             minute: '2-digit'
                           })}
                         </span>
-                        {email.account?.name && (
+                        {activity.account?.name && (
                           <>
                             <span>•</span>
-                            <span>{email.account.name}</span>
+                            <span>{activity.account.name}</span>
                           </>
+                        )}
+                        {activity.open_count > 1 && (
+                          <span style={{ color: t.textMuted }}>({activity.open_count} opens)</span>
+                        )}
+                        {activity.click_count > 1 && (
+                          <span style={{ color: t.textMuted }}>({activity.click_count} clicks)</span>
                         )}
                       </div>
                     </div>

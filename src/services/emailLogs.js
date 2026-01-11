@@ -563,6 +563,134 @@ export const emailRepliesService = {
   }
 };
 
+/**
+ * Combined email activity feed service
+ * Pulls from email_logs, email_events, and email_replies
+ */
+export const emailActivityService = {
+  /**
+   * Get combined recent email activity feed
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Query options
+   */
+  async getRecentActivity(ownerIds, options = {}) {
+    const { limit = 20 } = options;
+
+    // Fetch from multiple sources in parallel
+    const [recentSends, recentOpens, recentClicks, recentReplies] = await Promise.all([
+      // Recent email sends
+      (async () => {
+        let query = supabase
+          .from('email_logs')
+          .select(`
+            id, subject, to_email, to_name, status, sent_at, created_at,
+            account:accounts(account_unique_id, name)
+          `)
+          .in('status', ['Sent', 'Delivered', 'Queued'])
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        query = applyOwnerFilter(query, ownerIds);
+        const { data } = await query;
+        return (data || []).map(e => ({
+          id: `send-${e.id}`,
+          type: 'sent',
+          email_log_id: e.id,
+          subject: e.subject,
+          to_email: e.to_email,
+          to_name: e.to_name,
+          status: e.status,
+          account: e.account,
+          timestamp: e.sent_at || e.created_at
+        }));
+      })(),
+
+      // Recent opens (from email_logs first_opened_at)
+      (async () => {
+        let query = supabase
+          .from('email_logs')
+          .select(`
+            id, subject, to_email, to_name, first_opened_at, open_count,
+            account:accounts(account_unique_id, name)
+          `)
+          .not('first_opened_at', 'is', null)
+          .order('first_opened_at', { ascending: false })
+          .limit(limit);
+        query = applyOwnerFilter(query, ownerIds);
+        const { data } = await query;
+        return (data || []).map(e => ({
+          id: `open-${e.id}`,
+          type: 'opened',
+          email_log_id: e.id,
+          subject: e.subject,
+          to_email: e.to_email,
+          to_name: e.to_name,
+          open_count: e.open_count,
+          account: e.account,
+          timestamp: e.first_opened_at
+        }));
+      })(),
+
+      // Recent clicks (from email_logs first_clicked_at)
+      (async () => {
+        let query = supabase
+          .from('email_logs')
+          .select(`
+            id, subject, to_email, to_name, first_clicked_at, click_count,
+            account:accounts(account_unique_id, name)
+          `)
+          .not('first_clicked_at', 'is', null)
+          .order('first_clicked_at', { ascending: false })
+          .limit(limit);
+        query = applyOwnerFilter(query, ownerIds);
+        const { data } = await query;
+        return (data || []).map(e => ({
+          id: `click-${e.id}`,
+          type: 'clicked',
+          email_log_id: e.id,
+          subject: e.subject,
+          to_email: e.to_email,
+          to_name: e.to_name,
+          click_count: e.click_count,
+          account: e.account,
+          timestamp: e.first_clicked_at
+        }));
+      })(),
+
+      // Recent replies
+      (async () => {
+        let query = supabase
+          .from('email_replies')
+          .select(`
+            id, subject, from_email, received_at, snippet,
+            email_log:email_logs(id, subject, to_email),
+            account:accounts(account_unique_id, name)
+          `)
+          .order('received_at', { ascending: false })
+          .limit(limit);
+        query = applyOwnerFilter(query, ownerIds);
+        const { data } = await query;
+        return (data || []).map(e => ({
+          id: `reply-${e.id}`,
+          type: 'replied',
+          email_log_id: e.email_log?.id,
+          subject: e.subject || e.email_log?.subject,
+          from_email: e.from_email,
+          snippet: e.snippet,
+          account: e.account,
+          timestamp: e.received_at
+        }));
+      })()
+    ]);
+
+    // Combine and sort by timestamp
+    const allActivity = [...recentSends, ...recentOpens, ...recentClicks, ...recentReplies]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, limit);
+
+    return allActivity;
+  }
+};
+
 export const emailEventsService = {
   /**
    * Get events for an email log

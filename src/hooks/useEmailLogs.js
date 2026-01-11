@@ -1,6 +1,6 @@
 // src/hooks/useEmailLogs.js
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { emailLogsService, emailEventsService } from '../services/emailLogs';
+import { emailLogsService, emailEventsService, emailActivityService } from '../services/emailLogs';
 import { useEffectiveOwner } from './useEffectiveOwner';
 
 /**
@@ -155,6 +155,19 @@ export function useEmailEvents(emailLogId) {
     queryKey: ['emailEvents', emailLogId],
     queryFn: () => emailEventsService.getByEmailLog(emailLogId),
     enabled: !!emailLogId
+  });
+}
+
+/**
+ * Get combined email activity feed (sends, opens, clicks, replies)
+ */
+export function useEmailActivityFeed(options = {}) {
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
+  return useQuery({
+    queryKey: ['emailActivity', filterKey, options],
+    queryFn: () => emailActivityService.getRecentActivity(ownerIds, options),
+    enabled: ownerIds.length > 0
   });
 }
 

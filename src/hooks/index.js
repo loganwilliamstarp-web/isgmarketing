@@ -48,6 +48,7 @@ export {
   useDailyStats,
   useComparisonStats,
   useEmailEvents,
+  useEmailActivityFeed,
   useEmailLogMutations
 } from './useEmailLogs';
 
