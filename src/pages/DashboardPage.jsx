@@ -353,6 +353,255 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   );
 };
 
+// Activity Preview Modal (for sent emails and replies)
+const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
+  const [emailData, setEmailData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!activity?.email_log_id) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchEmailData = async () => {
+      setLoading(true);
+      try {
+        // Fetch the full email log data
+        const { data, error } = await import('../lib/supabase').then(m =>
+          m.supabase
+            .from('email_logs')
+            .select(`
+              *,
+              account:accounts(name, person_email),
+              template:email_templates(name, subject, body_html)
+            `)
+            .eq('id', activity.email_log_id)
+            .single()
+        );
+        if (!error && data) {
+          setEmailData(data);
+        }
+      } catch (err) {
+        console.error('Error fetching email data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmailData();
+  }, [activity?.email_log_id]);
+
+  if (!activity) return null;
+
+  const isReply = activity.type === 'replied';
+  const title = isReply ? 'Reply Preview' : 'Sent Email Preview';
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: '20px'
+    }} onClick={onClose}>
+      <div style={{
+        backgroundColor: t.bgCard,
+        borderRadius: '12px',
+        width: '100%',
+        maxWidth: '800px',
+        maxHeight: '90vh',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: t.text }}>
+            {title}
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              color: t.textSecondary,
+              padding: '4px 8px'
+            }}
+          >×</button>
+        </div>
+
+        {/* Email Details */}
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: `1px solid ${t.border}`,
+          backgroundColor: t.bg
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px', fontSize: '13px' }}>
+            {isReply ? (
+              <>
+                <span style={{ color: t.textSecondary }}>From:</span>
+                <span style={{ color: t.text }}>{activity.from_email}</span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: t.textSecondary }}>To:</span>
+                <span style={{ color: t.text }}>
+                  {activity.to_name || emailData?.to_name || 'Unknown'} &lt;{activity.to_email || emailData?.to_email || 'unknown'}&gt;
+                </span>
+              </>
+            )}
+
+            <span style={{ color: t.textSecondary }}>Subject:</span>
+            <span style={{ color: t.text, fontWeight: '500' }}>{activity.subject || emailData?.subject || 'No subject'}</span>
+
+            <span style={{ color: t.textSecondary }}>{isReply ? 'Received:' : 'Sent:'}</span>
+            <span style={{ color: t.text }}>
+              {new Date(activity.timestamp).toLocaleString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+              })}
+            </span>
+
+            {activity.account?.name && (
+              <>
+                <span style={{ color: t.textSecondary }}>Account:</span>
+                <span style={{ color: t.text }}>{activity.account.name}</span>
+              </>
+            )}
+
+            {emailData?.status && !isReply && (
+              <>
+                <span style={{ color: t.textSecondary }}>Status:</span>
+                <span style={{
+                  color: emailData.status === 'Delivered' || emailData.status === 'Sent' ? t.success :
+                    emailData.status === 'Opened' ? t.primary :
+                    emailData.status === 'Clicked' ? t.warning :
+                    emailData.status === 'Bounced' || emailData.status === 'Failed' ? t.danger : t.text,
+                  fontWeight: '500'
+                }}>{emailData.status}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Email Body */}
+        <div style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: '20px',
+          backgroundColor: '#ffffff'
+        }}>
+          {loading ? (
+            <div style={{
+              color: t.textMuted,
+              textAlign: 'center',
+              padding: '40px',
+              fontSize: '14px'
+            }}>
+              Loading preview...
+            </div>
+          ) : isReply && activity.snippet ? (
+            <div style={{
+              fontFamily: 'Arial, sans-serif',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: '#333',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {activity.snippet}
+              <div style={{
+                marginTop: '20px',
+                padding: '12px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#666'
+              }}>
+                This is a preview snippet. View the full reply in your email client.
+              </div>
+            </div>
+          ) : emailData?.body_html || emailData?.template?.body_html ? (
+            <div
+              dangerouslySetInnerHTML={{
+                __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
+                  (emailData.body_html || emailData.template?.body_html)
+              }}
+              style={{
+                fontFamily: 'Arial, sans-serif',
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: '#333'
+              }}
+            />
+          ) : emailData?.body_text ? (
+            <div style={{
+              fontFamily: 'Arial, sans-serif',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: '#333',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {emailData.body_text}
+            </div>
+          ) : (
+            <div style={{
+              color: t.textMuted,
+              textAlign: 'center',
+              padding: '40px',
+              fontSize: '14px'
+            }}>
+              No email content available
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 20px',
+          borderTop: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '8px'
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: t.bgHover,
+              border: `1px solid ${t.border}`,
+              borderRadius: '6px',
+              color: t.text,
+              cursor: 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Scheduled email item
 const ScheduledEmailItem = ({ email, theme: t, userId, onPreview, onSendNow, onCancel, isSending }) => (
   <div style={{
@@ -478,6 +727,7 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview, onSendNow, onC
 const DashboardPage = ({ t }) => {
   const { userId } = useParams();
   const [previewEmail, setPreviewEmail] = useState(null);
+  const [previewActivity, setPreviewActivity] = useState(null);
   const [sendingEmailId, setSendingEmailId] = useState(null);
 
   // Fetch dashboard data using hooks
@@ -695,11 +945,11 @@ const DashboardPage = ({ t }) => {
                   replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
                 };
                 const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
+                const canPreview = activity.type === 'sent' || activity.type === 'replied';
 
                 return (
-                  <Link
+                  <div
                     key={activity.id}
-                    to={activity.email_log_id ? `/${userId}/email-logs/${activity.email_log_id}` : `/${userId}/email-logs`}
                     style={{
                       display: 'flex',
                       gap: '12px',
@@ -707,8 +957,7 @@ const DashboardPage = ({ t }) => {
                       padding: '10px',
                       backgroundColor: t.bg,
                       borderRadius: '8px',
-                      border: `1px solid ${t.border}`,
-                      textDecoration: 'none'
+                      border: `1px solid ${t.border}`
                     }}
                   >
                     <div style={{
@@ -758,7 +1007,56 @@ const DashboardPage = ({ t }) => {
                         )}
                       </div>
                     </div>
-                  </Link>
+                    {/* Preview button for sent emails and replies */}
+                    {canPreview && (
+                      <button
+                        onClick={() => setPreviewActivity(activity)}
+                        title="Preview"
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: t.bgHover,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: '6px',
+                          color: t.textSecondary,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                    )}
+                    {/* Link to email log for all types */}
+                    {activity.email_log_id && (
+                      <Link
+                        to={`/${userId}/email-logs/${activity.email_log_id}`}
+                        title="View details"
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: t.bgHover,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: '6px',
+                          color: t.textSecondary,
+                          textDecoration: 'none',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </Link>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -776,12 +1074,21 @@ const DashboardPage = ({ t }) => {
         </div>
       </div>
 
-      {/* Email Preview Modal */}
+      {/* Email Preview Modal (for scheduled emails) */}
       {previewEmail && (
         <EmailPreviewModal
           email={previewEmail}
           theme={t}
           onClose={() => setPreviewEmail(null)}
+        />
+      )}
+
+      {/* Activity Preview Modal (for sent emails and replies) */}
+      {previewActivity && (
+        <ActivityPreviewModal
+          activity={previewActivity}
+          theme={t}
+          onClose={() => setPreviewActivity(null)}
         />
       )}
     </div>
