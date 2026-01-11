@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
+import {
   useAccountWithPolicies,
   useAccountWithEmailHistory,
   useAccountEmailLogs,
   useAccountActivity,
   useAccountEnrollments,
-  useQuickStats
+  useQuickStats,
+  useScheduledEmailMutations
 } from '../hooks';
+import ComposeEmailModal from '../components/ComposeEmailModal';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -274,6 +276,10 @@ const ClientProfilePage = ({ t }) => {
   const { userId, accountId } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const [showComposeModal, setShowComposeModal] = useState(false);
+
+  // Mutations for sending email
+  const { sendDirectEmail } = useScheduledEmailMutations();
 
   // Primary data - always load
   const { data: client, isLoading, error } = useAccountWithPolicies(accountId);
@@ -436,6 +442,12 @@ const ClientProfilePage = ({ t }) => {
               📝 Add Note
             </button>
             <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowComposeModal(true);
+              }}
               style={{
                 padding: '10px 16px',
                 backgroundColor: t.primary,
@@ -869,6 +881,18 @@ const ClientProfilePage = ({ t }) => {
           )}
         </div>
       )}
+
+      {/* Compose Email Modal */}
+      <ComposeEmailModal
+        isOpen={showComposeModal}
+        onClose={() => setShowComposeModal(false)}
+        account={client}
+        theme={t}
+        onSend={async (emailData) => {
+          await sendDirectEmail.mutateAsync(emailData);
+        }}
+        sending={sendDirectEmail.isPending}
+      />
     </div>
   );
 };

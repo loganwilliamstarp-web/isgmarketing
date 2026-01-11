@@ -378,6 +378,70 @@ export const scheduledEmailsService = {
   },
 
   /**
+   * Send a direct email immediately (not from automation)
+   * Creates a scheduled email and sends it right away
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} emailData - Email data including to_email, to_name, subject, body, etc.
+   */
+  async sendDirectEmail(ownerIds, emailData) {
+    const ownerId = getFirstOwnerId(ownerIds);
+    const {
+      accountId,
+      toEmail,
+      toName,
+      fromEmail,
+      fromName,
+      subject,
+      bodyHtml,
+      bodyText
+    } = emailData;
+
+    // Create a scheduled email with immediate send
+    const { data: scheduledEmail, error: createError } = await supabase
+      .from('scheduled_emails')
+      .insert({
+        owner_id: ownerId,
+        account_id: accountId,
+        recipient_email: toEmail,
+        recipient_name: toName || '',
+        from_email: fromEmail,
+        from_name: fromName || '',
+        subject: subject,
+        scheduled_for: new Date().toISOString(),
+        status: 'Pending',
+        requires_verification: false
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+
+    // Trigger the edge function to send immediately
+    const { data: functionData, error: functionError } = await supabase.functions.invoke(
+      'send-direct-email',
+      {
+        body: {
+          scheduledEmailId: scheduledEmail.id,
+          bodyHtml,
+          bodyText: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || ''
+        }
+      }
+    );
+
+    if (functionError) {
+      console.error('Error triggering direct send:', functionError);
+      // Update status to failed
+      await supabase
+        .from('scheduled_emails')
+        .update({ status: 'Failed', error_message: functionError.message })
+        .eq('id', scheduledEmail.id);
+      throw new Error('Failed to send email');
+    }
+
+    return { scheduledEmail, sendResult: functionData };
+  },
+
+  /**
    * Delete a scheduled email
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */

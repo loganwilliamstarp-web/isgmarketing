@@ -103,13 +103,25 @@ export function useScheduledEmailMutations() {
     }
   });
 
+  const sendDirectEmail = useMutation({
+    mutationFn: (emailData) => scheduledEmailsService.sendDirectEmail(ownerIds, emailData),
+    onSuccess: () => {
+      invalidateScheduled();
+      queryClient.invalidateQueries({ queryKey: ['emailLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['emailActivity'] });
+      queryClient.invalidateQueries({ queryKey: ['activity'] });
+      queryClient.invalidateQueries({ queryKey: ['quickStats'] });
+    }
+  });
+
   return {
     scheduleEmail,
     scheduleBatch,
     cancelScheduled,
     reschedule,
     deleteScheduled,
-    sendNow
+    sendNow,
+    sendDirectEmail
   };
 }
 
