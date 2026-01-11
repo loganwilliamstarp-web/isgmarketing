@@ -63,18 +63,20 @@ serve(async (req) => {
     }
 
     // Parse request to determine action
-    let action = 'process' // default action
+    // Default to 'daily' for cron jobs (no body), 'process' for manual calls
+    let action = 'daily' // default action - runs refresh, verify, and send
     let automationId: string | null = null
     let scheduledEmailId: string | null = null
     let accountOffset: number = 0  // For chunked processing of large activations
     try {
       const body = await req.json()
-      action = body.action || 'process'
+      action = body.action || 'daily'
       automationId = body.automationId || null
       scheduledEmailId = body.scheduledEmailId || null
       accountOffset = body.accountOffset || 0
     } catch {
-      // No body or invalid JSON, use default action
+      // No body or invalid JSON (e.g., cron trigger), use default 'daily' action
+      console.log('[Cron] No request body - running daily action (refresh + verify + send)')
     }
 
     const results = {

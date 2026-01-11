@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.sendgrid-inbound-parse]
 verify_jwt = false
+
+# Process scheduled emails - called by pg_cron
+[functions.process-scheduled-emails]
+verify_jwt = false
