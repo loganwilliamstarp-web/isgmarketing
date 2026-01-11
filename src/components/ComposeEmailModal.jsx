@@ -1,12 +1,30 @@
 // src/components/ComposeEmailModal.jsx
 import React, { useState, useEffect } from 'react';
-import { useUserSettings } from '../hooks/useUserSettings';
+import { userSettingsService } from '../services/userSettings';
 
 const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending }) => {
-  const { data: userSettings } = useUserSettings();
+  const [ownerSettings, setOwnerSettings] = useState(null);
+  const [loadingSettings, setLoadingSettings] = useState(false);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [error, setError] = useState(null);
+
+  // Fetch settings for the account owner when modal opens
+  useEffect(() => {
+    if (isOpen && account?.owner_id) {
+      setLoadingSettings(true);
+      userSettingsService.get(account.owner_id)
+        .then(settings => {
+          setOwnerSettings(settings);
+        })
+        .catch(err => {
+          console.error('Failed to load owner settings:', err);
+        })
+        .finally(() => {
+          setLoadingSettings(false);
+        });
+    }
+  }, [isOpen, account?.owner_id]);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -54,8 +72,8 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
         accountId: account.account_unique_id,
         toEmail: recipientEmail,
         toName: recipientName,
-        fromEmail: userSettings?.from_email,
-        fromName: userSettings?.from_name,
+        fromEmail: ownerSettings?.from_email,
+        fromName: ownerSettings?.from_name,
         subject: subject.trim(),
         bodyHtml,
         bodyText: body.trim()
@@ -157,7 +175,9 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
                 color: t.text
               }}
             >
-              {userSettings?.from_name ? `${userSettings.from_name} <${userSettings.from_email}>` : userSettings?.from_email || 'Not configured'}
+              {loadingSettings ? 'Loading...' : (
+                ownerSettings?.from_name ? `${ownerSettings.from_name} <${ownerSettings.from_email}>` : ownerSettings?.from_email || 'Not configured'
+              )}
             </div>
           </div>
 
@@ -211,7 +231,7 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
               }}
             />
             <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-              Your email signature will be added automatically.
+              The account owner's email signature will be added automatically.
             </p>
           </div>
 
