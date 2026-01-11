@@ -18,6 +18,7 @@ const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 // Rate limiting: max emails per batch to avoid timeouts
 const MAX_EMAILS_PER_RUN = 200
 const BATCH_SIZE = 100
+const MAX_ACCOUNTS_PER_REFRESH = 1000  // Process accounts in chunks to avoid timeouts
 
 interface ScheduledEmail {
   id: string
@@ -65,11 +66,13 @@ serve(async (req) => {
     let action = 'process' // default action
     let automationId: string | null = null
     let scheduledEmailId: string | null = null
+    let accountOffset: number = 0  // For chunked processing of large activations
     try {
       const body = await req.json()
       action = body.action || 'process'
       automationId = body.automationId || null
       scheduledEmailId = body.scheduledEmailId || null
+      accountOffset = body.accountOffset || 0
     } catch {
       // No body or invalid JSON, use default action
     }
@@ -83,17 +86,21 @@ serve(async (req) => {
       failed: 0,
       refreshed: 0,
       newScheduled: 0,
-      errors: [] as string[]
+      errors: [] as string[],
+      hasMore: false,        // Indicates if there are more accounts to process
+      nextOffset: 0          // Next offset for continuation
     }
 
     // Step 0: Daily refresh - find new qualifying accounts for active automations
     // If automationId is provided, only refresh that specific automation
     if (action === 'refresh' || action === 'daily' || action === 'activate') {
-      const refreshResult = await runDailyRefresh(supabaseClient, automationId)
+      const refreshResult = await runDailyRefresh(supabaseClient, automationId, accountOffset)
       results.refreshed = refreshResult.automationsProcessed
       results.newScheduled = refreshResult.totalAdded
       results.cancelled += refreshResult.totalRemoved
       results.errors.push(...refreshResult.errors)
+      results.hasMore = refreshResult.hasMore
+      results.nextOffset = refreshResult.nextOffset
     }
 
     // Step 1: Run 24-hour verification for automation emails
@@ -134,16 +141,24 @@ serve(async (req) => {
 // DAILY REFRESH - Find new qualifying accounts
 // ============================================================================
 
-async function runDailyRefresh(supabase: any, specificAutomationId: string | null = null): Promise<{
+async function runDailyRefresh(
+  supabase: any,
+  specificAutomationId: string | null = null,
+  accountOffset: number = 0
+): Promise<{
   automationsProcessed: number,
   totalAdded: number,
   totalRemoved: number,
-  errors: string[]
+  errors: string[],
+  hasMore: boolean,
+  nextOffset: number
 }> {
   const errors: string[] = []
   let automationsProcessed = 0
   let totalAdded = 0
   let totalRemoved = 0
+  let hasMore = false
+  let nextOffset = 0
 
   // Get automations to process
   let query = supabase
@@ -162,7 +177,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
 
   if (error) {
     errors.push(`Failed to get active automations: ${error.message}`)
-    return { automationsProcessed, totalAdded, totalRemoved, errors }
+    return { automationsProcessed, totalAdded, totalRemoved, errors, hasMore, nextOffset }
   }
 
   for (const automation of (automations || [])) {
@@ -201,20 +216,32 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const defaultFromEmail = userSettings?.from_email || null
       const defaultFromName = userSettings?.from_name || null
 
-      // Get all accounts that match base criteria
+      // Get accounts that match base criteria (paginated for large datasets)
       let accountsQuery = supabase
         .from('accounts')
-        .select('*')
+        .select('*', { count: 'exact' })
         .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
+        .order('account_unique_id')  // Consistent ordering for pagination
+        .range(accountOffset, accountOffset + MAX_ACCOUNTS_PER_REFRESH - 1)
 
       // Only filter by owner if automation has an owner (not a system default)
       if (automation.owner_id) {
         accountsQuery = accountsQuery.eq('owner_id', automation.owner_id)
       }
 
-      const { data: accounts } = await accountsQuery
+      const { data: accounts, count: totalAccounts } = await accountsQuery
 
       if (!accounts || accounts.length === 0) continue
+
+      // Check if there are more accounts to process in subsequent calls
+      const processedUpTo = accountOffset + accounts.length
+      if (totalAccounts && processedUpTo < totalAccounts) {
+        hasMore = true
+        nextOffset = processedUpTo
+        console.log(`[${automation.name}] Processing accounts ${accountOffset + 1}-${processedUpTo} of ${totalAccounts} (has more: true)`)
+      } else {
+        console.log(`[${automation.name}] Processing accounts ${accountOffset + 1}-${processedUpTo} of ${totalAccounts || accounts.length} (final batch)`)
+      }
 
       // Get policies for these accounts (needed for date-based and policy type filters)
       // Batch the query to avoid URL length limits (max ~100 IDs per query)
@@ -537,7 +564,7 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
     }
   }
 
-  return { automationsProcessed, totalAdded, totalRemoved, errors }
+  return { automationsProcessed, totalAdded, totalRemoved, errors, hasMore, nextOffset }
 }
 
 // ============================================================================
@@ -745,8 +772,44 @@ async function processReadyEmails(
         continue
       }
 
-      // Final deduplication check
+      // Get recipient email for checks
       const recipientEmail = email.to_email || email.account?.person_email || email.account?.email
+
+      // Final unsubscribe check (catches unsubscribes after 24-hour verification)
+      if (recipientEmail) {
+        const { data: unsubscribed } = await supabase
+          .from('unsubscribes')
+          .select('id')
+          .ilike('email', recipientEmail.trim())
+          .limit(1)
+
+        if (unsubscribed && unsubscribed.length > 0) {
+          await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'Cancelled',
+              error_message: 'Recipient unsubscribed before send',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', email.id)
+          continue
+        }
+
+        // Also check account opt-out status
+        if (email.account?.person_has_opted_out_of_email) {
+          await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'Cancelled',
+              error_message: 'Account opted out of email before send',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', email.id)
+          continue
+        }
+      }
+
+      // Final deduplication check
       if (email.template_id && recipientEmail) {
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
