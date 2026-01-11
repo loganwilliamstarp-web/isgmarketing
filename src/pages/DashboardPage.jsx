@@ -796,8 +796,8 @@ const DashboardPage = ({ t }) => {
 
   // Fetch dashboard data using hooks
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
-  const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
-  const { data: emailActivity, isLoading: activityLoading } = useEmailActivityFeed({ limit: 15 });
+  const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(10);
+  const { data: emailActivity, isLoading: activityLoading } = useEmailActivityFeed({ limit: 10 });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
 
   // Handle send now
@@ -922,11 +922,11 @@ const DashboardPage = ({ t }) => {
               View all →
             </Link>
           </div>
-          <p style={{ fontSize: '12px', color: t.textSecondary, marginBottom: '16px' }}>
-            Emails scheduled to be sent in the next 7 days
+          <p style={{ fontSize: '12px', color: t.textSecondary, marginBottom: '16px', margin: 0 }}>
+            Emails scheduled to be sent
           </p>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
             {emailsLoading ? (
               // Loading skeletons
               Array.from({ length: 3 }).map((_, i) => (
@@ -942,7 +942,7 @@ const DashboardPage = ({ t }) => {
                 </div>
               ))
             ) : upcomingEmails?.length > 0 ? (
-              upcomingEmails.slice(0, 5).map((email) => (
+              upcomingEmails.slice(0, 10).map((email) => (
                 <ScheduledEmailItem
                   key={email.id}
                   email={email}
@@ -975,7 +975,7 @@ const DashboardPage = ({ t }) => {
           borderRadius: '12px',
           border: `1px solid ${t.border}`
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
               Recent Email Activity
             </h3>
@@ -986,9 +986,12 @@ const DashboardPage = ({ t }) => {
               View all →
             </Link>
           </div>
+          <p style={{ fontSize: '12px', color: t.textSecondary, margin: 0 }}>
+            Recent sends, opens, clicks, and replies
+          </p>
 
           {activityLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
               {[1, 2, 3].map(i => (
                 <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <Skeleton width="32px" height="32px" />
@@ -1000,8 +1003,8 @@ const DashboardPage = ({ t }) => {
               ))}
             </div>
           ) : emailActivity?.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {emailActivity.map((activity) => {
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
+              {emailActivity.slice(0, 10).map((activity) => {
                 const typeConfig = {
                   sent: { icon: '📤', label: 'Sent', color: t.success },
                   opened: { icon: '📬', label: 'Opened', color: t.primary },
