@@ -225,25 +225,30 @@ export const automationsService = {
     const result = await this.update(ownerIds, automationId, { status });
 
     // Handle schedule generation/cleanup based on status change
-    try {
-      if (status === 'active' || status === 'Active') {
-        // Call edge function to pre-schedule emails for this automation
-        const response = await supabase.functions.invoke('process-scheduled-emails', {
-          body: { action: 'activate', automationId }
-        });
-
+    // Note: Activation triggers edge function in background (fire-and-forget) for faster UI response
+    // Deactivation cleanup runs synchronously since it's typically fast
+    if (status === 'active' || status === 'Active') {
+      // Call edge function to pre-schedule emails for this automation (fire-and-forget)
+      // Don't await - let it run in the background so the UI updates immediately
+      supabase.functions.invoke('process-scheduled-emails', {
+        body: { action: 'activate', automationId }
+      }).then(response => {
         if (response.error) {
           console.warn('Failed to generate automation schedule:', response.error);
         } else {
           console.log('Automation schedule generated:', response.data);
         }
-      } else {
-        // Use client-side cleanup for deactivation (cancel pending emails)
+      }).catch(err => {
+        console.warn('Failed to handle automation schedule:', err.message);
+      });
+    } else {
+      // Use client-side cleanup for deactivation (cancel pending emails)
+      // This is typically fast so we can await it
+      try {
         await automationSchedulerService.cleanupAutomationSchedule(automationId);
+      } catch (err) {
+        console.warn('Failed to cleanup automation schedule:', err.message);
       }
-    } catch (err) {
-      console.warn('Failed to handle automation schedule:', err.message);
-      // Don't throw - the status update succeeded
     }
 
     return result;
