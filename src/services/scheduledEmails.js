@@ -402,14 +402,13 @@ export const scheduledEmailsService = {
       .insert({
         owner_id: ownerId,
         account_id: accountId,
-        recipient_email: toEmail,
-        recipient_name: toName || '',
+        to_email: toEmail,
+        to_name: toName || '',
         from_email: fromEmail,
         from_name: fromName || '',
         subject: subject,
         scheduled_for: new Date().toISOString(),
-        status: 'Pending',
-        requires_verification: false
+        status: 'Pending'
       })
       .select()
       .single();
@@ -423,7 +422,9 @@ export const scheduledEmailsService = {
         body: {
           scheduledEmailId: scheduledEmail.id,
           bodyHtml,
-          bodyText: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || ''
+          bodyText: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '',
+          fromEmail,
+          fromName
         }
       }
     );

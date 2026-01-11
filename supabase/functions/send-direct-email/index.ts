@@ -30,7 +30,7 @@ serve(async (req) => {
     }
 
     const body = await req.json()
-    const { scheduledEmailId, bodyHtml, bodyText } = body
+    const { scheduledEmailId, bodyHtml, bodyText, fromEmail, fromName } = body
 
     if (!scheduledEmailId) {
       return new Response(
@@ -81,8 +81,12 @@ serve(async (req) => {
       </div>
     `.trim()
 
-    const recipientEmail = email.recipient_email
-    const recipientName = email.recipient_name
+    const recipientEmail = email.to_email
+    const recipientName = email.to_name
+
+    // Use from email/name from scheduled email record (or body as fallback)
+    const senderEmail = email.from_email || fromEmail
+    const senderName = email.from_name || fromName
 
     // Create email log
     const { data: emailLog, error: logError } = await supabaseClient
@@ -92,8 +96,8 @@ serve(async (req) => {
         account_id: email.account_id,
         to_email: recipientEmail,
         to_name: recipientName,
-        from_email: email.from_email,
-        from_name: email.from_name,
+        from_email: senderEmail,
+        from_name: senderName,
         subject: email.subject,
         body_html: htmlContent,
         body_text: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '',
@@ -108,7 +112,7 @@ serve(async (req) => {
     }
 
     // Build Message-ID for reply tracking
-    const domainPart = email.from_email?.split('@')[1] || 'isgmarketing.com'
+    const domainPart = senderEmail?.split('@')[1] || 'isgmarketing.com'
     const customMessageId = `<isg-${emailLog.id}-${Date.now()}@${domainPart}>`
 
     // Dry run if no API key
@@ -150,12 +154,12 @@ serve(async (req) => {
         }
       }],
       from: {
-        email: email.from_email,
-        name: email.from_name || ''
+        email: senderEmail,
+        name: senderName || ''
       },
       reply_to: {
-        email: email.from_email,
-        name: email.from_name || ''
+        email: senderEmail,
+        name: senderName || ''
       },
       subject: email.subject,
       content: [
@@ -194,7 +198,7 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
           sendgrid_message_id: messageId,
           custom_message_id: customMessageId,
-          reply_to: email.from_email
+          reply_to: senderEmail
         })
         .eq('id', emailLog.id)
 
