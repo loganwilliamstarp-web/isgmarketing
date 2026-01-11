@@ -356,6 +356,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
 // Activity Preview Modal (for sent emails and replies)
 const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   const [emailData, setEmailData] = useState(null);
+  const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -367,20 +368,21 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
     const fetchEmailData = async () => {
       setLoading(true);
       try {
-        // Fetch the full email log data
+        // Fetch the full email log data with template
         const { data, error } = await import('../lib/supabase').then(m =>
           m.supabase
             .from('email_logs')
             .select(`
               *,
-              account:accounts(name, person_email),
-              template:email_templates(name, subject, body_html)
+              account:accounts(*),
+              template:email_templates(name, subject, body_html, body_text)
             `)
             .eq('id', activity.email_log_id)
             .single()
         );
         if (!error && data) {
           setEmailData(data);
+          setAccount(data.account);
         }
       } catch (err) {
         console.error('Error fetching email data:', err);
@@ -396,6 +398,53 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
 
   const isReply = activity.type === 'replied';
   const title = isReply ? 'Reply Preview' : 'Sent Email Preview';
+
+  // Apply merge fields to content (same logic as EmailPreviewModal)
+  const applyMergeFields = (content) => {
+    if (!content) return '';
+    const acc = account || {};
+
+    // Extract first/last name from account.name if dedicated fields aren't available
+    const nameParts = (acc.name || '').trim().split(/\s+/);
+    const derivedFirstName = nameParts[0] || '';
+    const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+    const mergeFields = {
+      '{{first_name}}': acc.primary_contact_first_name || derivedFirstName,
+      '{{last_name}}': acc.primary_contact_last_name || derivedLastName,
+      '{{full_name}}': [acc.primary_contact_first_name, acc.primary_contact_last_name].filter(Boolean).join(' ') || acc.name || '',
+      '{{name}}': acc.name || '',
+      '{{company_name}}': acc.name || '',
+      '{{email}}': acc.person_email || emailData?.to_email || '',
+      '{{phone}}': acc.phone || '',
+      '{{address}}': acc.billing_street || '',
+      '{{city}}': acc.billing_city || '',
+      '{{state}}': acc.billing_state || '',
+      '{{zip}}': acc.billing_postal_code || '',
+      '{{postal_code}}': acc.billing_postal_code || '',
+      '{{recipient_name}}': emailData?.to_name || '',
+      '{{recipient_email}}': emailData?.to_email || '',
+      '{{today}}': new Date().toLocaleDateString('en-US'),
+      '{{current_year}}': new Date().getFullYear().toString(),
+    };
+
+    let result = content;
+    for (const [field, value] of Object.entries(mergeFields)) {
+      result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value);
+    }
+    return result;
+  };
+
+  // Get the body content - prefer template body_html
+  const getBodyContent = () => {
+    if (emailData?.template?.body_html) {
+      return applyMergeFields(emailData.template.body_html);
+    }
+    if (emailData?.body_html) {
+      return emailData.body_html;
+    }
+    return null;
+  };
 
   return (
     <div style={{
@@ -539,11 +588,11 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 This is a preview snippet. View the full reply in your email client.
               </div>
             </div>
-          ) : emailData?.body_html || emailData?.template?.body_html ? (
+          ) : getBodyContent() ? (
             <div
               dangerouslySetInnerHTML={{
                 __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
-                  (emailData.body_html || emailData.template?.body_html)
+                  getBodyContent()
               }}
               style={{
                 fontFamily: 'Arial, sans-serif',
@@ -552,7 +601,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 color: '#333'
               }}
             />
-          ) : emailData?.body_text ? (
+          ) : emailData?.template?.body_text || emailData?.body_text ? (
             <div style={{
               fontFamily: 'Arial, sans-serif',
               fontSize: '14px',
@@ -560,7 +609,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
               color: '#333',
               whiteSpace: 'pre-wrap'
             }}>
-              {emailData.body_text}
+              {applyMergeFields(emailData.template?.body_text || emailData.body_text)}
             </div>
           ) : (
             <div style={{
@@ -940,7 +989,7 @@ const DashboardPage = ({ t }) => {
               {emailActivity.map((activity) => {
                 const typeConfig = {
                   sent: { icon: '📤', label: 'Sent', color: t.success },
-                  opened: { icon: '👀', label: 'Opened', color: t.primary },
+                  opened: { icon: '📬', label: 'Opened', color: t.primary },
                   clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
                   replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
                 };
@@ -951,111 +1000,116 @@ const DashboardPage = ({ t }) => {
                   <div
                     key={activity.id}
                     style={{
-                      display: 'flex',
-                      gap: '12px',
-                      alignItems: 'flex-start',
-                      padding: '10px',
+                      padding: '14px',
                       backgroundColor: t.bg,
                       borderRadius: '8px',
                       border: `1px solid ${t.border}`
                     }}
                   >
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      backgroundColor: `${config.color}20`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px'
-                    }}>
-                      {config.icon}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
-                        {activity.subject || 'No subject'}
-                      </div>
-                      <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {activity.type === 'replied'
-                          ? `From: ${activity.from_email}`
-                          : `To: ${activity.to_name || activity.to_email}`}
-                        {activity.snippet && ` - ${activity.snippet}`}
-                      </div>
-                      <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ color: config.color, fontWeight: '500' }}>{config.label}</span>
-                        <span>•</span>
-                        <span>
-                          {new Date(activity.timestamp).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit'
-                          })}
-                        </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>{config.icon}</span>
+                          <span style={{ color: config.color, fontWeight: '500' }}>{config.label}</span>
+                          <span>•</span>
+                          <span>
+                            {new Date(activity.timestamp).toLocaleString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
+                          {activity.subject || 'No subject'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px' }}>
+                          {activity.type === 'replied'
+                            ? `From: ${activity.from_email}`
+                            : `To: ${activity.to_name || activity.to_email}`}
+                        </div>
                         {activity.account?.name && (
-                          <>
-                            <span>•</span>
-                            <span>{activity.account.name}</span>
-                          </>
+                          <span style={{
+                            display: 'inline-block',
+                            marginTop: '6px',
+                            padding: '3px 8px',
+                            backgroundColor: t.bgHover,
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: t.textSecondary
+                          }}>
+                            {activity.account.name}
+                          </span>
                         )}
-                        {activity.open_count > 1 && (
-                          <span style={{ color: t.textMuted }}>({activity.open_count} opens)</span>
+                        {(activity.open_count > 1 || activity.click_count > 1) && (
+                          <span style={{
+                            display: 'inline-block',
+                            marginTop: '6px',
+                            marginLeft: activity.account?.name ? '6px' : '0',
+                            padding: '3px 8px',
+                            backgroundColor: t.bgHover,
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: t.textSecondary
+                          }}>
+                            {activity.open_count > 1 && `${activity.open_count} opens`}
+                            {activity.open_count > 1 && activity.click_count > 1 && ' • '}
+                            {activity.click_count > 1 && `${activity.click_count} clicks`}
+                          </span>
                         )}
-                        {activity.click_count > 1 && (
-                          <span style={{ color: t.textMuted }}>({activity.click_count} clicks)</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {/* Preview button for sent emails and replies */}
+                        {canPreview && (
+                          <button
+                            onClick={() => setPreviewActivity(activity)}
+                            title="Preview"
+                            style={{
+                              padding: '6px 10px',
+                              backgroundColor: t.bgHover,
+                              border: `1px solid ${t.border}`,
+                              borderRadius: '6px',
+                              color: t.textSecondary,
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          </button>
+                        )}
+                        {/* Link to email log for all types */}
+                        {activity.email_log_id && (
+                          <Link
+                            to={`/${userId}/email-logs/${activity.email_log_id}`}
+                            title="View details"
+                            style={{
+                              padding: '6px 10px',
+                              backgroundColor: t.bgHover,
+                              border: `1px solid ${t.border}`,
+                              borderRadius: '6px',
+                              color: t.textSecondary,
+                              textDecoration: 'none',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                              <polyline points="15 3 21 3 21 9"/>
+                              <line x1="10" y1="14" x2="21" y2="3"/>
+                            </svg>
+                          </Link>
                         )}
                       </div>
                     </div>
-                    {/* Preview button for sent emails and replies */}
-                    {canPreview && (
-                      <button
-                        onClick={() => setPreviewActivity(activity)}
-                        title="Preview"
-                        style={{
-                          padding: '6px 10px',
-                          backgroundColor: t.bgHover,
-                          border: `1px solid ${t.border}`,
-                          borderRadius: '6px',
-                          color: t.textSecondary,
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                      </button>
-                    )}
-                    {/* Link to email log for all types */}
-                    {activity.email_log_id && (
-                      <Link
-                        to={`/${userId}/email-logs/${activity.email_log_id}`}
-                        title="View details"
-                        style={{
-                          padding: '6px 10px',
-                          backgroundColor: t.bgHover,
-                          border: `1px solid ${t.border}`,
-                          borderRadius: '6px',
-                          color: t.textSecondary,
-                          textDecoration: 'none',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                          <polyline points="15 3 21 3 21 9"/>
-                          <line x1="10" y1="14" x2="21" y2="3"/>
-                        </svg>
-                      </Link>
-                    )}
                   </div>
                 );
               })}
