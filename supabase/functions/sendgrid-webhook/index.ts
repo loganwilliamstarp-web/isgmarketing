@@ -262,13 +262,15 @@ async function processEvent(supabase: any, event: SendGridEvent): Promise<void> 
   const eventTime = new Date(event.timestamp * 1000).toISOString()
 
   // Find the email log by SendGrid message ID
-  const { data: emailLog, error: findError } = await supabase
+  let emailLog: any = null
+
+  const { data: emailLogExact, error: findError } = await supabase
     .from('email_logs')
     .select('id, status, open_count, click_count')
     .eq('sendgrid_message_id', messageId)
     .single()
 
-  if (findError || !emailLog) {
+  if (findError || !emailLogExact) {
     // Try finding by the full message ID (with filter suffix)
     const { data: emailLogAlt } = await supabase
       .from('email_logs')
@@ -281,9 +283,12 @@ async function processEvent(supabase: any, event: SendGridEvent): Promise<void> 
       console.warn(`Email log not found for message ID: ${messageId}`)
       return
     }
+    emailLog = emailLogAlt
+  } else {
+    emailLog = emailLogExact
   }
 
-  const logId = emailLog?.id
+  const logId = emailLog.id
 
   // Process based on event type
   switch (event.event) {
