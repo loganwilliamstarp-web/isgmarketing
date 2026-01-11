@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { senderDomainsService } from '../../services';
 import { supabase } from '../../lib/supabase';
 
 const ImpersonationBanner = () => {
@@ -18,7 +19,7 @@ const ImpersonationBanner = () => {
 
     const checkDomainVerification = async () => {
       try {
-        // Get impersonated user's email
+        // Get impersonated user's email (for display purposes)
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('email')
@@ -38,19 +39,8 @@ const ImpersonationBanner = () => {
           return;
         }
 
-        // Get verified sender domains that match the user's email domain
-        // Match either exact domain OR subdomains (e.g., mail.isgdfw.com matches isgdfw.com)
-        const { data: domains, error: domainsError } = await supabase
-          .from('sender_domains')
-          .select('domain, status')
-          .eq('status', 'verified')
-          .or(`domain.eq.${emailDomain},domain.ilike.%.${emailDomain}`);
-
-        if (domainsError) {
-          console.error('Error fetching sender domains:', domainsError);
-          setDomainWarning(null);
-          return;
-        }
+        // Get verified sender domains via edge function (bypasses RLS)
+        const domains = await senderDomainsService.getVerifiedDomains(impersonating.targetUserId);
 
         // Check if any verified domain was found matching the user's email domain
         const hasMatchingDomain = domains && domains.length > 0;
@@ -59,7 +49,7 @@ const ImpersonationBanner = () => {
           setDomainWarning({
             email: userData.email,
             domain: emailDomain,
-            hasAnyVerifiedDomain: domains && domains.length > 0
+            hasAnyVerifiedDomain: false
           });
         } else {
           setDomainWarning(null);
