@@ -16,7 +16,7 @@ const corsHeaders = {
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
 // Rate limiting: max emails per batch to avoid timeouts
-const MAX_EMAILS_PER_RUN = 50
+const MAX_EMAILS_PER_RUN = 200
 const BATCH_SIZE = 100
 
 interface ScheduledEmail {
@@ -725,8 +725,9 @@ async function processReadyEmails(
 
   for (const email of (emails || [])) {
     try {
-      // Mark as processing
-      await supabase
+      // Mark as processing - use atomic check to prevent race conditions
+      // Only update if status is still 'Pending' (another process may have grabbed it)
+      const { data: updateResult, error: updateError } = await supabase
         .from('scheduled_emails')
         .update({
           status: 'Processing',
@@ -735,6 +736,14 @@ async function processReadyEmails(
           updated_at: new Date().toISOString()
         })
         .eq('id', email.id)
+        .eq('status', 'Pending')  // Atomic check - only update if still Pending
+        .select('id')
+
+      // If no rows updated, another process grabbed this email - skip it
+      if (updateError || !updateResult || updateResult.length === 0) {
+        console.log(`[Send] Skipping email ${email.id} - already being processed by another instance`)
+        continue
+      }
 
       // Final deduplication check
       const recipientEmail = email.to_email || email.account?.person_email || email.account?.email
