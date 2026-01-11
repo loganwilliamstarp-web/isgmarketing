@@ -1795,8 +1795,12 @@ BEGIN
   END IF;
   
   -- Check cooldown period
+  -- Use completion/exit date if available, otherwise fall back to enrolled_at
+  -- Priority: completed_at > exited_at > enrolled_at
+  -- This means cooldown starts when they FINISH the automation, not when they start
   IF v_last_enrollment IS NOT NULL AND v_automation.enrollment_cooldown_days > 0 THEN
-    IF v_last_enrollment.enrolled_at > NOW() - (v_automation.enrollment_cooldown_days || ' days')::INTERVAL THEN
+    IF COALESCE(v_last_enrollment.completed_at, v_last_enrollment.exited_at, v_last_enrollment.enrolled_at)
+       > NOW() - (v_automation.enrollment_cooldown_days || ' days')::INTERVAL THEN
       RETURN FALSE;
     END IF;
   END IF;

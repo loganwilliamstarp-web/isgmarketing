@@ -100,6 +100,10 @@ export const automationSchedulerService = {
     const sendTime = triggerNode?.config?.time || '09:00';
     const timezone = triggerNode?.config?.timezone || 'America/Chicago';
 
+    // Get pacing config from entry_criteria node
+    const entryCriteriaNode = nodes.find(n => n.type === 'entry_criteria');
+    const pacingConfig = entryCriteriaNode?.config?.pacing || { enabled: false };
+
     // Identify date-based trigger rules in the filter config
     const dateTriggerRules = this.extractDateTriggerRules(filterConfig);
 
@@ -249,10 +253,33 @@ export const automationSchedulerService = {
       }
     }
 
+    // Apply pacing distribution if enabled
+    let finalEmails = scheduledEmails;
+    if (pacingConfig.enabled && scheduledEmails.length > 0) {
+      // Spread emails evenly over the configured days
+      finalEmails = this.applyPacingDistribution(
+        scheduledEmails,
+        pacingConfig.spreadOverDays || 7,
+        pacingConfig.allowedDays || ['mon', 'tue', 'wed', 'thu', 'fri'],
+        sendTime
+      );
+    } else if (pacingConfig.allowedDays?.length > 0 && pacingConfig.allowedDays.length < 7) {
+      // Even without full pacing, respect day-of-week restrictions
+      // Move any emails scheduled on non-allowed days to the next allowed day
+      finalEmails = scheduledEmails.map(email => {
+        const originalDate = new Date(email.scheduled_for);
+        const adjustedDate = this.moveToNextAllowedDay(originalDate, pacingConfig.allowedDays);
+        if (adjustedDate.getTime() !== originalDate.getTime()) {
+          return { ...email, scheduled_for: adjustedDate.toISOString() };
+        }
+        return email;
+      });
+    }
+
     // Insert in batches
     const batchSize = 100;
-    for (let i = 0; i < scheduledEmails.length; i += batchSize) {
-      const batch = scheduledEmails.slice(i, i + batchSize);
+    for (let i = 0; i < finalEmails.length; i += batchSize) {
+      const batch = finalEmails.slice(i, i + batchSize);
       const { error: insertError } = await supabase
         .from('scheduled_emails')
         .insert(batch);
@@ -410,6 +437,96 @@ export const automationSchedulerService = {
     processNodes(workflowNodes);
 
     return schedule;
+  },
+
+  /**
+   * Apply pacing distribution to spread emails evenly over allowed days
+   * @param {Array} emails - Array of scheduled email objects
+   * @param {number} spreadOverDays - Number of days to spread over
+   * @param {Array} allowedDays - Array of allowed day names ['mon', 'tue', 'wed', 'thu', 'fri']
+   * @param {string} sendTime - Time to send emails (e.g., '09:00')
+   * @returns {Array} - Emails with updated scheduled_for dates
+   */
+  applyPacingDistribution(emails, spreadOverDays, allowedDays, sendTime) {
+    if (!emails || emails.length === 0) return emails;
+
+    // Map day names to JS day numbers (0=Sun, 1=Mon, etc.)
+    const dayMap = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const allowedDayNumbers = (allowedDays || ['mon', 'tue', 'wed', 'thu', 'fri']).map(d => dayMap[d]);
+
+    // Build list of valid send dates starting from today
+    const validDates = [];
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+
+    // Look ahead enough days to find spreadOverDays valid dates
+    const maxLookAhead = spreadOverDays * 2; // Look ahead twice as far to account for weekends
+    for (let i = 0; i < maxLookAhead && validDates.length < spreadOverDays; i++) {
+      const checkDate = new Date(startDate);
+      checkDate.setDate(checkDate.getDate() + i);
+      if (allowedDayNumbers.includes(checkDate.getDay())) {
+        validDates.push(new Date(checkDate));
+      }
+    }
+
+    // If no valid dates found (shouldn't happen), fall back to all days
+    if (validDates.length === 0) {
+      for (let i = 0; i < spreadOverDays; i++) {
+        const checkDate = new Date(startDate);
+        checkDate.setDate(checkDate.getDate() + i);
+        validDates.push(checkDate);
+      }
+    }
+
+    // Distribute emails evenly across valid dates
+    const emailsPerDay = Math.ceil(emails.length / validDates.length);
+
+    // Parse send time once
+    const [hours, minutes] = (sendTime || '09:00').split(':').map(Number);
+
+    return emails.map((email, index) => {
+      const dayIndex = Math.floor(index / emailsPerDay);
+      const sendDate = new Date(validDates[Math.min(dayIndex, validDates.length - 1)]);
+
+      // Apply send time
+      sendDate.setHours(hours, minutes, 0, 0);
+
+      return {
+        ...email,
+        scheduled_for: sendDate.toISOString()
+      };
+    });
+  },
+
+  /**
+   * Move a date to the next allowed day of week
+   * @param {Date} date - The date to adjust
+   * @param {Array} allowedDays - Array of allowed day names ['mon', 'tue', 'wed', 'thu', 'fri']
+   * @returns {Date} - Adjusted date on an allowed day
+   */
+  moveToNextAllowedDay(date, allowedDays) {
+    if (!allowedDays || allowedDays.length === 0) return date;
+
+    const dayMap = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const allowedDayNumbers = allowedDays.map(d => dayMap[d]);
+
+    // If already on an allowed day, return as-is
+    if (allowedDayNumbers.includes(date.getDay())) {
+      return date;
+    }
+
+    // Move forward until we hit an allowed day (max 7 days)
+    const newDate = new Date(date);
+    for (let i = 0; i < 7; i++) {
+      newDate.setDate(newDate.getDate() + 1);
+      if (allowedDayNumbers.includes(newDate.getDay())) {
+        return newDate;
+      }
+    }
+
+    // Fallback (shouldn't happen)
+    return date;
   },
 
   /**
