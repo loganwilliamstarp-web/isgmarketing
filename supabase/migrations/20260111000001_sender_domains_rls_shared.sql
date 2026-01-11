@@ -14,15 +14,22 @@ DROP POLICY IF EXISTS "Users can view verified domains matching email" ON sender
 DROP POLICY IF EXISTS "Anyone can view verified domains" ON sender_domains;
 DROP POLICY IF EXISTS "Service role full access sender domains" ON sender_domains;
 DROP POLICY IF EXISTS "Anon can read verified domains" ON sender_domains;
+DROP POLICY IF EXISTS "Authenticated can read verified domains" ON sender_domains;
 
--- Policy 1: Allow reading verified domains (for all users including Salesforce auth)
--- The anon key can read verified domains - filtering by email domain is done in app
+-- Policy 1: Allow anon role to read verified domains
 CREATE POLICY "Anon can read verified domains"
 ON sender_domains FOR SELECT
 TO anon
 USING (status = 'verified');
 
--- Policy 2: Service role has full access (for edge functions that handle writes)
+-- Policy 2: Allow authenticated role to read verified domains
+-- (Supabase switches to authenticated role when user signs in, even with null auth.uid())
+CREATE POLICY "Authenticated can read verified domains"
+ON sender_domains FOR SELECT
+TO authenticated
+USING (status = 'verified');
+
+-- Policy 3: Service role has full access (for edge functions that handle writes)
 -- All write operations go through edge functions which use service role
 CREATE POLICY "Service role full access sender domains"
 ON sender_domains FOR ALL
