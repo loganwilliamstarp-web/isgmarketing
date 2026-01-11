@@ -1048,6 +1048,11 @@ const DashboardPage = ({ t }) => {
                             ? `From: ${activity.from_email}`
                             : `To: ${activity.to_name || activity.to_email}`}
                         </div>
+                        {activity.type !== 'replied' && (activity.from_name || activity.from_email) && (
+                          <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                            From: {activity.from_name || 'Unknown'} &lt;{activity.from_email || 'unknown'}&gt;
+                          </div>
+                        )}
                         {activity.account?.name && (
                           <span style={{
                             display: 'inline-block',

@@ -583,7 +583,7 @@ export const emailActivityService = {
         let query = supabase
           .from('email_logs')
           .select(`
-            id, subject, to_email, to_name, status, sent_at, created_at,
+            id, subject, to_email, to_name, from_email, from_name, status, sent_at, created_at,
             account:accounts(account_unique_id, name)
           `)
           .in('status', ['Sent', 'Delivered', 'Queued'])
@@ -598,6 +598,8 @@ export const emailActivityService = {
           subject: e.subject,
           to_email: e.to_email,
           to_name: e.to_name,
+          from_email: e.from_email,
+          from_name: e.from_name,
           status: e.status,
           account: e.account,
           timestamp: e.sent_at || e.created_at
@@ -609,7 +611,7 @@ export const emailActivityService = {
         let query = supabase
           .from('email_logs')
           .select(`
-            id, subject, to_email, to_name, first_opened_at, open_count,
+            id, subject, to_email, to_name, from_email, from_name, first_opened_at, open_count,
             account:accounts(account_unique_id, name)
           `)
           .not('first_opened_at', 'is', null)
@@ -624,6 +626,8 @@ export const emailActivityService = {
           subject: e.subject,
           to_email: e.to_email,
           to_name: e.to_name,
+          from_email: e.from_email,
+          from_name: e.from_name,
           open_count: e.open_count,
           account: e.account,
           timestamp: e.first_opened_at
@@ -635,7 +639,7 @@ export const emailActivityService = {
         let query = supabase
           .from('email_logs')
           .select(`
-            id, subject, to_email, to_name, first_clicked_at, click_count,
+            id, subject, to_email, to_name, from_email, from_name, first_clicked_at, click_count,
             account:accounts(account_unique_id, name)
           `)
           .not('first_clicked_at', 'is', null)
@@ -650,6 +654,8 @@ export const emailActivityService = {
           subject: e.subject,
           to_email: e.to_email,
           to_name: e.to_name,
+          from_email: e.from_email,
+          from_name: e.from_name,
           click_count: e.click_count,
           account: e.account,
           timestamp: e.first_clicked_at
