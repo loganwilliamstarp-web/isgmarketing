@@ -180,8 +180,8 @@ const EmailLogItem = ({ log, theme: t }) => (
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
       <EmailEventBadge event="sent" theme={t} />
       {log.delivered_at && <EmailEventBadge event="delivered" theme={t} />}
-      {log.opened_at && <EmailEventBadge event="opened" theme={t} />}
-      {log.clicked_at && <EmailEventBadge event="clicked" theme={t} />}
+      {log.first_opened_at && <EmailEventBadge event="opened" theme={t} />}
+      {log.first_clicked_at && <EmailEventBadge event="clicked" theme={t} />}
       {log.bounced_at && <EmailEventBadge event="bounced" theme={t} />}
     </div>
   </div>
@@ -245,15 +245,15 @@ const EnrollmentCard = ({ enrollment, theme: t, userId }) => (
             textDecoration: 'none'
           }}
         >
-          {enrollment.automations?.name || 'Unknown Automation'}
+          {enrollment.automation?.name || 'Unknown Automation'}
         </Link>
         <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '2px' }}>
           Started {new Date(enrollment.enrolled_at).toLocaleDateString()}
         </div>
       </div>
-      <StatusBadge 
-        status={enrollment.status === 'active' ? 'active' : enrollment.status} 
-        theme={t} 
+      <StatusBadge
+        status={enrollment.status?.toLowerCase() || 'pending'}
+        theme={t}
       />
     </div>
     {enrollment.current_node_id && (
@@ -301,11 +301,11 @@ const ClientProfilePage = ({ t }) => {
   // Calculate this account's stats
   const accountStats = {
     emailsSent: emailLogs?.length || 0,
-    opened: emailLogs?.filter(l => l.opened_at).length || 0,
-    clicked: emailLogs?.filter(l => l.clicked_at).length || 0,
-    openRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.opened_at).length / emailLogs.length) * 100) : 0,
-    clickRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.clicked_at).length / emailLogs.length) * 100) : 0,
-    activeEnrollments: enrollments?.filter(e => e.status === 'active').length || 0
+    opened: emailLogs?.filter(l => l.first_opened_at).length || 0,
+    clicked: emailLogs?.filter(l => l.first_clicked_at).length || 0,
+    openRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.first_opened_at).length / emailLogs.length) * 100) : 0,
+    clickRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.first_clicked_at).length / emailLogs.length) * 100) : 0,
+    activeEnrollments: enrollments?.filter(e => e.status === 'Active').length || 0
   };
 
   // Org averages for comparison
@@ -753,8 +753,8 @@ const ClientProfilePage = ({ t }) => {
               <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
                 Active Automations
               </h3>
-              {enrollments?.filter(e => e.status === 'active').length > 0 ? (
-                enrollments.filter(e => e.status === 'active').map(enrollment => (
+              {enrollments?.filter(e => e.status === 'Active').length > 0 ? (
+                enrollments.filter(e => e.status === 'Active').map(enrollment => (
                   <EnrollmentCard 
                     key={enrollment.id} 
                     enrollment={enrollment} 
