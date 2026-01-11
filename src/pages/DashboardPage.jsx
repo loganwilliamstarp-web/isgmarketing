@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useRecentActivity } from '../hooks';
+import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useEmailLogs } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
 
@@ -483,7 +483,7 @@ const DashboardPage = ({ t }) => {
   // Fetch dashboard data using hooks
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuickStats();
   const { data: upcomingEmails, isLoading: emailsLoading } = useUpcomingEmails(7);
-  const { data: recentActivity, isLoading: activityLoading } = useRecentActivity({ category: 'email', limit: 10 });
+  const { data: recentEmails, isLoading: emailsActivityLoading } = useEmailLogs({ limit: 10 });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
 
   // Handle send now
@@ -654,7 +654,7 @@ const DashboardPage = ({ t }) => {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recent Email Activity */}
         <div style={{
           padding: '20px',
           backgroundColor: t.bgCard,
@@ -663,17 +663,17 @@ const DashboardPage = ({ t }) => {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, margin: 0 }}>
-              Recent Activity
+              Recent Email Activity
             </h3>
             <Link
-              to={`/${userId}/timeline`}
+              to={`/${userId}/email-logs`}
               style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
             >
               View all →
             </Link>
           </div>
 
-          {activityLoading ? (
+          {emailsActivityLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[1, 2, 3].map(i => (
                 <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -685,62 +685,75 @@ const DashboardPage = ({ t }) => {
                 </div>
               ))}
             </div>
-          ) : recentActivity?.length > 0 ? (
+          ) : recentEmails?.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {recentActivity.map((activity) => (
-                <div
-                  key={activity.id}
-                  style={{
-                    display: 'flex',
-                    gap: '12px',
-                    alignItems: 'flex-start',
-                    padding: '10px',
-                    backgroundColor: t.bg,
-                    borderRadius: '8px',
-                    border: `1px solid ${t.border}`
-                  }}
-                >
-                  <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    backgroundColor: activity.event_type === 'email_sent' ? `${t.success}20` :
-                      activity.event_type === 'email_opened' ? `${t.primary}20` :
-                      activity.event_type === 'email_clicked' ? `${t.warning}20` :
-                      activity.event_type === 'email_bounced' ? `${t.danger}20` : t.bgHover,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px'
-                  }}>
-                    {activity.event_type === 'email_sent' ? '📤' :
-                     activity.event_type === 'email_opened' ? '👀' :
-                     activity.event_type === 'email_clicked' ? '🔗' :
-                     activity.event_type === 'email_bounced' ? '⚠️' : '📧'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
-                      {activity.title}
+              {recentEmails.map((email) => {
+                const statusIcon = email.status === 'Sent' ? '📤' :
+                  email.status === 'Delivered' ? '✅' :
+                  email.status === 'Opened' ? '👀' :
+                  email.status === 'Clicked' ? '🔗' :
+                  email.status === 'Bounced' ? '⚠️' :
+                  email.status === 'Failed' ? '❌' : '📧';
+                const statusColor = email.status === 'Sent' || email.status === 'Delivered' ? t.success :
+                  email.status === 'Opened' ? t.primary :
+                  email.status === 'Clicked' ? t.warning :
+                  email.status === 'Bounced' || email.status === 'Failed' ? t.danger : t.textSecondary;
+                return (
+                  <Link
+                    key={email.id}
+                    to={`/${userId}/email-logs/${email.id}`}
+                    style={{
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'flex-start',
+                      padding: '10px',
+                      backgroundColor: t.bg,
+                      borderRadius: '8px',
+                      border: `1px solid ${t.border}`,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      backgroundColor: `${statusColor}20`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '14px'
+                    }}>
+                      {statusIcon}
                     </div>
-                    {activity.description && (
-                      <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {activity.description}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                        {email.subject || 'No subject'}
                       </div>
-                    )}
-                    <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-                      {new Date(activity.created_at).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
-                      {activity.account?.name && (
-                        <span> • {activity.account.name}</span>
-                      )}
+                      <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        To: {email.to_name || email.to_email}
+                      </div>
+                      <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: statusColor, fontWeight: '500' }}>{email.status}</span>
+                        <span>•</span>
+                        <span>
+                          {new Date(email.sent_at || email.created_at).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                        {email.account?.name && (
+                          <>
+                            <span>•</span>
+                            <span>{email.account.name}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           ) : (
             <div style={{
@@ -750,7 +763,7 @@ const DashboardPage = ({ t }) => {
               fontSize: '14px'
             }}>
               <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
-              No recent activity yet
+              No email activity yet
             </div>
           )}
         </div>
