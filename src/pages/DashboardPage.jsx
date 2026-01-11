@@ -980,7 +980,7 @@ const DashboardPage = ({ t }) => {
               Recent Email Activity
             </h3>
             <Link
-              to={`/${userId}/timeline`}
+              to={`/${userId}/email-activity`}
               style={{ fontSize: '12px', color: t.primary, textDecoration: 'none' }}
             >
               View all →
