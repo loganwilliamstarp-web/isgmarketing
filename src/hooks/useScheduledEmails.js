@@ -98,6 +98,7 @@ export function useScheduledEmailMutations() {
       invalidateScheduled();
       // Also invalidate email logs and activity since we just sent an email
       queryClient.invalidateQueries({ queryKey: ['emailLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['emailActivity'] });
       queryClient.invalidateQueries({ queryKey: ['activity'] });
       queryClient.invalidateQueries({ queryKey: ['quickStats'] });
     }
