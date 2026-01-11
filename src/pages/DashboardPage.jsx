@@ -926,7 +926,7 @@ const DashboardPage = ({ t }) => {
             Emails scheduled to be sent
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '800px', overflowY: 'auto', marginTop: '16px' }}>
             {emailsLoading ? (
               // Loading skeletons
               Array.from({ length: 3 }).map((_, i) => (
@@ -991,7 +991,7 @@ const DashboardPage = ({ t }) => {
           </p>
 
           {activityLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '800px', overflowY: 'auto', marginTop: '16px' }}>
               {[1, 2, 3].map(i => (
                 <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <Skeleton width="32px" height="32px" />
@@ -1003,7 +1003,7 @@ const DashboardPage = ({ t }) => {
               ))}
             </div>
           ) : emailActivity?.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto', marginTop: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '800px', overflowY: 'auto', marginTop: '16px' }}>
               {emailActivity.slice(0, 10).map((activity) => {
                 const typeConfig = {
                   sent: { icon: '📤', label: 'Sent', color: t.success },
