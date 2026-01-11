@@ -280,19 +280,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
     }));
   };
 
-  // Get the scheduled date for a specific enrollee index
-  const getScheduledDateForIndex = (index, totalCount) => {
-    if (!pacingConfig.enabled) return null;
-
-    const schedule = getPacedScheduleDates(totalCount);
-    for (const { date, startIndex, endIndex } of schedule) {
-      if (index >= startIndex && index <= endIndex) {
-        return date;
-      }
-    }
-    return null;
-  };
-
   const nodeTypes = {
     entry_criteria: { icon: '🎯', color: '#8b5cf6', label: 'Entry Criteria' },
     trigger: { icon: '⚡', color: t.primary, label: 'Trigger' },
@@ -1401,38 +1388,18 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                 </div>
                 <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>Active Filters</div>
               </div>
+              {pacingConfig.enabled && (
+                <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: t.warning }}>
+                    ~{Math.ceil((potentialEnrollees?.length || 0) / (getPacedScheduleDates(potentialEnrollees?.length || 0).length || 1))}/day
+                  </div>
+                  <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase' }}>
+                    Over {pacingConfig.spreadOverDays} days ({pacingConfig.allowedDays?.length || 5} days/wk)
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Pacing Summary - only shown when pacing is enabled */}
-            {pacingConfig.enabled && potentialEnrollees && potentialEnrollees.length > 0 && (
-              <div style={{
-                padding: '12px 20px',
-                borderBottom: `1px solid ${t.border}`,
-                backgroundColor: `${t.primary}10`
-              }}>
-                <div style={{ fontSize: '12px', fontWeight: '600', color: t.primary, marginBottom: '8px' }}>
-                  Pacing Schedule Preview
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {getPacedScheduleDates(potentialEnrollees.length).map(({ date, startIndex, endIndex }, i) => (
-                    <div key={i} style={{
-                      padding: '6px 12px',
-                      backgroundColor: t.bgCard,
-                      border: `1px solid ${t.border}`,
-                      borderRadius: '6px',
-                      fontSize: '12px'
-                    }}>
-                      <span style={{ fontWeight: '600', color: t.text }}>
-                        {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </span>
-                      <span style={{ color: t.textMuted, marginLeft: '8px' }}>
-                        {endIndex - startIndex + 1} contact{endIndex - startIndex !== 0 ? 's' : ''}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Potential Enrollees Table */}
             <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
@@ -1451,15 +1418,12 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                     <tr style={{ backgroundColor: t.bgHover }}>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Contact</th>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Account Type</th>
-                      {pacingConfig.enabled && (
-                        <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Scheduled For</th>
-                      )}
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Last Email</th>
                       <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', borderBottom: `1px solid ${t.border}` }}>Matched Groups</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {potentialEnrollees.map((contact, index) => (
+                    {potentialEnrollees.map((contact) => (
                       <tr key={contact.id} style={{ borderBottom: `1px solid ${t.border}` }}>
                         <td style={{ padding: '12px 20px' }}>
                           <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{contact.name || contact.account_name}</div>
@@ -1468,14 +1432,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
                           {contact.account_type || '—'}
                         </td>
-                        {pacingConfig.enabled && (
-                          <td style={{ padding: '12px 20px', fontSize: '13px', color: t.primary, fontWeight: '500' }}>
-                            {(() => {
-                              const scheduledDate = getScheduledDateForIndex(index, potentialEnrollees.length);
-                              return scheduledDate ? scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
-                            })()}
-                          </td>
-                        )}
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: t.textSecondary }}>
                           {contact._lastEmailSent ? new Date(contact._lastEmailSent).toLocaleDateString() : 'Never'}
                         </td>
