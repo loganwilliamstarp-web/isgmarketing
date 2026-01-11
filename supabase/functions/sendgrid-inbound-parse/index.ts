@@ -30,6 +30,13 @@ interface ParsedEmail {
 }
 
 serve(async (req) => {
+  // Log immediately on any request to confirm webhook is being called
+  console.log('=== SendGrid Inbound Parse Called ===', {
+    method: req.method,
+    url: req.url,
+    contentType: req.headers.get('content-type')
+  })
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -48,6 +55,7 @@ serve(async (req) => {
 
     // SendGrid sends multipart/form-data
     const formData = await req.formData()
+    console.log('Form data fields:', [...formData.keys()])
 
     // Parse the email data from form fields
     const email = parseFormData(formData)

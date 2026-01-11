@@ -1,0 +1,7 @@
+# Supabase configuration
+
+[functions.sendgrid-webhook]
+verify_jwt = false
+
+[functions.sendgrid-inbound-parse]
+verify_jwt = false

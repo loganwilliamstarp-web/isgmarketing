@@ -179,45 +179,43 @@ export const dashboardService = {
 
   /**
    * Get quick stats (lightweight version for header/sidebar)
+   * Returns: emailsSent, emailsSentChange, openRate, clickRate, responseRate, scheduledCount
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async getQuickStats(ownerIds) {
-    const today = new Date().toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    // Build queries with owner filter
-    let emailsTodayQuery = supabase.from('email_logs').select('*', { count: 'exact', head: true }).gte('sent_at', today);
-    emailsTodayQuery = applyOwnerFilter(emailsTodayQuery, ownerIds);
-
-    let opensTodayQuery = supabase.from('email_logs').select('*', { count: 'exact', head: true }).gte('first_opened_at', today);
-    opensTodayQuery = applyOwnerFilter(opensTodayQuery, ownerIds);
-
-    let activeAutomationsQuery = supabase.from('automations').select('*', { count: 'exact', head: true }).eq('status', 'Active');
-    activeAutomationsQuery = applyOwnerFilter(activeAutomationsQuery, ownerIds);
-
-    let pendingScheduledQuery = supabase.from('scheduled_emails').select('*', { count: 'exact', head: true }).eq('status', 'Pending');
-    pendingScheduledQuery = applyOwnerFilter(pendingScheduledQuery, ownerIds);
-
-    // Parallel queries for speed
-    const [
-      { count: emailsToday },
-      { count: opensToday },
-      { count: activeAutomations },
-      { count: pendingScheduled }
-    ] = await Promise.all([
-      emailsTodayQuery,
-      opensTodayQuery,
-      activeAutomationsQuery,
-      pendingScheduledQuery
+    // Get comparison stats for last 30 days (includes sent, open rate, click rate with changes)
+    const [comparisonStats, responseStats, scheduledCount] = await Promise.all([
+      emailLogsService.getComparisonStats(ownerIds, 30),
+      emailLogsService.getResponseRateStats(ownerIds),
+      this.getScheduledCount(ownerIds)
     ]);
 
+    const current = comparisonStats.current || {};
+    const changes = comparisonStats.changes || {};
+
     return {
-      emailsToday: emailsToday || 0,
-      opensToday: opensToday || 0,
-      activeAutomations: activeAutomations || 0,
-      pendingScheduled: pendingScheduled || 0
+      emailsSent: current.total_sent || 0,
+      emailsSentChange: parseFloat(changes.sent) || 0,
+      openRate: current.open_rate || 0,
+      clickRate: current.click_rate || 0,
+      responseRate: responseStats?.response_rate || 0,
+      scheduledCount: scheduledCount || 0
     };
+  },
+
+  /**
+   * Get count of pending scheduled emails
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   */
+  async getScheduledCount(ownerIds) {
+    let query = supabase
+      .from('scheduled_emails')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'Pending');
+    query = applyOwnerFilter(query, ownerIds);
+
+    const { count } = await query;
+    return count || 0;
   }
 };
 

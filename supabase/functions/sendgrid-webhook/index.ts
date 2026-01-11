@@ -161,6 +161,13 @@ interface SendGridEvent {
 }
 
 serve(async (req) => {
+  // Log immediately on any request to confirm webhook is being called
+  console.log('=== SendGrid Webhook Called ===', {
+    method: req.method,
+    url: req.url,
+    headers: Object.fromEntries(req.headers.entries())
+  })
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -174,6 +181,7 @@ serve(async (req) => {
   try {
     // Get the raw body for signature verification (must be done before parsing JSON)
     const rawBody = await req.text()
+    console.log('Raw webhook body length:', rawBody.length, 'chars')
 
     // Verify SendGrid webhook signature if public key is configured
     const sendgridPublicKey = Deno.env.get('SENDGRID_WEBHOOK_PUBLIC_KEY')
@@ -224,17 +232,26 @@ serve(async (req) => {
       errors: [] as string[]
     }
 
+    // Log all incoming events for debugging
+    console.log(`Received ${events.length} SendGrid events:`, events.map(e => ({
+      event: e.event,
+      sg_message_id: e.sg_message_id,
+      email: e.email
+    })))
+
     for (const event of events) {
       try {
         await processEvent(supabaseClient, event)
         results.processed++
+        results.updated++
       } catch (err: any) {
+        console.error(`Error processing event ${event.sg_event_id}:`, err)
         results.errors.push(`Error processing event ${event.sg_event_id}: ${err.message}`)
       }
     }
 
     // Log webhook receipt for debugging
-    console.log(`Processed ${results.processed} SendGrid events, ${results.errors.length} errors`)
+    console.log(`Processed ${results.processed} SendGrid events, updated ${results.updated}, ${results.errors.length} errors`)
 
     return new Response(
       JSON.stringify({ success: true, ...results }),
