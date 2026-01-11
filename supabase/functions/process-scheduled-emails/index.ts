@@ -187,6 +187,10 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
       const sendTime = automation.send_time || '09:00'
       const timezone = automation.timezone || 'America/Chicago'
 
+      // Get pacing config from entry_criteria node
+      const entryCriteriaNode = nodes.find((n: any) => n.type === 'entry_criteria')
+      const pacingConfig = entryCriteriaNode?.config?.pacing || { enabled: false, spreadOverDays: 7, allowedDays: ['mon', 'tue', 'wed', 'thu', 'fri'] }
+
       // Get user settings for from_email and from_name
       const { data: userSettings } = await supabase
         .from('user_settings')
@@ -481,13 +485,37 @@ async function runDailyRefresh(supabase: any, specificAutomationId: string | nul
         }
       }
 
-      // Insert new emails in batches
-      console.log(`[${automation.name}] About to insert ${newEmails.length} emails in batches of ${BATCH_SIZE}`)
-      if (newEmails.length > 0) {
-        console.log(`[${automation.name}] Sample email to insert:`, JSON.stringify(newEmails[0]))
+      // Apply pacing distribution if enabled
+      let finalEmails = newEmails
+      if (pacingConfig.enabled && newEmails.length > 0) {
+        console.log(`[${automation.name}] Applying pacing: spread over ${pacingConfig.spreadOverDays} days, allowed days: ${pacingConfig.allowedDays?.join(', ')}`)
+        finalEmails = applyPacingDistribution(
+          newEmails,
+          pacingConfig.spreadOverDays || 7,
+          pacingConfig.allowedDays || ['mon', 'tue', 'wed', 'thu', 'fri'],
+          sendTime,
+          timezone
+        )
+      } else if (pacingConfig.allowedDays?.length > 0 && pacingConfig.allowedDays.length < 7) {
+        // Even without full pacing, respect day-of-week restrictions
+        console.log(`[${automation.name}] Applying day-of-week filter: ${pacingConfig.allowedDays?.join(', ')}`)
+        finalEmails = newEmails.map((email: any) => {
+          const originalDate = new Date(email.scheduled_for)
+          const adjustedDate = moveToNextAllowedDay(originalDate, pacingConfig.allowedDays)
+          if (adjustedDate.getTime() !== originalDate.getTime()) {
+            return { ...email, scheduled_for: adjustedDate.toISOString() }
+          }
+          return email
+        })
       }
-      for (let i = 0; i < newEmails.length; i += BATCH_SIZE) {
-        const batch = newEmails.slice(i, i + BATCH_SIZE)
+
+      // Insert new emails in batches
+      console.log(`[${automation.name}] About to insert ${finalEmails.length} emails in batches of ${BATCH_SIZE}`)
+      if (finalEmails.length > 0) {
+        console.log(`[${automation.name}] Sample email to insert:`, JSON.stringify(finalEmails[0]))
+      }
+      for (let i = 0; i < finalEmails.length; i += BATCH_SIZE) {
+        const batch = finalEmails.slice(i, i + BATCH_SIZE)
         console.log(`[${automation.name}] Inserting batch ${i / BATCH_SIZE + 1} with ${batch.length} emails`)
         const { error: insertError, data: insertedData } = await supabase
           .from('scheduled_emails')
@@ -1485,4 +1513,103 @@ function matchValue(actualValue: string, filterValue: string, operator: string):
     default:
       return actualValues.some(av => filterValues.some(fv => av === fv))
   }
+}
+
+// ============================================================================
+// PACING DISTRIBUTION
+// ============================================================================
+
+/**
+ * Distribute emails evenly across allowed days over the pacing period
+ * @param emails - Array of emails to distribute
+ * @param spreadOverDays - Number of days to spread enrollments over
+ * @param allowedDays - Array of allowed day names (e.g., ['mon', 'tue', 'wed', 'thu', 'fri'])
+ * @param sendTime - Time to send emails (e.g., '09:00')
+ * @param timezone - Timezone for the send time
+ * @returns Array of emails with adjusted scheduled_for dates
+ */
+function applyPacingDistribution(
+  emails: any[],
+  spreadOverDays: number,
+  allowedDays: string[],
+  sendTime: string,
+  timezone: string
+): any[] {
+  // Map day names to JS day numbers (0=Sun, 1=Mon, etc.)
+  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
+  const allowedDayNumbers = allowedDays.map(d => dayMap[d.toLowerCase()])
+
+  // Build list of valid send dates starting from today
+  const validDates: Date[] = []
+  const startDate = new Date()
+  startDate.setHours(0, 0, 0, 0)
+
+  // Scan through enough days to find spreadOverDays valid dates
+  // (we may need to scan more than spreadOverDays if some days are excluded)
+  const maxDaysToScan = spreadOverDays * 2
+  for (let i = 0; i < maxDaysToScan && validDates.length < spreadOverDays; i++) {
+    const checkDate = new Date(startDate)
+    checkDate.setDate(checkDate.getDate() + i)
+    if (allowedDayNumbers.includes(checkDate.getDay())) {
+      validDates.push(new Date(checkDate))
+    }
+  }
+
+  // If no valid dates found (shouldn't happen), fall back to all days
+  if (validDates.length === 0) {
+    console.log(`[Pacing] No valid dates found for allowed days: ${allowedDays.join(', ')}. Falling back to all days.`)
+    for (let i = 0; i < spreadOverDays; i++) {
+      const checkDate = new Date(startDate)
+      checkDate.setDate(checkDate.getDate() + i)
+      validDates.push(checkDate)
+    }
+  }
+
+  // Distribute emails evenly across valid dates
+  const emailsPerDay = Math.ceil(emails.length / validDates.length)
+  console.log(`[Pacing] Distributing ${emails.length} emails over ${validDates.length} valid days (~${emailsPerDay}/day)`)
+
+  // Parse send time
+  const [hours, minutes] = sendTime.split(':').map(Number)
+
+  return emails.map((email, index) => {
+    const dayIndex = Math.floor(index / emailsPerDay)
+    const sendDate = new Date(validDates[Math.min(dayIndex, validDates.length - 1)])
+
+    // Apply send time in the specified timezone
+    const scheduledFor = getScheduledDateTimeUTC(sendDate, sendTime, timezone)
+
+    return {
+      ...email,
+      scheduled_for: scheduledFor
+    }
+  })
+}
+
+/**
+ * Move a date to the next allowed day if it falls on a non-allowed day
+ * @param date - The date to check
+ * @param allowedDays - Array of allowed day names (e.g., ['mon', 'tue', 'wed', 'thu', 'fri'])
+ * @returns The original date if allowed, or the next allowed date
+ */
+function moveToNextAllowedDay(date: Date, allowedDays: string[]): Date {
+  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
+  const allowedDayNumbers = allowedDays.map(d => dayMap[d.toLowerCase()])
+
+  // If current day is allowed, return as-is
+  if (allowedDayNumbers.includes(date.getDay())) {
+    return date
+  }
+
+  // Find the next allowed day (search up to 7 days)
+  const adjustedDate = new Date(date)
+  for (let i = 1; i <= 7; i++) {
+    adjustedDate.setDate(adjustedDate.getDate() + 1)
+    if (allowedDayNumbers.includes(adjustedDate.getDay())) {
+      return adjustedDate
+    }
+  }
+
+  // Should never reach here, but return original date if we do
+  return date
 }
