@@ -20,9 +20,11 @@ const IntegrationsTab = ({ userId, theme: t }) => {
 
   // Use profile_name for agency-level connections
   // When impersonating, use the target user's profile name
-  const agencyId = impersonating?.active && impersonating?.targetProfileName
+  // Map PT1 -> ISG Retail for legacy compatibility
+  const rawAgencyId = impersonating?.active && impersonating?.targetProfileName
     ? impersonating.targetProfileName
     : user?.profileName;
+  const agencyId = rawAgencyId === 'PT1' ? 'ISG Retail' : rawAgencyId;
 
   // Check for OAuth callback result in URL
   useEffect(() => {
@@ -40,11 +42,6 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   }, []);
 
   useEffect(() => {
-    // DEBUG
-    console.log('[IntegrationsTab] agencyId:', agencyId);
-    console.log('[IntegrationsTab] impersonating:', impersonating);
-    console.log('[IntegrationsTab] user.profileName:', user?.profileName);
-
     if (agencyId) {
       loadConnections();
     } else {

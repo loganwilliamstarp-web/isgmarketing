@@ -216,7 +216,9 @@ async function handleCallback(
   }
 
   // Support both agency_id (new) and owner_id (legacy)
-  const agencyId = state.agency_id || state.owner_id
+  // Map PT1 -> ISG Retail for legacy compatibility
+  const rawAgencyId = state.agency_id || state.owner_id
+  const agencyId = rawAgencyId === 'PT1' ? 'ISG Retail' : rawAgencyId
   const { redirect_after } = state
 
   if (!agencyId) {
