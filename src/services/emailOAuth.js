@@ -122,19 +122,10 @@ export const emailOAuthService = {
       return { gmail: null, microsoft: null };
     }
 
-    // DEBUG: Log the query being made
-    console.log('[emailOAuth] DEBUG - Querying with agency_id:', agencyId);
-
     const { data, error } = await supabase
       .from('email_provider_connections')
-      .select('provider, provider_email, status, last_error, last_used_at, created_at, updated_at, agency_id')
+      .select('provider, provider_email, status, last_error, last_used_at, created_at, updated_at')
       .eq('agency_id', agencyId);
-
-    // DEBUG: Log raw results
-    console.log('[emailOAuth] DEBUG - Raw query results:', JSON.stringify(data));
-    if (data && data.length > 0) {
-      console.log('[emailOAuth] DEBUG - agency_id values in results:', data.map(d => d.agency_id));
-    }
 
     if (error) {
       console.error('Error fetching OAuth connections:', error);

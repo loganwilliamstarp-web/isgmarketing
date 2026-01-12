@@ -55,17 +55,8 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     setIsLoading(true);
     setError(null);
     try {
-      // DEBUG: Log the agencyId being used for query
-      console.log('[IntegrationsTab] DEBUG - user.profileName:', user?.profileName);
-      console.log('[IntegrationsTab] DEBUG - impersonating:', impersonating?.active, 'targetProfileName:', impersonating?.targetProfileName);
-      console.log('[IntegrationsTab] DEBUG - agencyId being queried:', agencyId);
-
       // Get connections by agency (profile_name)
       const data = await emailOAuthService.getConnectionsByAgency(agencyId);
-
-      // DEBUG: Log what was returned
-      console.log('[IntegrationsTab] DEBUG - connections returned:', JSON.stringify(data));
-
       setConnections(data);
     } catch (err) {
       console.error('[IntegrationsTab] Failed to load connections:', err);
