@@ -184,6 +184,7 @@ serve(async (req) => {
     }
 
     // Store the reply
+    // Note: Using actual database schema columns (attachments instead of attachment_count/attachments_info)
     const { data: reply, error: insertError } = await supabaseClient
       .from('email_replies')
       .insert({
@@ -197,13 +198,8 @@ serve(async (req) => {
         body_text: email.text,
         body_html: email.html,
         in_reply_to: headers['in-reply-to'] || email.inReplyTo,
-        message_id: headers['message-id'] || email.messageId,
         references_header: headers['references'] || email.references,
-        attachment_count: email.attachments || 0,
-        attachments_info: email.attachmentsInfo || [],
-        spf: email.spf,
-        dkim: email.dkim,
-        spam_score: email.spamScore,
+        attachments: email.attachmentsInfo || [],
         raw_headers: headers,
         received_at: new Date().toISOString()
       })
