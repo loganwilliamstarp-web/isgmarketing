@@ -43,15 +43,21 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   }, [agencyId]);
 
   const loadConnections = async () => {
-    if (!agencyId) return;
+    console.log('[IntegrationsTab] loadConnections called, agencyId:', agencyId);
+    if (!agencyId) {
+      console.log('[IntegrationsTab] No agencyId, skipping load');
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       // Get connections by agency (profile_name)
+      console.log('[IntegrationsTab] Fetching connections for agency:', agencyId);
       const data = await emailOAuthService.getConnectionsByAgency(agencyId);
+      console.log('[IntegrationsTab] Got connections:', data);
       setConnections(data);
     } catch (err) {
-      console.error('Failed to load connections:', err);
+      console.error('[IntegrationsTab] Failed to load connections:', err);
       setError('Failed to load connection status');
     } finally {
       setIsLoading(false);
@@ -61,15 +67,19 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   const handleConnect = async (provider) => {
     if (!canManageConnections) return;
 
+    console.log('[IntegrationsTab] handleConnect called for', provider, 'agencyId:', agencyId);
     setIsConnecting(provider);
     setError(null);
     try {
       // Pass agency ID instead of user ID
+      console.log('[IntegrationsTab] Initiating OAuth...');
       await emailOAuthService.initiateOAuth(provider, agencyId);
+      console.log('[IntegrationsTab] OAuth completed, reloading connections...');
       // OAuth completed successfully, reload connections
       await loadConnections();
+      console.log('[IntegrationsTab] Connections reloaded:', connections);
     } catch (err) {
-      console.error('OAuth failed:', err);
+      console.error('[IntegrationsTab] OAuth failed:', err);
       setError(err.message || `Failed to connect ${provider}`);
     } finally {
       setIsConnecting(null);
