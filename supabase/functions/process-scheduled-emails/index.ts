@@ -865,7 +865,7 @@ async function processReadyEmails(
       const sendResult = await sendEmailViaSendGrid(email, sendgridApiKey, supabase, emailLog.id)
 
       if (sendResult.success) {
-        // Update email_log with SendGrid message ID and sent status
+        // Update email_log with SendGrid message ID, sent status, and processed content
         await supabase
           .from('email_logs')
           .update({
@@ -874,6 +874,9 @@ async function processReadyEmails(
             sendgrid_message_id: sendResult.messageId,
             reply_to: sendResult.replyTo,
             custom_message_id: sendResult.customMessageId,
+            subject: sendResult.processedSubject,
+            body_html: sendResult.processedBodyHtml,
+            body_text: sendResult.processedBodyText,
             updated_at: new Date().toISOString()
           })
           .eq('id', emailLog.id)
@@ -1073,7 +1076,7 @@ async function sendEmailViaSendGrid(
     console.log(`  Reply-To: ${replyToAddress}`)
     console.log(`  Message-ID: ${customMessageId}`)
     console.log(`  Subject: ${finalSubject}`)
-    return { success: true, messageId: `dry-run-${Date.now()}`, replyTo: replyToAddress }
+    return { success: true, messageId: `dry-run-${Date.now()}`, replyTo: replyToAddress, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
   }
 
   // Build SendGrid payload
@@ -1134,7 +1137,7 @@ async function sendEmailViaSendGrid(
     if (response.ok || response.status === 202) {
       // SendGrid returns 202 Accepted for successful sends
       const messageId = response.headers.get('X-Message-Id') || `sg-${Date.now()}`
-      return { success: true, messageId, replyTo: replyToAddress, customMessageId }
+      return { success: true, messageId, replyTo: replyToAddress, customMessageId, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
     } else {
       const errorBody = await response.text()
       let errorMessage = `SendGrid error: ${response.status}`

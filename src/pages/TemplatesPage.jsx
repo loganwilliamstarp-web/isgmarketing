@@ -905,7 +905,7 @@ const TemplatesPage = ({ t }) => {
         updates: data
       });
     } else if (editingTemplate) {
-      await updateTemplate.mutateAsync({ id: editingTemplate.id, ...data });
+      await updateTemplate.mutateAsync({ templateId: editingTemplate.id, updates: data });
     } else {
       await createTemplate.mutateAsync(data);
     }

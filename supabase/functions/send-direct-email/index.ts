@@ -72,11 +72,19 @@ serve(async (req) => {
     // Build email footer
     const emailFooter = buildEmailFooter(userSettings, email)
 
+    // Get account data for merge field processing
+    const account = email.account || {}
+
+    // Apply merge fields to subject and body
+    const processedSubject = applyMergeFields(email.subject || '', email, account)
+    const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account)
+    const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account)
+
     // Wrap body in proper HTML with footer
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
         <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
-        ${bodyHtml || ''}
+        ${processedBodyHtml}
         ${emailFooter}
       </div>
     `.trim()
@@ -98,9 +106,9 @@ serve(async (req) => {
         to_name: recipientName,
         from_email: senderEmail,
         from_name: senderName,
-        subject: email.subject,
+        subject: processedSubject,
         body_html: htmlContent,
-        body_text: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '',
+        body_text: processedBodyText,
         status: 'Queued',
         queued_at: new Date().toISOString()
       })
@@ -194,9 +202,9 @@ serve(async (req) => {
         email: replyToAddress,
         name: senderName || ''
       },
-      subject: email.subject,
+      subject: processedSubject,
       content: [
-        { type: 'text/plain', value: bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '' },
+        { type: 'text/plain', value: processedBodyText },
         { type: 'text/html', value: htmlContent }
       ],
       headers: {
@@ -296,6 +304,49 @@ serve(async (req) => {
     )
   }
 })
+
+function applyMergeFields(content: string, email: any, account: any): string {
+  if (!content) return content
+
+  // Extract first/last name from account.name if dedicated fields aren't available
+  const nameParts = (account?.name || '').trim().split(/\s+/)
+  const derivedFirstName = nameParts[0] || ''
+  const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
+
+  const mergeFields: Record<string, string> = {
+    // Account fields
+    '{{first_name}}': account?.primary_contact_first_name || derivedFirstName,
+    '{{last_name}}': account?.primary_contact_last_name || derivedLastName,
+    '{{full_name}}': [account?.primary_contact_first_name, account?.primary_contact_last_name].filter(Boolean).join(' ') || account?.name || '',
+    '{{name}}': account?.name || '',
+    '{{company_name}}': account?.name || '',
+    '{{email}}': account?.person_email || account?.email || email.to_email || '',
+    '{{phone}}': account?.phone || '',
+
+    // Address fields
+    '{{address}}': account?.billing_street || '',
+    '{{city}}': account?.billing_city || '',
+    '{{state}}': account?.billing_state || '',
+    '{{zip}}': account?.billing_postal_code || '',
+    '{{postal_code}}': account?.billing_postal_code || '',
+
+    // Recipient fields
+    '{{recipient_name}}': email.to_name || '',
+    '{{recipient_email}}': email.to_email || '',
+
+    // Date fields
+    '{{today}}': new Date().toLocaleDateString('en-US'),
+    '{{current_year}}': new Date().getFullYear().toString(),
+  }
+
+  let result = content
+  for (const [field, value] of Object.entries(mergeFields)) {
+    // Case-insensitive replacement
+    result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value)
+  }
+
+  return result
+}
 
 function buildEmailFooter(userSettings: any, email: any): string {
   const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
