@@ -127,6 +127,7 @@ serve(async (req) => {
     // If yes, use tracking reply address (mailbox-replies.com)
     // If no, use sender's actual email (normal flow, no tracking)
     let replyToAddress = senderEmail
+    let useTrackingReply = false
     const replyDomain = Deno.env.get('REPLY_DOMAIN')
 
     if (replyDomain) {
@@ -151,6 +152,7 @@ serve(async (req) => {
         if (oauthConn && oauthConn.length > 0) {
           // OAuth connected: use tracking reply address for inbox injection
           replyToAddress = `reply-${emailLog.id}@${replyDomain}`
+          useTrackingReply = true
           console.log(`Using tracking reply address: ${replyToAddress} (agency: ${agencyId})`)
         }
       }
@@ -166,7 +168,9 @@ serve(async (req) => {
           status: 'Sent',
           sent_at: new Date().toISOString(),
           sendgrid_message_id: `dry-run-${Date.now()}`,
-          custom_message_id: customMessageId
+          custom_message_id: customMessageId,
+          reply_to: replyToAddress,
+          use_tracking_reply: useTrackingReply
         })
         .eq('id', emailLog.id)
 
@@ -239,7 +243,8 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
           sendgrid_message_id: messageId,
           custom_message_id: customMessageId,
-          reply_to: replyToAddress
+          reply_to: replyToAddress,
+          use_tracking_reply: useTrackingReply
         })
         .eq('id', emailLog.id)
 

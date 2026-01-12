@@ -873,6 +873,7 @@ async function processReadyEmails(
             sent_at: new Date().toISOString(),
             sendgrid_message_id: sendResult.messageId,
             reply_to: sendResult.replyTo,
+            use_tracking_reply: sendResult.useTrackingReply || false,
             custom_message_id: sendResult.customMessageId,
             subject: sendResult.processedSubject,
             body_html: sendResult.processedBodyHtml,
@@ -1038,6 +1039,7 @@ async function sendEmailViaSendGrid(
   // If yes, use tracking reply address (mailbox-replies.com)
   // If no, use sender's actual email (normal flow, no tracking)
   let replyToAddress = fromEmail
+  let useTrackingReply = false
   const replyDomain = Deno.env.get('REPLY_DOMAIN')
 
   if (replyDomain) {
@@ -1062,6 +1064,7 @@ async function sendEmailViaSendGrid(
       if (oauthConn && oauthConn.length > 0) {
         // OAuth connected: use tracking reply address for inbox injection
         replyToAddress = `reply-${emailLogId}@${replyDomain}`
+        useTrackingReply = true
         console.log(`Using tracking reply address: ${replyToAddress} (agency: ${agencyId})`)
       }
     }
@@ -1076,7 +1079,7 @@ async function sendEmailViaSendGrid(
     console.log(`  Reply-To: ${replyToAddress}`)
     console.log(`  Message-ID: ${customMessageId}`)
     console.log(`  Subject: ${finalSubject}`)
-    return { success: true, messageId: `dry-run-${Date.now()}`, replyTo: replyToAddress, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
+    return { success: true, messageId: `dry-run-${Date.now()}`, replyTo: replyToAddress, useTrackingReply, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
   }
 
   // Build SendGrid payload
@@ -1137,7 +1140,7 @@ async function sendEmailViaSendGrid(
     if (response.ok || response.status === 202) {
       // SendGrid returns 202 Accepted for successful sends
       const messageId = response.headers.get('X-Message-Id') || `sg-${Date.now()}`
-      return { success: true, messageId, replyTo: replyToAddress, customMessageId, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
+      return { success: true, messageId, replyTo: replyToAddress, useTrackingReply, customMessageId, processedSubject: finalSubject, processedBodyHtml: htmlContent, processedBodyText: textContent }
     } else {
       const errorBody = await response.text()
       let errorMessage = `SendGrid error: ${response.status}`

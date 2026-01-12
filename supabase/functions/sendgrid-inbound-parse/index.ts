@@ -108,6 +108,8 @@ serve(async (req) => {
     let emailLogId: number | null = null
     let ownerId: string | null = null
     let accountId: string | null = null
+    let expectedSenderEmail: string | null = null
+    let senderVerification: VerificationResult = { verified: false, notes: 'No original email found' }
 
     // Try to extract email_log_id from the To address first
     // Format: reply-{email_log_id}@isg-replies.com
@@ -124,7 +126,10 @@ serve(async (req) => {
         emailLogId = emailLog.id
         ownerId = emailLog.owner_id
         accountId = emailLog.account_id
+        expectedSenderEmail = emailLog.to_email
+        senderVerification = verifyReplyFrom(email.from, emailLog.to_email)
         console.log(`Matched reply to email_log ${emailLogId} via To address format`)
+        console.log(`Sender verification: ${senderVerification.verified ? 'VERIFIED' : 'MISMATCH'} - ${senderVerification.notes}`)
       }
     }
 
@@ -141,13 +146,10 @@ serve(async (req) => {
         emailLogId = originalEmail.id
         ownerId = originalEmail.owner_id
         accountId = originalEmail.account_id
+        expectedSenderEmail = originalEmail.to_email
+        senderVerification = verifyReplyFrom(email.from, originalEmail.to_email)
         console.log(`Matched reply to email_log ${emailLogId} via In-Reply-To header`)
-
-        // Verify the reply is from the expected recipient
-        if (!verifyReplyFrom(email.from, originalEmail.to_email)) {
-          console.warn(`Reply from ${email.from} doesn't match original recipient ${originalEmail.to_email}`)
-          // Still store it but log the mismatch
-        }
+        console.log(`Sender verification: ${senderVerification.verified ? 'VERIFIED' : 'MISMATCH'} - ${senderVerification.notes}`)
       } else {
         // Try extracting ID from our custom format: <isg-{id}-{timestamp}@domain>
         const match = inReplyTo.match(/<isg-(\d+)-\d+@/)
@@ -163,7 +165,10 @@ serve(async (req) => {
             emailLogId = emailLog.id
             ownerId = emailLog.owner_id
             accountId = emailLog.account_id
+            expectedSenderEmail = emailLog.to_email
+            senderVerification = verifyReplyFrom(email.from, emailLog.to_email)
             console.log(`Matched reply to email_log ${emailLogId} via parsed Message-ID`)
+            console.log(`Sender verification: ${senderVerification.verified ? 'VERIFIED' : 'MISMATCH'} - ${senderVerification.notes}`)
           }
         }
       }
@@ -172,6 +177,8 @@ serve(async (req) => {
     // If we still couldn't find owner, try to find from the domain
     if (!ownerId) {
       ownerId = await findOwnerFromDomain(supabaseClient, email.to)
+      // Domain-based lookup cannot verify sender
+      senderVerification = { verified: false, notes: 'Owner found via domain lookup - no original email to verify against' }
     }
 
     if (!ownerId) {
@@ -183,8 +190,7 @@ serve(async (req) => {
       )
     }
 
-    // Store the reply
-    // Note: Using actual database schema columns (attachments instead of attachment_count/attachments_info)
+    // Store the reply with sender verification status
     const { data: reply, error: insertError } = await supabaseClient
       .from('email_replies')
       .insert({
@@ -201,7 +207,11 @@ serve(async (req) => {
         references_header: headers['references'] || email.references,
         attachments: email.attachmentsInfo || [],
         raw_headers: headers,
-        received_at: new Date().toISOString()
+        received_at: new Date().toISOString(),
+        // New verification fields
+        sender_verified: senderVerification.verified,
+        expected_sender_email: expectedSenderEmail,
+        verification_notes: senderVerification.notes
       })
       .select('id')
       .single()
@@ -211,7 +221,7 @@ serve(async (req) => {
       throw insertError
     }
 
-    console.log(`Stored reply ${reply?.id} for email_log ${emailLogId}`)
+    console.log(`Stored reply ${reply?.id} for email_log ${emailLogId} (sender_verified: ${senderVerification.verified})`)
 
     // Note: The trigger will automatically update email_logs with reply stats
 
@@ -246,7 +256,10 @@ serve(async (req) => {
         subject: email.subject,
         bodyText: email.text,
         bodyHtml: email.html,
-        receivedAt: new Date().toISOString()
+        receivedAt: new Date().toISOString(),
+        // Pass the original recipient email so Reply-To is set correctly
+        // This ensures when user hits "reply" in their inbox, it goes to the contact
+        originalRecipientEmail: email.from
       })
       console.log(`Inbox injection result:`, injectionResult)
     }
@@ -427,22 +440,43 @@ function decodeQuotedPrintable(str: string): string {
     .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
 }
 
-function verifyReplyFrom(replyFrom: string, originalTo: string): boolean {
-  // Normalize emails for comparison (lowercase, trim)
-  const normalizedReply = replyFrom.toLowerCase().trim()
-  const normalizedOriginal = originalTo.toLowerCase().trim()
+interface VerificationResult {
+  verified: boolean
+  notes: string
+}
 
-  // Exact match
-  if (normalizedReply === normalizedOriginal) {
-    return true
+function verifyReplyFrom(replyFrom: string, originalTo: string): VerificationResult {
+  // Normalize emails for comparison (lowercase, trim)
+  // Handle formats like "Name <email@domain.com>" by extracting the email
+  const extractEmail = (str: string): string => {
+    const match = str.match(/<([^>]+)>/)
+    return (match ? match[1] : str).toLowerCase().trim()
   }
 
-  // Could add fuzzy matching for forwarded emails, aliases, etc.
-  // For now, just check if the domain matches
+  const normalizedReply = extractEmail(replyFrom)
+  const normalizedOriginal = extractEmail(originalTo)
+
+  // Exact match - fully verified
+  if (normalizedReply === normalizedOriginal) {
+    return { verified: true, notes: 'Exact email match' }
+  }
+
+  // Domain match only - not verified but provide context
   const replyDomain = normalizedReply.split('@')[1]
   const originalDomain = normalizedOriginal.split('@')[1]
 
-  return replyDomain === originalDomain
+  if (replyDomain === originalDomain) {
+    return {
+      verified: false,
+      notes: `Domain match only: expected ${normalizedOriginal}, got ${normalizedReply}`
+    }
+  }
+
+  // No match at all
+  return {
+    verified: false,
+    notes: `No match: expected ${normalizedOriginal}, got ${normalizedReply}`
+  }
 }
 
 async function findOwnerFromDomain(supabase: any, toAddress: string): Promise<string | null> {
@@ -525,6 +559,8 @@ interface InjectionParams {
   bodyText?: string
   bodyHtml?: string
   receivedAt: string
+  // The original recipient email (contact's email) - used for Reply-To so replies go back to the contact
+  originalRecipientEmail?: string
 }
 
 async function attemptInboxInjection(
@@ -700,15 +736,31 @@ async function injectIntoGmail(
       ? `"${params.fromName}" <${params.fromEmail}>`
       : params.fromEmail
 
+    // Build email headers - include Reply-To so replies go back to the contact
     const emailLines = [
       `From: ${fromHeader}`,
       `To: me`,
       `Subject: ${params.subject}`,
-      `Date: ${new Date(params.receivedAt).toUTCString()}`,
+      `Date: ${new Date(params.receivedAt).toUTCString()}`
+    ]
+
+    // Add Reply-To header pointing to the original sender (contact)
+    // This ensures when you hit "reply" in Gmail, it goes to the contact, not somewhere else
+    if (params.originalRecipientEmail) {
+      const replyToHeader = params.fromName
+        ? `"${params.fromName}" <${params.originalRecipientEmail}>`
+        : params.originalRecipientEmail
+      emailLines.push(`Reply-To: ${replyToHeader}`)
+    } else {
+      // Fallback: use the from email as reply-to
+      emailLines.push(`Reply-To: ${fromHeader}`)
+    }
+
+    emailLines.push(
       `Content-Type: ${params.bodyHtml ? 'text/html' : 'text/plain'}; charset=UTF-8`,
       '',
       params.bodyHtml || params.bodyText || ''
-    ]
+    )
 
     const rawMessage = emailLines.join('\r\n')
 
@@ -759,6 +811,43 @@ async function injectIntoMicrosoft(
   params: InjectionParams
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
+    // Build message payload
+    // Include replyTo so replies go back to the contact
+    const messagePayload: Record<string, any> = {
+      subject: params.subject,
+      body: {
+        contentType: params.bodyHtml ? 'HTML' : 'Text',
+        content: params.bodyHtml || params.bodyText || ''
+      },
+      from: {
+        emailAddress: {
+          name: params.fromName || params.fromEmail,
+          address: params.fromEmail
+        }
+      },
+      receivedDateTime: params.receivedAt,
+      isRead: false,
+      isDraft: false
+    }
+
+    // Add replyTo field so replies go back to the contact
+    if (params.originalRecipientEmail) {
+      messagePayload.replyTo = [{
+        emailAddress: {
+          name: params.fromName || params.originalRecipientEmail,
+          address: params.originalRecipientEmail
+        }
+      }]
+    } else {
+      // Fallback: use the from email
+      messagePayload.replyTo = [{
+        emailAddress: {
+          name: params.fromName || params.fromEmail,
+          address: params.fromEmail
+        }
+      }]
+    }
+
     // Microsoft Graph API - Create message
     // https://learn.microsoft.com/en-us/graph/api/user-post-messages
     const createResponse = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
@@ -767,22 +856,7 @@ async function injectIntoMicrosoft(
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        subject: params.subject,
-        body: {
-          contentType: params.bodyHtml ? 'HTML' : 'Text',
-          content: params.bodyHtml || params.bodyText || ''
-        },
-        from: {
-          emailAddress: {
-            name: params.fromName || params.fromEmail,
-            address: params.fromEmail
-          }
-        },
-        receivedDateTime: params.receivedAt,
-        isRead: false,
-        isDraft: false
-      })
+      body: JSON.stringify(messagePayload)
     })
 
     if (!createResponse.ok) {
