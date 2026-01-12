@@ -584,7 +584,9 @@ export const emailActivityService = {
           .from('email_logs')
           .select(`
             id, subject, to_email, to_name, from_email, from_name, status, sent_at, created_at,
-            account:accounts(account_unique_id, name)
+            body_html, body_text,
+            account:accounts(account_unique_id, name),
+            template:email_templates(body_html, body_text)
           `)
           .in('status', ['Sent', 'Delivered', 'Queued'])
           .order('created_at', { ascending: false })
@@ -601,6 +603,8 @@ export const emailActivityService = {
           from_email: e.from_email,
           from_name: e.from_name,
           status: e.status,
+          body_html: e.body_html || e.template?.body_html,
+          body_text: e.body_text || e.template?.body_text,
           account: e.account,
           timestamp: e.sent_at || e.created_at
         }));

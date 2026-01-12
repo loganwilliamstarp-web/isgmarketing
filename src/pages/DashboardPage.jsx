@@ -439,7 +439,11 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
 
   // Get the body content - check multiple sources
   const getBodyContent = () => {
-    // First check if email_log has body_html directly (direct emails)
+    // First check if activity has body_html directly (from activity feed)
+    if (activity?.body_html) {
+      return applyMergeFields(activity.body_html);
+    }
+    // Then check if email_log has body_html directly (direct emails)
     if (emailData?.body_html) {
       return applyMergeFields(emailData.body_html);
     }
@@ -452,6 +456,10 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
 
   // Get plain text content as fallback
   const getTextContent = () => {
+    // First check activity data
+    if (activity?.body_text) {
+      return applyMergeFields(activity.body_text);
+    }
     if (emailData?.body_text) {
       return applyMergeFields(emailData.body_text);
     }
@@ -583,26 +591,31 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
             }}>
               Loading preview...
             </div>
-          ) : isReply && activity.snippet ? (
-            <div style={{
-              fontFamily: 'Arial, sans-serif',
-              fontSize: '14px',
-              lineHeight: '1.6',
-              color: '#333',
-              whiteSpace: 'pre-wrap'
-            }}>
-              {activity.snippet}
+          ) : isReply && (activity.body_html || activity.body_text) ? (
+            activity.body_html ? (
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
+                    activity.body_html
+                }}
+                style={{
+                  fontFamily: 'Arial, sans-serif',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: '#333'
+                }}
+              />
+            ) : (
               <div style={{
-                marginTop: '20px',
-                padding: '12px',
-                backgroundColor: '#f5f5f5',
-                borderRadius: '6px',
-                fontSize: '12px',
-                color: '#666'
+                fontFamily: 'Arial, sans-serif',
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: '#333',
+                whiteSpace: 'pre-wrap'
               }}>
-                This is a preview snippet. View the full reply in your email client.
+                {activity.body_text}
               </div>
-            </div>
+            )
           ) : getBodyContent() ? (
             <div
               dangerouslySetInnerHTML={{
