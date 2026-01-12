@@ -1,21 +1,29 @@
 // src/components/settings/IntegrationsTab.jsx
 // Integrations settings tab with Gmail/Microsoft OAuth for inbox injection
+// Only agency admins can connect - connection applies to all users in the agency
 
 import React, { useState, useEffect } from 'react';
 import { emailOAuthService } from '../../services/emailOAuth';
+import { useAuth } from '../../contexts/AuthContext';
 
 const IntegrationsTab = ({ userId, theme: t }) => {
+  const { isAdmin, isAgencyAdmin, user } = useAuth();
   const [connections, setConnections] = useState({ gmail: null, microsoft: null });
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(null);
   const [disconnecting, setDisconnecting] = useState(null);
   const [error, setError] = useState(null);
 
+  // Only admins and agency admins can manage connections
+  const canManageConnections = isAdmin || isAgencyAdmin;
+
+  // Use profile_name for agency-level connections
+  const agencyId = user?.profileName;
+
   // Check for OAuth callback result in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthResult = params.get('oauth');
-    const oauthProvider = params.get('provider');
     const oauthError = params.get('error');
 
     if (oauthResult === 'success') {
@@ -29,17 +37,18 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   }, []);
 
   useEffect(() => {
-    if (userId) {
+    if (agencyId) {
       loadConnections();
     }
-  }, [userId]);
+  }, [agencyId]);
 
   const loadConnections = async () => {
-    if (!userId) return;
+    if (!agencyId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const data = await emailOAuthService.getConnections(userId);
+      // Get connections by agency (profile_name)
+      const data = await emailOAuthService.getConnectionsByAgency(agencyId);
       setConnections(data);
     } catch (err) {
       console.error('Failed to load connections:', err);
@@ -50,10 +59,13 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   };
 
   const handleConnect = async (provider) => {
+    if (!canManageConnections) return;
+
     setIsConnecting(provider);
     setError(null);
     try {
-      await emailOAuthService.initiateOAuth(provider, userId);
+      // Pass agency ID instead of user ID
+      await emailOAuthService.initiateOAuth(provider, agencyId);
       // OAuth completed successfully, reload connections
       await loadConnections();
     } catch (err) {
@@ -65,10 +77,12 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   };
 
   const handleDisconnect = async (provider) => {
+    if (!canManageConnections) return;
+
     setDisconnecting(provider);
     setError(null);
     try {
-      await emailOAuthService.disconnect(provider, userId);
+      await emailOAuthService.disconnect(provider, agencyId);
       setConnections(prev => ({ ...prev, [provider]: null }));
     } catch (err) {
       console.error('Failed to disconnect:', err);
@@ -82,12 +96,27 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     <div>
       {/* Email Inbox Sync Section */}
       <div style={{ marginBottom: '32px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
-          Email Inbox Sync
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
+            Email Inbox Sync
+          </h3>
+          {canManageConnections && (
+            <span style={{
+              padding: '4px 10px',
+              backgroundColor: t.bgHover,
+              borderRadius: '20px',
+              fontSize: '11px',
+              color: t.textSecondary
+            }}>
+              Agency Admin
+            </span>
+          )}
+        </div>
         <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '16px' }}>
-          Connect your Gmail or Microsoft 365 account to automatically receive email replies directly in your inbox.
-          When prospects reply to your marketing emails, the response will appear in your connected inbox.
+          {canManageConnections
+            ? `Connect an email account for your agency (${agencyId}). All users in your agency will have replies delivered to this inbox.`
+            : 'Email replies are delivered to your agency\'s connected inbox. Contact your agency admin to manage this connection.'
+          }
         </p>
 
         {/* Info banner */}
@@ -104,11 +133,31 @@ const IntegrationsTab = ({ userId, theme: t }) => {
         }}>
           <span style={{ fontSize: '16px' }}>💡</span>
           <div>
-            <strong>How it works:</strong> When you connect your email, replies to your marketing emails
-            are automatically delivered to your inbox. This allows you to respond naturally while we track
-            response rates for your campaigns.
+            <strong>How it works:</strong> When connected, replies to marketing emails from anyone in your agency
+            are automatically delivered to the connected inbox. This allows your team to respond naturally while
+            tracking response rates for campaigns.
           </div>
         </div>
+
+        {/* Admin-only notice for non-admins */}
+        {!canManageConnections && (
+          <div style={{
+            padding: '12px 16px',
+            backgroundColor: `${t.warning}15`,
+            borderRadius: '8px',
+            marginBottom: '16px',
+            fontSize: '13px',
+            color: t.warning,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <span style={{ fontSize: '16px' }}>🔒</span>
+            <div>
+              Only agency administrators can connect or disconnect email integrations.
+            </div>
+          </div>
+        )}
 
         {/* Error display */}
         {error && (
@@ -137,12 +186,13 @@ const IntegrationsTab = ({ userId, theme: t }) => {
               name="Gmail"
               icon={<GmailIcon />}
               iconBg="#EA4335"
-              description="Connect your Gmail account to receive replies"
+              description="Connect a Gmail account to receive replies"
               connection={connections.gmail}
               isConnecting={isConnecting === 'gmail'}
               isDisconnecting={disconnecting === 'gmail'}
               onConnect={() => handleConnect('gmail')}
               onDisconnect={() => handleDisconnect('gmail')}
+              canManage={canManageConnections}
               theme={t}
             />
 
@@ -152,12 +202,13 @@ const IntegrationsTab = ({ userId, theme: t }) => {
               name="Microsoft 365"
               icon={<MicrosoftIcon />}
               iconBg="#00A4EF"
-              description="Connect your Outlook/Microsoft 365 account to receive replies"
+              description="Connect an Outlook/Microsoft 365 account to receive replies"
               connection={connections.microsoft}
               isConnecting={isConnecting === 'microsoft'}
               isDisconnecting={disconnecting === 'microsoft'}
               onConnect={() => handleConnect('microsoft')}
               onDisconnect={() => handleDisconnect('microsoft')}
+              canManage={canManageConnections}
               theme={t}
             />
           </>
@@ -272,6 +323,7 @@ const IntegrationCard = ({
   isDisconnecting,
   onConnect,
   onDisconnect,
+  canManage,
   theme: t
 }) => {
   const isConnected = connection?.status === 'active';
@@ -323,22 +375,24 @@ const IntegrationCard = ({
               }}>
                 Connected
               </span>
-              <button
-                onClick={onDisconnect}
-                disabled={isDisconnecting}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'transparent',
-                  border: `1px solid ${t.danger}`,
-                  borderRadius: '6px',
-                  color: t.danger,
-                  cursor: isDisconnecting ? 'wait' : 'pointer',
-                  fontSize: '13px',
-                  opacity: isDisconnecting ? 0.7 : 1
-                }}
-              >
-                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-              </button>
+              {canManage && (
+                <button
+                  onClick={onDisconnect}
+                  disabled={isDisconnecting}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${t.danger}`,
+                    borderRadius: '6px',
+                    color: t.danger,
+                    cursor: isDisconnecting ? 'wait' : 'pointer',
+                    fontSize: '13px',
+                    opacity: isDisconnecting ? 0.7 : 1
+                  }}
+                >
+                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                </button>
+              )}
             </>
           ) : hasError ? (
             <>
@@ -352,6 +406,28 @@ const IntegrationCard = ({
               }}>
                 {connection?.status === 'expired' ? 'Expired' : 'Error'}
               </span>
+              {canManage && (
+                <button
+                  onClick={onConnect}
+                  disabled={isConnecting}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: t.primary,
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    cursor: isConnecting ? 'wait' : 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    opacity: isConnecting ? 0.7 : 1
+                  }}
+                >
+                  {isConnecting ? 'Connecting...' : 'Reconnect'}
+                </button>
+              )}
+            </>
+          ) : (
+            canManage ? (
               <button
                 onClick={onConnect}
                 disabled={isConnecting}
@@ -367,27 +443,20 @@ const IntegrationCard = ({
                   opacity: isConnecting ? 0.7 : 1
                 }}
               >
-                {isConnecting ? 'Connecting...' : 'Reconnect'}
+                {isConnecting ? 'Connecting...' : `Connect ${name}`}
               </button>
-            </>
-          ) : (
-            <button
-              onClick={onConnect}
-              disabled={isConnecting}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: t.primary,
-                border: 'none',
-                borderRadius: '6px',
-                color: '#fff',
-                cursor: isConnecting ? 'wait' : 'pointer',
-                fontSize: '13px',
-                fontWeight: '500',
-                opacity: isConnecting ? 0.7 : 1
-              }}
-            >
-              {isConnecting ? 'Connecting...' : `Connect ${name}`}
-            </button>
+            ) : (
+              <span style={{
+                padding: '4px 10px',
+                backgroundColor: t.bgHover,
+                color: t.textMuted,
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: '500'
+              }}>
+                Not Connected
+              </span>
+            )
           )}
         </div>
       </div>
