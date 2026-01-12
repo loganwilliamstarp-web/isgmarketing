@@ -49,6 +49,8 @@ export const activityLogService = {
     query = applyOwnerFilter(query, ownerIds);
     const { data, error } = await query;
 
+    console.log('Activity log query result:', { accountId, ownerIds, data, error });
+
     if (error) throw error;
     return data;
   },
