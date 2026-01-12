@@ -118,19 +118,14 @@ export const emailOAuthService = {
    * @returns {Promise<Object>} Connection status for gmail and microsoft
    */
   async getConnectionsByAgency(agencyId) {
-    console.log('[emailOAuth] getConnectionsByAgency called with:', agencyId);
     if (!agencyId) {
-      console.log('[emailOAuth] No agencyId provided');
       return { gmail: null, microsoft: null };
     }
 
-    console.log('[emailOAuth] Querying email_provider_connections where agency_id =', agencyId);
     const { data, error } = await supabase
       .from('email_provider_connections')
       .select('provider, provider_email, status, last_error, last_used_at, created_at, updated_at, agency_id')
       .eq('agency_id', agencyId);
-
-    console.log('[emailOAuth] Query result - data:', data, 'error:', error);
 
     if (error) {
       console.error('Error fetching OAuth connections:', error);
