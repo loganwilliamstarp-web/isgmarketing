@@ -1009,7 +1009,7 @@ const DashboardPage = ({ t }) => {
                   sent: { icon: '📤', label: 'Sent', color: t.success },
                   opened: { icon: '📬', label: 'Opened', color: t.primary },
                   clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
-                  replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
+                  replied: { icon: null, label: 'Replied', color: '#8b5cf6' }
                 };
                 const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
                 const canPreview = activity.type === 'sent' || activity.type === 'replied';
@@ -1027,7 +1027,7 @@ const DashboardPage = ({ t }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span>{config.icon}</span>
+                          {config.icon && <span>{config.icon}</span>}
                           <span style={{ color: config.color, fontWeight: '500' }}>{config.label}</span>
                           <span>•</span>
                           <span>

@@ -48,11 +48,11 @@ const EmailEventBadge = ({ event, theme: t }) => {
     delivered: '✅',
     opened: '📬',
     clicked: '🖱️',
-    replied: '💬',
+    replied: null, // Use text only for replied
     bounced: '❌',
     unsubscribed: '🚫'
   };
-  
+
   return (
     <span style={{
       display: 'inline-flex',
@@ -64,7 +64,7 @@ const EmailEventBadge = ({ event, theme: t }) => {
       fontSize: '11px',
       color: t.textSecondary
     }}>
-      {icons[event] || '📧'} {event}
+      {icons[event] ? `${icons[event]} ` : ''}{event}
     </span>
   );
 };
@@ -195,12 +195,19 @@ const ActivityItem = ({ activity, theme: t }) => {
     email_sent: '📤',
     email_opened: '📬',
     email_clicked: '🖱️',
-    email_reply_received: '💬',
+    email_reply_received: null, // Use text label instead
     enrollment_started: '▶️',
     enrollment_completed: '✅',
     enrollment_paused: '⏸️',
     note_added: '📝',
   };
+
+  const textLabels = {
+    email_reply_received: 'RE'
+  };
+
+  const icon = icons[activity.event_type];
+  const textLabel = textLabels[activity.event_type];
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '12px 0' }}>
@@ -212,9 +219,11 @@ const ActivityItem = ({ activity, theme: t }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '14px'
+        fontSize: textLabel ? '11px' : '14px',
+        fontWeight: textLabel ? '600' : 'normal',
+        color: textLabel ? t.textSecondary : 'inherit'
       }}>
-        {icons[activity.event_type] || '📌'}
+        {icon || textLabel || '📌'}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '13px', color: t.text }}>
