@@ -675,6 +675,7 @@ export const emailActivityService = {
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
         const { data, error } = await query;
+        console.log('Email replies query result:', { data, error, ownerIds });
         if (error) {
           console.error('Error fetching replies:', error);
           return [];
