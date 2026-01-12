@@ -7,7 +7,7 @@ import { emailOAuthService } from '../../services/emailOAuth';
 import { useAuth } from '../../contexts/AuthContext';
 
 const IntegrationsTab = ({ userId, theme: t }) => {
-  const { isAdmin, isAgencyAdmin, user } = useAuth();
+  const { isAdmin, isAgencyAdmin, user, impersonating } = useAuth();
   const [connections, setConnections] = useState({ gmail: null, microsoft: null });
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(null);
@@ -15,10 +15,14 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   const [error, setError] = useState(null);
 
   // Only admins and agency admins can manage connections
-  const canManageConnections = isAdmin || isAgencyAdmin;
+  // When impersonating, don't allow managing connections (view only)
+  const canManageConnections = !impersonating?.active && (isAdmin || isAgencyAdmin);
 
   // Use profile_name for agency-level connections
-  const agencyId = user?.profileName;
+  // When impersonating, use the target user's profile name
+  const agencyId = impersonating?.active && impersonating?.targetProfileName
+    ? impersonating.targetProfileName
+    : user?.profileName;
 
   // Check for OAuth callback result in URL
   useEffect(() => {
@@ -53,6 +57,7 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     try {
       // DEBUG: Log the agencyId being used for query
       console.log('[IntegrationsTab] DEBUG - user.profileName:', user?.profileName);
+      console.log('[IntegrationsTab] DEBUG - impersonating:', impersonating?.active, 'targetProfileName:', impersonating?.targetProfileName);
       console.log('[IntegrationsTab] DEBUG - agencyId being queried:', agencyId);
 
       // Get connections by agency (profile_name)
