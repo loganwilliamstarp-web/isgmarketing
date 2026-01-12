@@ -40,6 +40,11 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   }, []);
 
   useEffect(() => {
+    // DEBUG
+    console.log('[IntegrationsTab] agencyId:', agencyId);
+    console.log('[IntegrationsTab] impersonating:', impersonating);
+    console.log('[IntegrationsTab] user.profileName:', user?.profileName);
+
     if (agencyId) {
       loadConnections();
     } else {
