@@ -888,7 +888,7 @@ const DashboardPage = ({ t }) => {
           label="Response Rate"
           value={Math.round(stats?.responseRate || 0)}
           industryAvg={5}
-          icon="💬"
+          icon="↩️"
           isLoading={statsLoading}
           theme={t}
         />
