@@ -667,21 +667,27 @@ export const emailActivityService = {
         let query = supabase
           .from('email_replies')
           .select(`
-            id, subject, from_email, received_at, snippet,
+            id, subject, from_email, from_name, received_at, body_text, body_html,
             email_log:email_logs(id, subject, to_email),
             account:accounts(account_unique_id, name)
           `)
           .order('received_at', { ascending: false })
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
-        const { data } = await query;
+        const { data, error } = await query;
+        if (error) {
+          console.error('Error fetching replies:', error);
+          return [];
+        }
         return (data || []).map(e => ({
           id: `reply-${e.id}`,
           type: 'replied',
           email_log_id: e.email_log?.id,
           subject: e.subject || e.email_log?.subject,
           from_email: e.from_email,
-          snippet: e.snippet,
+          from_name: e.from_name,
+          body_text: e.body_text,
+          body_html: e.body_html,
           account: e.account,
           timestamp: e.received_at
         }));
