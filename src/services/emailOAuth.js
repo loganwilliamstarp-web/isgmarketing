@@ -18,7 +18,8 @@ if (typeof window !== 'undefined') {
     const allowedOrigins = [
       window.location.origin,
       import.meta.env.VITE_FRONTEND_URL,
-      'https://app.isgmarketing.com'
+      'https://app.isgmarketing.com',
+      'https://isgmarketing-production.up.railway.app'
     ].filter(Boolean);
 
     if (!allowedOrigins.includes(event.origin)) return;

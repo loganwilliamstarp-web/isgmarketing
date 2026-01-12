@@ -42,15 +42,20 @@ serve(async (req) => {
     let action = url.searchParams.get('action')
     let provider = url.searchParams.get('provider')
 
+    // Debug logging
+    console.log('Path:', url.pathname)
+    console.log('Path parts:', pathParts)
+
     // Check for path-based routing (for OAuth callbacks that can't have query strings)
-    // Path format: /functions/v1/email-oauth/gmail/callback
-    if (pathParts.length >= 4) {
-      const funcIndex = pathParts.indexOf('email-oauth')
-      if (funcIndex !== -1 && pathParts.length > funcIndex + 2) {
-        provider = pathParts[funcIndex + 1] // gmail or microsoft
-        action = pathParts[funcIndex + 2]   // callback
-      }
+    // Path format: /functions/v1/email-oauth/gmail/callback OR /email-oauth/gmail/callback
+    const funcIndex = pathParts.indexOf('email-oauth')
+    if (funcIndex !== -1 && pathParts.length > funcIndex + 2) {
+      provider = pathParts[funcIndex + 1] // gmail or microsoft
+      action = pathParts[funcIndex + 2]   // callback
+      console.log('Path-based routing - provider:', provider, 'action:', action)
     }
+
+    console.log('Final action:', action, 'provider:', provider)
 
     // Create Supabase admin client for database operations
     const supabaseAdmin = createClient(
