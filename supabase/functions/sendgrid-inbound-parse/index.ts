@@ -408,16 +408,38 @@ async function attemptInboxInjection(
   params: InjectionParams
 ): Promise<{ success: boolean; method?: string; error?: string }> {
   try {
-    // Check if user has an active OAuth connection
+    // OAuth connections are stored at agency level (profile_name)
+    // First get the user's profile_name from the users table
+    const { data: userData } = await supabase
+      .from('users')
+      .select('profile_name')
+      .eq('user_unique_id', params.ownerId)
+      .single()
+
+    const agencyId = userData?.profile_name
+
+    if (!agencyId) {
+      console.log(`No agency found for owner ${params.ownerId} - skipping injection`)
+      await supabase
+        .from('email_replies')
+        .update({
+          inbox_injected: false,
+          inbox_injection_error: 'no_agency_found'
+        })
+        .eq('id', params.replyId)
+      return { success: false, error: 'no_agency_found' }
+    }
+
+    // Check if agency has an active OAuth connection
     const { data: connection } = await supabase
       .from('email_provider_connections')
       .select('*')
-      .eq('owner_id', params.ownerId)
+      .eq('agency_id', agencyId)
       .eq('status', 'active')
       .single()
 
     if (!connection) {
-      console.log(`No active OAuth connection for owner ${params.ownerId} - skipping injection`)
+      console.log(`No active OAuth connection for agency ${agencyId} (owner: ${params.ownerId}) - skipping injection`)
       // Update reply record to indicate no injection attempted
       await supabase
         .from('email_replies')

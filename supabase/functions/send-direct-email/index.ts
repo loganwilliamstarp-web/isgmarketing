@@ -122,16 +122,29 @@ serve(async (req) => {
     const replyDomain = Deno.env.get('REPLY_DOMAIN')
 
     if (replyDomain) {
-      const { data: oauthConn } = await supabaseClient
-        .from('email_provider_connections')
-        .select('id')
-        .eq('owner_id', email.owner_id)
-        .eq('status', 'active')
-        .limit(1)
+      // OAuth connections are stored at agency level (profile_name)
+      // First get the user's profile_name from the users table
+      const { data: userData } = await supabaseClient
+        .from('users')
+        .select('profile_name')
+        .eq('user_unique_id', email.owner_id)
+        .single()
 
-      if (oauthConn && oauthConn.length > 0) {
-        // OAuth connected: use tracking reply address for inbox injection
-        replyToAddress = `reply-${emailLog.id}@${replyDomain}`
+      const agencyId = userData?.profile_name
+
+      if (agencyId) {
+        const { data: oauthConn } = await supabaseClient
+          .from('email_provider_connections')
+          .select('id')
+          .eq('agency_id', agencyId)
+          .eq('status', 'active')
+          .limit(1)
+
+        if (oauthConn && oauthConn.length > 0) {
+          // OAuth connected: use tracking reply address for inbox injection
+          replyToAddress = `reply-${emailLog.id}@${replyDomain}`
+          console.log(`Using tracking reply address: ${replyToAddress} (agency: ${agencyId})`)
+        }
       }
     }
 
