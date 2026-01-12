@@ -683,7 +683,7 @@ const SettingsPage = ({ t }) => {
               borderRadius: '12px',
               border: `1px solid ${t.border}`
             }}>
-              <IntegrationsTab userId={effectiveOwnerId} theme={t} />
+              <IntegrationsTab userId={ownerId} theme={t} />
             </div>
           )}
         </>
