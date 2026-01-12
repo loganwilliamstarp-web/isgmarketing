@@ -172,6 +172,20 @@ export function useEmailActivityFeed(options = {}) {
 }
 
 /**
+ * Get combined email activity feed for a specific account
+ */
+export function useAccountEmailActivity(accountId, options = {}) {
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
+  return useQuery({
+    queryKey: ['emailActivity', filterKey, 'account', accountId, options],
+    queryFn: () => emailActivityService.getAccountActivity(ownerIds, accountId, options),
+    enabled: ownerIds.length > 0 && !!accountId,
+    staleTime: 30000
+  });
+}
+
+/**
  * Email log mutations
  */
 export function useEmailLogMutations() {

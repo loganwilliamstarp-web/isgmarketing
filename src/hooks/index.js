@@ -49,6 +49,7 @@ export {
   useComparisonStats,
   useEmailEvents,
   useEmailActivityFeed,
+  useAccountEmailActivity,
   useEmailLogMutations
 } from './useEmailLogs';
 

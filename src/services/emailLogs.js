@@ -574,7 +574,7 @@ export const emailActivityService = {
    * @param {Object} options - Query options
    */
   async getRecentActivity(ownerIds, options = {}) {
-    const { limit = 20 } = options;
+    const { limit = 20, accountId = null } = options;
 
     // Fetch from multiple sources in parallel
     const [recentSends, recentOpens, recentClicks, recentReplies] = await Promise.all([
@@ -592,6 +592,7 @@ export const emailActivityService = {
           .order('created_at', { ascending: false })
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
+        if (accountId) query = query.eq('account_id', accountId);
         const { data } = await query;
         return (data || []).map(e => ({
           id: `send-${e.id}`,
@@ -622,6 +623,7 @@ export const emailActivityService = {
           .order('first_opened_at', { ascending: false })
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
+        if (accountId) query = query.eq('account_id', accountId);
         const { data } = await query;
         return (data || []).map(e => ({
           id: `open-${e.id}`,
@@ -650,6 +652,7 @@ export const emailActivityService = {
           .order('first_clicked_at', { ascending: false })
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
+        if (accountId) query = query.eq('account_id', accountId);
         const { data } = await query;
         return (data || []).map(e => ({
           id: `click-${e.id}`,
@@ -678,6 +681,7 @@ export const emailActivityService = {
           .order('received_at', { ascending: false })
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
+        if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
         console.log('Email replies query result:', { data, error, ownerIds });
         if (error) {
@@ -705,6 +709,16 @@ export const emailActivityService = {
       .slice(0, limit);
 
     return allActivity;
+  },
+
+  /**
+   * Get activity feed for a specific account
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {string} accountId - Account ID to filter by
+   * @param {Object} options - Query options
+   */
+  async getAccountActivity(ownerIds, accountId, options = {}) {
+    return this.getRecentActivity(ownerIds, { ...options, accountId });
   }
 };
 

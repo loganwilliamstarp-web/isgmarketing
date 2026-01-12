@@ -4,7 +4,7 @@ import {
   useAccountWithPolicies,
   useAccountWithEmailHistory,
   useAccountEmailLogs,
-  useAccountActivity,
+  useAccountEmailActivity,
   useAccountEnrollments,
   useQuickStats,
   useScheduledEmailMutations
@@ -189,13 +189,20 @@ const EmailLogItem = ({ log, theme: t }) => (
   </div>
 );
 
-// Activity item
+// Activity item - handles both old activity_log format and new email activity format
 const ActivityItem = ({ activity, theme: t }) => {
+  // Map activity types to icons
   const icons = {
+    // New email activity format (type)
+    sent: '📤',
+    opened: '📬',
+    clicked: '🖱️',
+    replied: null,
+    // Old activity_log format (event_type)
     email_sent: '📤',
     email_opened: '📬',
     email_clicked: '🖱️',
-    email_reply_received: null, // Use text label instead
+    email_reply_received: null,
     enrollment_started: '▶️',
     enrollment_completed: '✅',
     enrollment_paused: '⏸️',
@@ -203,11 +210,33 @@ const ActivityItem = ({ activity, theme: t }) => {
   };
 
   const textLabels = {
+    replied: 'RE',
     email_reply_received: 'RE'
   };
 
-  const icon = icons[activity.event_type];
-  const textLabel = textLabels[activity.event_type];
+  // Support both type (new) and event_type (old) formats
+  const activityType = activity.type || activity.event_type;
+  const icon = icons[activityType];
+  const textLabel = textLabels[activityType];
+  const timestamp = activity.timestamp || activity.created_at;
+
+  // Generate description based on activity type
+  const getDescription = () => {
+    if (activity.description) return activity.description;
+
+    switch (activityType) {
+      case 'sent':
+        return `Email "${activity.subject}" sent to ${activity.to_name || activity.to_email}`;
+      case 'opened':
+        return `${activity.to_name || activity.to_email} opened "${activity.subject}"${activity.open_count > 1 ? ` (${activity.open_count} times)` : ''}`;
+      case 'clicked':
+        return `${activity.to_name || activity.to_email} clicked a link in "${activity.subject}"${activity.click_count > 1 ? ` (${activity.click_count} times)` : ''}`;
+      case 'replied':
+        return `Reply received from ${activity.from_email} to "${activity.subject}"`;
+      default:
+        return activity.subject || 'Activity';
+    }
+  };
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '12px 0' }}>
@@ -227,10 +256,10 @@ const ActivityItem = ({ activity, theme: t }) => {
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '13px', color: t.text }}>
-          {activity.description}
+          {getDescription()}
         </div>
         <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '2px' }}>
-          {new Date(activity.created_at).toLocaleString()}
+          {new Date(timestamp).toLocaleString()}
         </div>
       </div>
     </div>
@@ -300,8 +329,9 @@ const ClientProfilePage = ({ t }) => {
   const { data: emailLogs, isLoading: logsLoading } = useAccountEmailLogs(
     activeTab === 'overview' || activeTab === 'emails' ? accountId : null
   );
-  const { data: activities, isLoading: activitiesLoading } = useAccountActivity(
-    activeTab === 'activity' ? accountId : null
+  const { data: activities, isLoading: activitiesLoading } = useAccountEmailActivity(
+    activeTab === 'activity' ? accountId : null,
+    { limit: 50 }
   );
   const { data: enrollments, isLoading: enrollmentsLoading } = useAccountEnrollments(
     activeTab === 'overview' || activeTab === 'automations' ? accountId : null
