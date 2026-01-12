@@ -275,6 +275,12 @@ export const emailLogsService = {
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async getStats(ownerIds, startDate, endDate, automationId = null) {
+    // If multiple owner IDs (e.g., master admin viewing all), use fallback query
+    // since RPC only accepts single owner ID
+    if (Array.isArray(ownerIds) && ownerIds.length > 1) {
+      return this.calculateStatsFallback(ownerIds, startDate, endDate, automationId);
+    }
+
     // For RPC, we need to use first owner ID since RPC typically expects single value
     const ownerId = getFirstOwnerId(ownerIds);
     const { data, error } = await supabase
@@ -285,7 +291,10 @@ export const emailLogsService = {
         p_automation_id: automationId
       });
 
-    if (error) throw error;
+    if (error) {
+      console.warn('RPC get_email_stats failed, using fallback:', error);
+      return this.calculateStatsFallback(ownerIds, startDate, endDate, automationId);
+    }
     return data?.[0] || {
       total_sent: 0,
       total_delivered: 0,
@@ -296,6 +305,53 @@ export const emailLogsService = {
       total_bounced: 0,
       open_rate: 0,
       click_rate: 0
+    };
+  },
+
+  /**
+   * Fallback stats calculation when RPC is not available or multiple owners
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   */
+  async calculateStatsFallback(ownerIds, startDate, endDate, automationId = null) {
+    let query = supabase
+      .from('email_logs')
+      .select('status, delivered_at, first_opened_at, first_clicked_at');
+
+    query = applyOwnerFilter(query, ownerIds);
+
+    if (startDate) {
+      query = query.gte('sent_at', startDate);
+    }
+    if (endDate) {
+      query = query.lte('sent_at', endDate);
+    }
+    if (automationId) {
+      query = query.eq('automation_id', automationId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const emails = data || [];
+    const totalSent = emails.length;
+    const totalDelivered = emails.filter(e => e.delivered_at).length;
+    const uniqueOpens = emails.filter(e => e.first_opened_at).length;
+    const uniqueClicks = emails.filter(e => e.first_clicked_at).length;
+    const totalBounced = emails.filter(e => e.status === 'Bounced').length;
+
+    const openRate = totalDelivered > 0 ? Math.round((uniqueOpens / totalDelivered) * 10000) / 100 : 0;
+    const clickRate = totalDelivered > 0 ? Math.round((uniqueClicks / totalDelivered) * 10000) / 100 : 0;
+
+    return {
+      total_sent: totalSent,
+      total_delivered: totalDelivered,
+      total_opened: uniqueOpens,
+      unique_opens: uniqueOpens,
+      total_clicked: uniqueClicks,
+      unique_clicks: uniqueClicks,
+      total_bounced: totalBounced,
+      open_rate: openRate,
+      click_rate: clickRate
     };
   },
 
@@ -365,6 +421,13 @@ export const emailLogsService = {
    */
   async getResponseRateStats(ownerIds, options = {}) {
     const { startDate, endDate, automationId } = options;
+
+    // If multiple owner IDs (e.g., master admin viewing all), use fallback
+    // since RPC only accepts single owner ID
+    if (Array.isArray(ownerIds) && ownerIds.length > 1) {
+      return this.calculateResponseRateFallback(ownerIds, options);
+    }
+
     const ownerId = getFirstOwnerId(ownerIds);
 
     // Use RPC function if available
