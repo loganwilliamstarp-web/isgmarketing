@@ -48,6 +48,7 @@ const EmailEventBadge = ({ event, theme: t }) => {
     delivered: '✅',
     opened: '📬',
     clicked: '🖱️',
+    replied: '💬',
     bounced: '❌',
     unsubscribed: '🚫'
   };
@@ -182,6 +183,7 @@ const EmailLogItem = ({ log, theme: t }) => (
       {log.delivered_at && <EmailEventBadge event="delivered" theme={t} />}
       {log.first_opened_at && <EmailEventBadge event="opened" theme={t} />}
       {log.first_clicked_at && <EmailEventBadge event="clicked" theme={t} />}
+      {log.first_replied_at && <EmailEventBadge event="replied" theme={t} />}
       {log.bounced_at && <EmailEventBadge event="bounced" theme={t} />}
     </div>
   </div>
@@ -193,6 +195,7 @@ const ActivityItem = ({ activity, theme: t }) => {
     email_sent: '📤',
     email_opened: '📬',
     email_clicked: '🖱️',
+    email_reply_received: '💬',
     enrollment_started: '▶️',
     enrollment_completed: '✅',
     enrollment_paused: '⏸️',
@@ -211,7 +214,7 @@ const ActivityItem = ({ activity, theme: t }) => {
         justifyContent: 'center',
         fontSize: '14px'
       }}>
-        {icons[activity.action_type] || '📌'}
+        {icons[activity.event_type] || '📌'}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '13px', color: t.text }}>
