@@ -23,6 +23,7 @@ const MassEmailPage = lazy(() => import('./pages/MassEmailPage'));
 const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
 const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
+const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -794,6 +795,11 @@ const App = () => {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/oauth-callback" element={
+              <Suspense fallback={<div>Loading...</div>}>
+                <OAuthCallbackPage />
+              </Suspense>
+            } />
 
             {/* Redirect root based on auth state */}
             <Route path="/" element={<RedirectToAuth />} />

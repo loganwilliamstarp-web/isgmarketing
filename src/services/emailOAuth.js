@@ -6,20 +6,108 @@ import { supabase } from '../lib/supabase';
 
 const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-oauth`;
 
+// Store popup reference and callbacks
+let oauthPopup = null;
+let oauthCallback = null;
+
+// Listen for messages from popup window
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', (event) => {
+    // Verify origin matches our frontend
+    const allowedOrigins = [
+      window.location.origin,
+      import.meta.env.VITE_FRONTEND_URL,
+      'https://app.isgmarketing.com'
+    ].filter(Boolean);
+
+    if (!allowedOrigins.includes(event.origin)) return;
+
+    if (event.data?.type === 'oauth_complete') {
+      if (oauthCallback) {
+        oauthCallback(event.data);
+        oauthCallback = null;
+      }
+      if (oauthPopup && !oauthPopup.closed) {
+        oauthPopup.close();
+      }
+      oauthPopup = null;
+    }
+  });
+}
+
 export const emailOAuthService = {
   /**
-   * Initiate OAuth flow - redirects to provider's authorization page
+   * Initiate OAuth flow in a popup window
    * @param {string} provider - 'gmail' or 'microsoft'
    * @param {string} ownerId - User's owner ID (Salesforce user ID)
-   * @param {string} redirectAfter - Path to redirect after OAuth completes
+   * @returns {Promise<Object>} Result of OAuth flow
    */
-  initiateOAuth(provider, ownerId, redirectAfter = '/settings?tab=integrations') {
-    const state = JSON.stringify({
-      owner_id: ownerId,
-      redirect_after: redirectAfter
+  initiateOAuth(provider, ownerId) {
+    return new Promise((resolve, reject) => {
+      const state = JSON.stringify({
+        owner_id: ownerId,
+        redirect_after: '/oauth-callback',
+        popup: true
+      });
+
+      const url = `${EDGE_FUNCTION_URL}?action=initiate&provider=${provider}&state=${encodeURIComponent(state)}`;
+
+      // Calculate popup position (centered)
+      const width = 500;
+      const height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+
+      // Close existing popup if any
+      if (oauthPopup && !oauthPopup.closed) {
+        oauthPopup.close();
+      }
+
+      // Open popup
+      oauthPopup = window.open(
+        url,
+        'oauth_popup',
+        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+      );
+
+      if (!oauthPopup) {
+        reject(new Error('Popup was blocked. Please allow popups for this site.'));
+        return;
+      }
+
+      // Set up callback
+      oauthCallback = (data) => {
+        if (data.success) {
+          resolve({ success: true, provider: data.provider });
+        } else {
+          reject(new Error(data.error || 'OAuth failed'));
+        }
+      };
+
+      // Check if popup was closed without completing
+      const checkClosed = setInterval(() => {
+        if (oauthPopup?.closed) {
+          clearInterval(checkClosed);
+          if (oauthCallback) {
+            oauthCallback = null;
+            // Don't reject - user may have completed OAuth before closing
+            // The message handler will have already resolved if successful
+          }
+        }
+      }, 500);
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        clearInterval(checkClosed);
+        if (oauthCallback) {
+          oauthCallback = null;
+          if (oauthPopup && !oauthPopup.closed) {
+            oauthPopup.close();
+          }
+          reject(new Error('OAuth timed out'));
+        }
+      }, 5 * 60 * 1000);
     });
-    const url = `${EDGE_FUNCTION_URL}?action=initiate&provider=${provider}&state=${encodeURIComponent(state)}`;
-    window.location.href = url;
   },
 
   /**

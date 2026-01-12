@@ -9,3 +9,7 @@ verify_jwt = false
 # Process scheduled emails - called by pg_cron
 [functions.process-scheduled-emails]
 verify_jwt = false
+
+# Email OAuth - callbacks from Google/Microsoft can't have JWT
+[functions.email-oauth]
+verify_jwt = false

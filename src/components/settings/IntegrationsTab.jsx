@@ -49,10 +49,19 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     }
   };
 
-  const handleConnect = (provider) => {
+  const handleConnect = async (provider) => {
     setIsConnecting(provider);
     setError(null);
-    emailOAuthService.initiateOAuth(provider, userId, '/settings?tab=integrations');
+    try {
+      await emailOAuthService.initiateOAuth(provider, userId);
+      // OAuth completed successfully, reload connections
+      await loadConnections();
+    } catch (err) {
+      console.error('OAuth failed:', err);
+      setError(err.message || `Failed to connect ${provider}`);
+    } finally {
+      setIsConnecting(null);
+    }
   };
 
   const handleDisconnect = async (provider) => {
