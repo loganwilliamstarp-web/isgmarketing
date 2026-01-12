@@ -178,7 +178,10 @@ const IntegrationsTab = ({ userId, theme: t }) => {
           }}>
             <span style={{ fontSize: '16px' }}>🔒</span>
             <div>
-              Only agency administrators can connect or disconnect email integrations.
+              {impersonating?.active
+                ? 'Connection management is disabled while viewing as another user.'
+                : 'Only agency administrators can connect or disconnect email integrations.'
+              }
             </div>
           </div>
         )}
