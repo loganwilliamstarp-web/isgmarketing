@@ -215,6 +215,27 @@ serve(async (req) => {
 
     // Note: The trigger will automatically update email_logs with reply stats
 
+    // Log activity for the reply
+    await supabaseClient
+      .from('activity_log')
+      .insert({
+        owner_id: ownerId,
+        event_type: 'email_reply_received',
+        event_category: 'email',
+        title: 'Email reply received',
+        description: `Reply from ${email.from} to "${email.subject}"`,
+        email_log_id: emailLogId,
+        account_id: accountId,
+        actor_type: 'contact',
+        severity: 'info',
+        metadata: {
+          reply_id: reply?.id,
+          from_email: email.from,
+          from_name: email.fromName
+        },
+        created_at: new Date().toISOString()
+      })
+
     // Attempt inbox injection if user has OAuth connected
     if (ownerId && reply?.id) {
       const injectionResult = await attemptInboxInjection(supabaseClient, {
@@ -280,13 +301,28 @@ function parseFormData(formData: FormData): ParsedEmail {
     }
   }
 
+  // Get text and html - check both direct fields and parse from 'email' field if needed
+  let text = formData.get('text') as string || undefined
+  let html = formData.get('html') as string || undefined
+
+  // If text/html not present, try to extract from raw 'email' field (MIME message)
+  if (!text && !html) {
+    const rawEmail = formData.get('email') as string
+    if (rawEmail) {
+      const extracted = extractBodyFromMime(rawEmail)
+      text = extracted.text
+      html = extracted.html
+      console.log(`Extracted body from MIME: text=${text?.length || 0} chars, html=${html?.length || 0} chars`)
+    }
+  }
+
   return {
     to,
     from,
     fromName,
     subject: formData.get('subject') as string || '(no subject)',
-    text: formData.get('text') as string || undefined,
-    html: formData.get('html') as string || undefined,
+    text,
+    html,
     headers: formData.get('headers') as string || '',
     inReplyTo: formData.get('In-Reply-To') as string || undefined,
     messageId: formData.get('Message-ID') as string || undefined,
@@ -297,6 +333,98 @@ function parseFormData(formData: FormData): ParsedEmail {
     dkim: formData.get('dkim') as string || undefined,
     spamScore: parseFloat(formData.get('spam_score') as string) || undefined,
   }
+}
+
+/**
+ * Extract text and html body from raw MIME email message
+ * This is a simplified parser for common email formats
+ */
+function extractBodyFromMime(rawEmail: string): { text?: string; html?: string } {
+  let text: string | undefined
+  let html: string | undefined
+
+  // Check if it's multipart
+  const boundaryMatch = rawEmail.match(/boundary="?([^"\r\n]+)"?/i)
+
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1]
+    const parts = rawEmail.split(`--${boundary}`)
+
+    for (const part of parts) {
+      const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i)
+      if (!contentTypeMatch) continue
+
+      const contentType = contentTypeMatch[1].toLowerCase().trim()
+
+      // Find the body (after double newline)
+      const bodyMatch = part.match(/\r?\n\r?\n([\s\S]*)/)
+      if (!bodyMatch) continue
+
+      let body = bodyMatch[1].trim()
+
+      // Check for transfer encoding
+      const encodingMatch = part.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i)
+      const encoding = encodingMatch?.[1]?.toLowerCase().trim()
+
+      // Decode if needed
+      if (encoding === 'base64') {
+        try {
+          body = atob(body.replace(/\s/g, ''))
+        } catch (e) {
+          console.warn('Failed to decode base64 body')
+        }
+      } else if (encoding === 'quoted-printable') {
+        body = decodeQuotedPrintable(body)
+      }
+
+      if (contentType.includes('text/plain') && !text) {
+        text = body
+      } else if (contentType.includes('text/html') && !html) {
+        html = body
+      }
+    }
+  } else {
+    // Not multipart - check Content-Type header
+    const contentTypeMatch = rawEmail.match(/Content-Type:\s*([^;\r\n]+)/i)
+    const contentType = contentTypeMatch?.[1]?.toLowerCase().trim() || 'text/plain'
+
+    // Find body after headers (double newline)
+    const bodyMatch = rawEmail.match(/\r?\n\r?\n([\s\S]*)/)
+    if (bodyMatch) {
+      let body = bodyMatch[1].trim()
+
+      // Check for transfer encoding
+      const encodingMatch = rawEmail.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i)
+      const encoding = encodingMatch?.[1]?.toLowerCase().trim()
+
+      if (encoding === 'base64') {
+        try {
+          body = atob(body.replace(/\s/g, ''))
+        } catch (e) {
+          console.warn('Failed to decode base64 body')
+        }
+      } else if (encoding === 'quoted-printable') {
+        body = decodeQuotedPrintable(body)
+      }
+
+      if (contentType.includes('text/html')) {
+        html = body
+      } else {
+        text = body
+      }
+    }
+  }
+
+  return { text, html }
+}
+
+/**
+ * Decode quoted-printable encoded text
+ */
+function decodeQuotedPrintable(str: string): string {
+  return str
+    .replace(/=\r?\n/g, '') // Remove soft line breaks
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
 }
 
 function verifyReplyFrom(replyFrom: string, originalTo: string): boolean {
