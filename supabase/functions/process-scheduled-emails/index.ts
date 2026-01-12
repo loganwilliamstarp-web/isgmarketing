@@ -1031,9 +1031,26 @@ async function sendEmailViaSendGrid(
   const domainPart = fromEmail.split('@')[1] || 'isgmarketing.com'
   const customMessageId = `<isg-${emailLogId}-${Date.now()}@${domainPart}>`
 
-  // Reply-To is the sender's actual email so they receive replies directly
-  // We track replies by matching the In-Reply-To header against our custom Message-ID
-  const replyToAddress = fromEmail
+  // Check if sender has OAuth connected for inbox injection
+  // If yes, use tracking reply address (mailbox-replies.com)
+  // If no, use sender's actual email (normal flow, no tracking)
+  let replyToAddress = fromEmail
+  const replyDomain = Deno.env.get('REPLY_DOMAIN')
+
+  if (replyDomain) {
+    const { data: oauthConn } = await supabase
+      .from('email_provider_connections')
+      .select('id')
+      .eq('owner_id', email.owner_id)
+      .eq('status', 'active')
+      .limit(1)
+
+    if (oauthConn && oauthConn.length > 0) {
+      // OAuth connected: use tracking reply address for inbox injection
+      replyToAddress = `reply-${emailLogId}@${replyDomain}`
+    }
+    // No OAuth: keep replyToAddress as fromEmail (normal flow)
+  }
 
   // Dry run mode if no API key
   if (!apiKey) {

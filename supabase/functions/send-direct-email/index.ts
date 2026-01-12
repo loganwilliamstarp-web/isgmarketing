@@ -115,6 +115,26 @@ serve(async (req) => {
     const domainPart = senderEmail?.split('@')[1] || 'isgmarketing.com'
     const customMessageId = `<isg-${emailLog.id}-${Date.now()}@${domainPart}>`
 
+    // Check if sender has OAuth connected for inbox injection
+    // If yes, use tracking reply address (mailbox-replies.com)
+    // If no, use sender's actual email (normal flow, no tracking)
+    let replyToAddress = senderEmail
+    const replyDomain = Deno.env.get('REPLY_DOMAIN')
+
+    if (replyDomain) {
+      const { data: oauthConn } = await supabaseClient
+        .from('email_provider_connections')
+        .select('id')
+        .eq('owner_id', email.owner_id)
+        .eq('status', 'active')
+        .limit(1)
+
+      if (oauthConn && oauthConn.length > 0) {
+        // OAuth connected: use tracking reply address for inbox injection
+        replyToAddress = `reply-${emailLog.id}@${replyDomain}`
+      }
+    }
+
     // Dry run if no API key
     if (!sendgridApiKey) {
       console.log(`[DRY RUN] Would send direct email to ${recipientEmail}`)
@@ -158,7 +178,7 @@ serve(async (req) => {
         name: senderName || ''
       },
       reply_to: {
-        email: senderEmail,
+        email: replyToAddress,
         name: senderName || ''
       },
       subject: email.subject,
@@ -198,7 +218,7 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
           sendgrid_message_id: messageId,
           custom_message_id: customMessageId,
-          reply_to: senderEmail
+          reply_to: replyToAddress
         })
         .eq('id', emailLog.id)
 

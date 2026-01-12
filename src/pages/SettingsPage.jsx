@@ -6,6 +6,7 @@ import { useEffectiveOwner } from '../hooks/useEffectiveOwner';
 import { senderDomainsService } from '../services';
 import SenderDomainsManager from '../components/settings/SenderDomainsManager';
 import SignatureEditor from '../components/settings/SignatureEditor';
+import IntegrationsTab from '../components/settings/IntegrationsTab';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -682,145 +683,7 @@ const SettingsPage = ({ t }) => {
               borderRadius: '12px',
               border: `1px solid ${t.border}`
             }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '24px' }}>
-                Integrations
-              </h3>
-
-              {/* SendGrid Integration */}
-              <div style={{
-                padding: '20px',
-                backgroundColor: t.bg,
-                borderRadius: '10px',
-                border: `1px solid ${t.border}`,
-                marginBottom: '16px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      backgroundColor: '#1A82E2',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: '20px',
-                      fontWeight: '700'
-                    }}>
-                      SG
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '600', color: t.text, marginBottom: '2px' }}>SendGrid</div>
-                      <div style={{ fontSize: '13px', color: t.textSecondary }}>Email delivery service</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      backgroundColor: `${t.success}20`,
-                      color: t.success,
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      fontWeight: '500'
-                    }}>
-                      Connected
-                    </span>
-                    <button style={{
-                      padding: '8px 12px',
-                      backgroundColor: t.bgHover,
-                      border: `1px solid ${t.border}`,
-                      borderRadius: '6px',
-                      color: t.textSecondary,
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}>
-                      Configure
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Salesforce Integration */}
-              <div style={{
-                padding: '20px',
-                backgroundColor: t.bg,
-                borderRadius: '10px',
-                border: `1px solid ${t.border}`,
-                marginBottom: '16px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      backgroundColor: '#00A1E0',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: '20px',
-                      fontWeight: '700'
-                    }}>
-                      SF
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '600', color: t.text, marginBottom: '2px' }}>Salesforce</div>
-                      <div style={{ fontSize: '13px', color: t.textSecondary }}>CRM data sync</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      backgroundColor: `${t.success}20`,
-                      color: t.success,
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      fontWeight: '500'
-                    }}>
-                      Connected
-                    </span>
-                    <button style={{
-                      padding: '8px 12px',
-                      backgroundColor: t.bgHover,
-                      border: `1px solid ${t.border}`,
-                      borderRadius: '6px',
-                      color: t.textSecondary,
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}>
-                      Sync Now
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Webhook Info */}
-              <div style={{
-                padding: '16px',
-                backgroundColor: `${t.primary}10`,
-                borderRadius: '8px',
-                marginTop: '24px'
-              }}>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: t.text, marginBottom: '4px' }}>
-                  📌 Webhook URL
-                </div>
-                <div style={{ fontSize: '12px', color: t.textSecondary, marginBottom: '8px' }}>
-                  Configure this URL in SendGrid to receive email event notifications
-                </div>
-                <code style={{
-                  display: 'block',
-                  padding: '8px 12px',
-                  backgroundColor: t.bgCard,
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  color: t.primary,
-                  wordBreak: 'break-all'
-                }}>
-                  https://your-app-url.com/api/webhooks/sendgrid/{userId}
-                </code>
-              </div>
+              <IntegrationsTab userId={effectiveOwnerId} theme={t} />
             </div>
           )}
         </>
