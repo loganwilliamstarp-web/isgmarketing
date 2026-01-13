@@ -64,7 +64,7 @@ serve(async (req) => {
     )
 
     const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
-    const senderEmail = Deno.env.get('ANALYTICS_FROM_EMAIL') || 'analytics@isg-replies.com'
+    const senderEmail = Deno.env.get('ANALYTICS_FROM_EMAIL') || 'noreply@isg-replies.com'
     const senderName = Deno.env.get('ANALYTICS_FROM_NAME') || 'Gizmo Analytics'
 
     // Parse request body for optional parameters

@@ -93,7 +93,7 @@ serve(async (req) => {
 
     // Get the sender info from the first master admin
     const adminUser = adminUsers?.[0]
-    const senderEmail = Deno.env.get('ANALYTICS_FROM_EMAIL') || 'analytics@isg-replies.com'
+    const senderEmail = Deno.env.get('ANALYTICS_FROM_EMAIL') || 'noreply@isg-replies.com'
     const senderName = Deno.env.get('ANALYTICS_FROM_NAME') || 'Gizmo Analytics'
 
     // Always use Gizmo Analytics as the sender - don't override with admin user info
