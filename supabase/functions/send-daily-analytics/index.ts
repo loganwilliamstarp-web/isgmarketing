@@ -535,9 +535,9 @@ function buildAnalyticsEmailHtml(analytics: AnalyticsData): string {
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6; line-height: 1.6;">
   <div style="max-width: 700px; margin: 0 auto; padding: 20px;">
     <!-- Header -->
-    <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 28px; font-weight: 700;">Daily Analytics Report</h1>
-      <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 16px;">${today}</p>
+    <div style="background: linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%); border-radius: 16px 16px 0 0; padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0 0 10px 0; color: #111827; font-size: 28px; font-weight: 700;">Daily Analytics Report</h1>
+      <p style="margin: 0; color: #374151; font-size: 16px;">${today}</p>
     </div>
 
     <!-- Main Content -->
