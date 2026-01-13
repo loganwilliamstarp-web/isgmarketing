@@ -81,12 +81,13 @@ serve(async (req) => {
     }
 
     // Get all active marketing users (marketing_cloud_engagement = true)
-    // Exclude agency admins - they get a separate email
+    // Exclude agency admins - they get a separate agency-level email
     let usersQuery = supabaseClient
       .from('users')
-      .select('user_unique_id, email, first_name, last_name, profile_name')
+      .select('user_unique_id, email, first_name, last_name, profile_name, marketing_cloud_agency_admin')
       .eq('marketing_cloud_engagement', true)
       .not('email', 'is', null)
+      .or('marketing_cloud_agency_admin.is.null,marketing_cloud_agency_admin.eq.false')
 
     if (specificUserId) {
       usersQuery = usersQuery.eq('user_unique_id', specificUserId)
