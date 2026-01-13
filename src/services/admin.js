@@ -248,12 +248,12 @@ export const adminService = {
    * If the master automation doesn't exist, create it first
    */
   async updateMasterAutomation(defaultKey, updates) {
-    // First check if master automation exists
+    // First check if master automation exists (use maybeSingle to avoid error on 0 rows)
     const { data: existing } = await supabase
       .from('master_automations')
       .select('id')
       .eq('default_key', defaultKey)
-      .single();
+      .maybeSingle();
 
     let data;
     let error;

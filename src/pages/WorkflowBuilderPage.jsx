@@ -143,7 +143,8 @@ const WorkflowBuilderPage = ({ t }) => {
       }
     } catch (err) {
       console.error('Failed to save automation:', err);
-      alert('Failed to save automation. Please try again.');
+      const errorMessage = err?.message || err?.error?.message || 'Unknown error';
+      alert(`Failed to save automation: ${errorMessage}`);
     }
   };
 
