@@ -742,7 +742,7 @@ export const emailActivityService = {
           .select(`
             id, subject, from_email, from_name, received_at, body_text, body_html,
             email_log:email_logs(id, subject, to_email),
-            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
+            account:accounts!email_replies_account_id_fkey(account_unique_id, name)
           `)
           .order('received_at', { ascending: false })
           .limit(limit);
