@@ -656,7 +656,8 @@ export const emailActivityService = {
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
-        const { data } = await query;
+        const { data, error } = await query;
+        console.log('Recent sends query:', { count: data?.length, error, ownerIds, limit });
         return (data || []).map(e => ({
           id: `send-${e.id}`,
           type: 'sent',
@@ -687,7 +688,8 @@ export const emailActivityService = {
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
-        const { data } = await query;
+        const { data, error } = await query;
+        console.log('Recent opens query:', { count: data?.length, error, ownerIds, limit });
         return (data || []).map(e => ({
           id: `open-${e.id}`,
           type: 'opened',
@@ -716,7 +718,8 @@ export const emailActivityService = {
           .limit(limit);
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
-        const { data } = await query;
+        const { data, error } = await query;
+        console.log('Recent clicks query:', { count: data?.length, error, ownerIds, limit });
         return (data || []).map(e => ({
           id: `click-${e.id}`,
           type: 'clicked',
