@@ -85,6 +85,13 @@ serve(async (req) => {
     const authenticatedUserId = userData.user_unique_id
     const isAdmin = userData.marketing_cloud_agency_admin === true
 
+    console.log('[sender-domains] User lookup:', {
+      email: authenticatedEmail,
+      user_unique_id: authenticatedUserId,
+      marketing_cloud_agency_admin: userData.marketing_cloud_agency_admin,
+      isAdmin
+    })
+
     // For list and verified actions, allow admins to query a target user's domains
     // Otherwise, use the authenticated user's ID
     const ownerId = (isAdmin && body.targetOwnerId) ? body.targetOwnerId : authenticatedUserId
@@ -154,10 +161,13 @@ serve(async (req) => {
 // ============================================================================
 
 async function listDomains(supabase: any, ownerId: string, userEmail: string, isAdmin: boolean) {
+  console.log('[listDomains] Called with:', { ownerId, userEmail, isAdmin })
+
   // For agency admins, show domains matching their email domain (agency-wide view)
   // For regular users, show only domains they own
   if (isAdmin && userEmail) {
     const emailDomain = userEmail.split('@')[1]?.toLowerCase()
+    console.log('[listDomains] Admin path - email domain:', emailDomain)
     if (emailDomain) {
       // Get domains that match the user's email domain (exact or subdomain)
       const { data, error } = await supabase
@@ -166,18 +176,21 @@ async function listDomains(supabase: any, ownerId: string, userEmail: string, is
         .or(`domain.eq.${emailDomain},domain.ilike.%.${emailDomain}`)
         .order('created_at', { ascending: false })
 
+      console.log('[listDomains] Admin query result:', { count: data?.length, error, domains: data?.map((d: any) => d.domain) })
       if (error) throw error
       return { domains: data || [] }
     }
   }
 
   // Fallback: query by owner_id
+  console.log('[listDomains] Fallback path - querying by owner_id:', ownerId)
   const { data, error } = await supabase
     .from('sender_domains')
     .select('*')
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: false })
 
+  console.log('[listDomains] Fallback query result:', { count: data?.length, error })
   if (error) throw error
   return { domains: data || [] }
 }
