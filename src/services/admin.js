@@ -10,9 +10,9 @@ export const adminService = {
       .from('admin_users')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    if (error) {
       throw error;
     }
     return !!data;
