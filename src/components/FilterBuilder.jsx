@@ -85,6 +85,17 @@ export const FILTER_FIELDS = [
   { value: 'email_domain', label: 'Email Domain', type: 'text' },
   { value: 'last_email_sent', label: 'Last Email Sent', type: 'date' },
   { value: 'account_created', label: 'Account Created', type: 'date' },
+  { value: 'survey_stars', label: 'Survey Rating', type: 'select', options: [
+    { value: '1', label: '1 Star' },
+    { value: '2', label: '2 Stars' },
+    { value: '3', label: '3 Stars' },
+    { value: '4', label: '4 Stars' },
+    { value: '5', label: '5 Stars' }
+  ]},
+  { value: 'survey_completed', label: 'Survey Completed', type: 'boolean', options: [
+    { value: 'true', label: 'Yes - Has completed survey' },
+    { value: 'false', label: 'No - Has not completed survey' }
+  ]},
 ];
 
 export const OPERATORS = {
@@ -125,6 +136,9 @@ export const OPERATORS = {
     { value: 'is_empty', label: 'is empty' },
     { value: 'is_not_empty', label: 'is not empty' },
   ],
+  boolean: [
+    { value: 'is', label: 'is' },
+  ],
 };
 
 // Quick filter presets
@@ -144,6 +158,9 @@ export const QUICK_FILTERS = [
   ]},
   { label: 'Prior Customers', filter: { field: 'account_status', operator: 'is', value: 'prior_customer' } },
   { label: 'Prospects', filter: { field: 'account_status', operator: 'is', value: 'prospect' } },
+  { label: 'No Survey Response', filter: { field: 'survey_completed', operator: 'is', value: 'false' } },
+  { label: 'Happy Customers (4-5 Stars)', filter: { field: 'survey_stars', operator: 'is_any', value: '4,5' } },
+  { label: 'Unhappy Customers (1-2 Stars)', filter: { field: 'survey_stars', operator: 'is_any', value: '1,2' } },
 ];
 
 // Helper to get field label

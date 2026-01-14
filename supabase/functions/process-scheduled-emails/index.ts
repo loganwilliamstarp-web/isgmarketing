@@ -971,10 +971,10 @@ async function sendEmailViaSendGrid(
   const template = email.template
   const account = email.account || {}
 
-  // Fetch user settings for signature and agency info
+  // Fetch user settings for signature, agency info, and google review link
   const { data: userSettings } = await supabase
     .from('user_settings')
-    .select('signature_html, agency_name, agency_address, agency_phone, agency_website')
+    .select('signature_html, agency_name, agency_address, agency_phone, agency_website, google_review_link')
     .eq('user_id', email.owner_id)
     .single()
 
@@ -1012,10 +1012,10 @@ async function sendEmailViaSendGrid(
     return { success: false, error: 'Template not found' }
   }
 
-  // Apply merge fields to template content
-  const baseHtmlContent = applyMergeFields(template.body_html || '', email, account)
-  const textContent = applyMergeFields(template.body_text || '', email, account)
-  const finalSubject = applyMergeFields(subject || 'No Subject', email, account)
+  // Apply merge fields to template content (pass emailLogId for star rating URLs)
+  const baseHtmlContent = applyMergeFields(template.body_html || '', email, account, emailLogId)
+  const textContent = applyMergeFields(template.body_text || '', email, account, emailLogId)
+  const finalSubject = applyMergeFields(subject || 'No Subject', email, account, emailLogId)
 
   // Build email footer with signature, company info, and unsubscribe
   const emailFooter = buildEmailFooter(userSettings, email)
@@ -1161,11 +1161,26 @@ async function sendEmailViaSendGrid(
 // MERGE FIELDS
 // ============================================================================
 
-function applyMergeFields(content: string, email: ScheduledEmail, account: Record<string, any>): string {
+function applyMergeFields(content: string, email: ScheduledEmail, account: Record<string, any>, emailLogId?: number): string {
   // Extract first/last name from account.name if dedicated fields aren't available
   const nameParts = (account.name || '').trim().split(/\s+/)
   const derivedFirstName = nameParts[0] || ''
   const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
+
+  // Build star rating URLs if we have an email log ID
+  const starRatingBaseUrl = Deno.env.get('SUPABASE_URL')
+    ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/star-rating`
+    : 'https://app.isgmarketing.com/api/star-rating'
+
+  const buildRatingUrl = (stars: number) => {
+    if (!emailLogId) return '#'
+    const params = new URLSearchParams({
+      id: emailLogId.toString(),
+      rating: stars.toString(),
+      account: email.account_id || ''
+    })
+    return `${starRatingBaseUrl}?${params.toString()}`
+  }
 
   const mergeFields: Record<string, string> = {
     // Account fields
@@ -1194,6 +1209,13 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
 
     // Trigger-specific fields
     '{{trigger_date}}': email.qualification_value || '',
+
+    // Star rating URLs (for periodic review emails)
+    '{{rating_url_1}}': buildRatingUrl(1),
+    '{{rating_url_2}}': buildRatingUrl(2),
+    '{{rating_url_3}}': buildRatingUrl(3),
+    '{{rating_url_4}}': buildRatingUrl(4),
+    '{{rating_url_5}}': buildRatingUrl(5),
   }
 
   let result = content
@@ -1553,6 +1575,17 @@ function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: 
           case 'has_email':
             const hasEmail = !!(account.person_email || account.email)
             return rule.operator === 'equals' ? hasEmail === (value === 'true') : hasEmail !== (value === 'true')
+
+          case 'survey_stars':
+            const surveyStars = account.survey_stars?.toString() || ''
+            if (!surveyStars && rule.operator === 'is_not') return true
+            if (!surveyStars) return false
+            return matchValue(surveyStars, value, rule.operator)
+
+          case 'survey_completed':
+            const hasSurvey = account.survey_stars !== null && account.survey_stars !== undefined
+            const wantsSurvey = value === 'true'
+            return rule.operator === 'is' ? hasSurvey === wantsSurvey : hasSurvey !== wantsSurvey
 
           default:
             // For unknown fields, try to match against account properties

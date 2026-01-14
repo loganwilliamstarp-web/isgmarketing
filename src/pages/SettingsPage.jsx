@@ -123,6 +123,8 @@ const SettingsPage = ({ t }) => {
     agency_address: '',
     agency_phone: '',
     agency_website: '',
+    google_review_link: '',
+    google_review_min_stars: 5,
     // Email settings
     default_from_name: '',
     default_from_email: '',
@@ -174,6 +176,8 @@ const SettingsPage = ({ t }) => {
         agency_address: settings.agency_address || '',
         agency_phone: settings.agency_phone || '',
         agency_website: settings.agency_website || '',
+        google_review_link: settings.google_review_link || '',
+        google_review_min_stars: settings.google_review_min_stars || 5,
         default_from_name: defaultFromName,
         default_from_email: defaultFromEmail,
         reply_to_email: settings.reply_to_email || user?.email || '',
@@ -273,7 +277,9 @@ const SettingsPage = ({ t }) => {
           agency_name: formData.agency_name,
           agency_address: formData.agency_address,
           agency_phone: formData.agency_phone,
-          agency_website: formData.agency_website
+          agency_website: formData.agency_website,
+          google_review_link: formData.google_review_link,
+          google_review_min_stars: formData.google_review_min_stars
         }
       });
       setSaveMessage({ type: 'success', text: 'Agency info saved for all users in your agency!' });
@@ -517,6 +523,41 @@ const SettingsPage = ({ t }) => {
                   placeholder="https://www.example.com"
                   theme={t}
                 />
+              </div>
+
+              <FormInput
+                label="Google Review Link"
+                value={formData.google_review_link}
+                onChange={handleChange('google_review_link')}
+                placeholder="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK"
+                hint="Used in star rating emails to redirect happy customers to leave a Google review"
+                theme={t}
+              />
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                  Minimum Stars for Google Review
+                </label>
+                <select
+                  value={formData.google_review_min_stars}
+                  onChange={(e) => handleChange('google_review_min_stars')(parseInt(e.target.value, 10))}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value={5}>5 Stars Only (Recommended)</option>
+                  <option value={4}>4-5 Stars</option>
+                  <option value={3}>3-5 Stars</option>
+                </select>
+                <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                  Customers rating below this threshold will see a feedback form instead
+                </p>
               </div>
 
               <button

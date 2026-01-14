@@ -62,10 +62,10 @@ serve(async (req) => {
       .update({ status: 'Processing', updated_at: new Date().toISOString() })
       .eq('id', scheduledEmailId)
 
-    // Get user settings for signature
+    // Get user settings for signature and google review link
     const { data: userSettings } = await supabaseClient
       .from('user_settings')
-      .select('signature_html, agency_name, agency_address, agency_phone, agency_website')
+      .select('signature_html, agency_name, agency_address, agency_phone, agency_website, google_review_link')
       .eq('user_id', email.owner_id)
       .single()
 
@@ -75,10 +75,11 @@ serve(async (req) => {
     // Get account data for merge field processing
     const account = email.account || {}
 
-    // Apply merge fields to subject and body
-    const processedSubject = applyMergeFields(email.subject || '', email, account)
-    const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account)
-    const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account)
+    // Apply merge fields to subject and body (pass emailLog.id for star rating URLs after we create the log)
+    // Note: For direct emails, we'll create the log first then apply merge fields
+    const processedSubject = applyMergeFields(email.subject || '', email, account, null)
+    const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account, null)
+    const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account, null)
 
     // Wrap body in proper HTML with footer
     const htmlContent = `
@@ -310,13 +311,28 @@ serve(async (req) => {
   }
 })
 
-function applyMergeFields(content: string, email: any, account: any): string {
+function applyMergeFields(content: string, email: any, account: any, emailLogId?: number | null): string {
   if (!content) return content
 
   // Extract first/last name from account.name if dedicated fields aren't available
   const nameParts = (account?.name || '').trim().split(/\s+/)
   const derivedFirstName = nameParts[0] || ''
   const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
+
+  // Build star rating URLs if we have an email log ID
+  const starRatingBaseUrl = Deno.env.get('SUPABASE_URL')
+    ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/star-rating`
+    : 'https://app.isgmarketing.com/api/star-rating'
+
+  const buildRatingUrl = (stars: number) => {
+    if (!emailLogId) return '#'
+    const params = new URLSearchParams({
+      id: emailLogId.toString(),
+      rating: stars.toString(),
+      account: email.account_id || ''
+    })
+    return `${starRatingBaseUrl}?${params.toString()}`
+  }
 
   const mergeFields: Record<string, string> = {
     // Account fields
@@ -342,6 +358,13 @@ function applyMergeFields(content: string, email: any, account: any): string {
     // Date fields
     '{{today}}': new Date().toLocaleDateString('en-US'),
     '{{current_year}}': new Date().getFullYear().toString(),
+
+    // Star rating URLs (for periodic review emails)
+    '{{rating_url_1}}': buildRatingUrl(1),
+    '{{rating_url_2}}': buildRatingUrl(2),
+    '{{rating_url_3}}': buildRatingUrl(3),
+    '{{rating_url_4}}': buildRatingUrl(4),
+    '{{rating_url_5}}': buildRatingUrl(5),
   }
 
   let result = content

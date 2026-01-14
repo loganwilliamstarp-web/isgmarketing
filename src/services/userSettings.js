@@ -31,7 +31,9 @@ export const userSettingsService = {
         agency_name: agencyInfo.agency_name,
         agency_address: agencyInfo.agency_address,
         agency_phone: agencyInfo.agency_phone,
-        agency_website: agencyInfo.agency_website
+        agency_website: agencyInfo.agency_website,
+        google_review_link: agencyInfo.google_review_link,
+        google_review_min_stars: agencyInfo.google_review_min_stars
       };
     }
 
@@ -74,7 +76,7 @@ export const userSettingsService = {
     // Get agency info from user_settings for any user in this profile that has agency_name set
     const { data: agencySettings, error: agencyError } = await supabase
       .from('user_settings')
-      .select('agency_name, agency_address, agency_phone, agency_website')
+      .select('agency_name, agency_address, agency_phone, agency_website, google_review_link, google_review_min_stars')
       .in('user_id', profileUserIds)
       .not('agency_name', 'is', null)
       .neq('agency_name', '')
@@ -193,7 +195,7 @@ export const userSettingsService = {
    * Creates user_settings records for users who don't have one yet
    */
   async updateAgencyInfoByProfile(profileName, agencyInfo) {
-    const { agency_name, agency_address, agency_phone, agency_website } = agencyInfo;
+    const { agency_name, agency_address, agency_phone, agency_website, google_review_link, google_review_min_stars } = agencyInfo;
 
     // First, get all user IDs in this profile
     const { data: users, error: usersError } = await supabase
@@ -214,6 +216,8 @@ export const userSettingsService = {
       agency_address,
       agency_phone,
       agency_website,
+      google_review_link,
+      google_review_min_stars,
       created_at: now,
       updated_at: now
     }));
