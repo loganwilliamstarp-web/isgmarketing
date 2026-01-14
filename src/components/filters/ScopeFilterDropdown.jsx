@@ -27,13 +27,13 @@ const ScopeFilterDropdown = ({ t }) => {
   const dropdownRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  // Don't render for regular marketing users
-  if (userRole === USER_ROLES.MARKETING_USER || (!isAdmin && !isAgencyAdmin)) {
-    return null;
-  }
+  // Determine if user should see the dropdown
+  const shouldRender = userRole !== USER_ROLES.MARKETING_USER && (isAdmin || isAgencyAdmin);
 
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (!shouldRender) return;
+
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
@@ -42,7 +42,7 @@ const ScopeFilterDropdown = ({ t }) => {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [shouldRender]);
 
   const fetchItems = async (query = '') => {
     setIsLoading(true);
@@ -152,6 +152,11 @@ const ScopeFilterDropdown = ({ t }) => {
   const getAllLabel = () => {
     return isAdmin ? 'All Agencies' : 'All Agents';
   };
+
+  // Don't render for regular marketing users (must be after all hooks)
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <div ref={dropdownRef} style={{ position: 'relative' }}>
