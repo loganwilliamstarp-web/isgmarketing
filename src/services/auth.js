@@ -272,9 +272,9 @@ export const authService = {
       .from('admin_users')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error) throw error;
     return !!data;
   },
 
