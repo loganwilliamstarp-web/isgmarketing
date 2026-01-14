@@ -14,7 +14,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         *,
-        account:accounts(account_unique_id, name, person_email, primary_contact_first_name),
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email, primary_contact_first_name),
         template:email_templates(id, name),
         automation:automations(id, name)
       `)
@@ -56,7 +56,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         *,
-        account:accounts(*),
+        account:accounts!email_logs_account_id_fkey(*),
         template:email_templates(*),
         automation:automations(id, name),
         enrollment:automation_enrollments(id, status)
@@ -125,7 +125,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         *,
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .eq('automation_id', automationId)
       .order('created_at', { ascending: false })
@@ -213,7 +213,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         id, subject, first_opened_at, open_count,
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .not('first_opened_at', 'is', null)
       .order('first_opened_at', { ascending: false })
@@ -234,7 +234,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         id, subject, first_clicked_at, click_count,
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .not('first_clicked_at', 'is', null)
       .order('first_clicked_at', { ascending: false })
@@ -257,7 +257,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         *,
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .eq('status', 'Bounced')
       .order('bounced_at', { ascending: false })
@@ -503,7 +503,7 @@ export const emailLogsService = {
       .from('email_logs')
       .select(`
         id, subject, first_replied_at, reply_count,
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .not('first_replied_at', 'is', null)
       .order('first_replied_at', { ascending: false })
@@ -553,7 +553,7 @@ export const emailRepliesService = {
       .select(`
         *,
         email_log:email_logs(id, subject, to_email, automation_id),
-        account:accounts(account_unique_id, name, person_email)
+        account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email)
       `)
       .order('received_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -586,7 +586,7 @@ export const emailRepliesService = {
       .select(`
         *,
         email_log:email_logs(*),
-        account:accounts(*)
+        account:accounts!email_logs_account_id_fkey(*)
       `)
       .eq('id', replyId);
     query = applyOwnerFilter(query, ownerIds);
@@ -648,7 +648,7 @@ export const emailActivityService = {
           .select(`
             id, subject, to_email, to_name, from_email, from_name, status, sent_at, created_at,
             body_html, body_text,
-            account:accounts(account_unique_id, name),
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name),
             template:email_templates(body_html, body_text)
           `)
           .in('status', ['Sent', 'Delivered', 'Queued'])
@@ -681,7 +681,7 @@ export const emailActivityService = {
           .from('email_logs')
           .select(`
             id, subject, to_email, to_name, from_email, from_name, first_opened_at, open_count,
-            account:accounts(account_unique_id, name)
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
           `)
           .not('first_opened_at', 'is', null)
           .order('first_opened_at', { ascending: false })
@@ -711,7 +711,7 @@ export const emailActivityService = {
           .from('email_logs')
           .select(`
             id, subject, to_email, to_name, from_email, from_name, first_clicked_at, click_count,
-            account:accounts(account_unique_id, name)
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
           `)
           .not('first_clicked_at', 'is', null)
           .order('first_clicked_at', { ascending: false })
@@ -742,7 +742,7 @@ export const emailActivityService = {
           .select(`
             id, subject, from_email, from_name, received_at, body_text, body_html,
             email_log:email_logs(id, subject, to_email),
-            account:accounts(account_unique_id, name)
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
           `)
           .order('received_at', { ascending: false })
           .limit(limit);
