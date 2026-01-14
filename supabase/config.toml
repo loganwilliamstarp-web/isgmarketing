@@ -17,3 +17,7 @@ verify_jwt = false
 # Daily analytics email to master admins - called by pg_cron at midnight
 [functions.send-daily-analytics]
 verify_jwt = false
+
+# Email validation - called by pg_cron daily
+[functions.validate-emails]
+verify_jwt = false
