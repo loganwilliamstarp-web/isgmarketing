@@ -219,10 +219,12 @@ async function runDailyRefresh(
       const defaultFromName = userSettings?.from_name || null
 
       // Get accounts that match base criteria (paginated for large datasets)
+      // Only include accounts with valid email validation status
       let accountsQuery = supabase
         .from('accounts')
         .select('*', { count: 'exact' })
         .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
+        .eq('email_validation_status', 'valid')  // Only schedule for validated emails
         .order('account_unique_id')  // Consistent ordering for pagination
         .range(accountOffset, accountOffset + MAX_ACCOUNTS_PER_REFRESH - 1)
 
@@ -652,6 +654,16 @@ async function verifyAccountQualifies(
     return { qualifies: false, reason: 'Account has opted out of email' }
   }
 
+  // Check email validation status - only send to validated emails
+  if (account.email_validation_status !== 'valid') {
+    const status = account.email_validation_status || 'unknown'
+    const reason = account.email_validation_reason
+    return {
+      qualifies: false,
+      reason: `Email validation status is '${status}'${reason ? ` (${reason})` : ''}`
+    }
+  }
+
   // Check if email address is valid
   const recipientEmail = email.to_email || account.person_email || account.email
   if (!recipientEmail || !recipientEmail.includes('@')) {
@@ -804,6 +816,21 @@ async function processReadyEmails(
             .update({
               status: 'Cancelled',
               error_message: 'Account opted out of email before send',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', email.id)
+          continue
+        }
+
+        // Final email validation check - only send to validated emails
+        if (email.account?.email_validation_status !== 'valid') {
+          const status = email.account?.email_validation_status || 'unknown'
+          const reason = email.account?.email_validation_reason
+          await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'Cancelled',
+              error_message: `Email validation status is '${status}'${reason ? ` (${reason})` : ''}`,
               updated_at: new Date().toISOString()
             })
             .eq('id', email.id)
