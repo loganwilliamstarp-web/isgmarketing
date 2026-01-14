@@ -126,21 +126,12 @@ export const authService = {
 
     if (!hasAccess) return null;
 
-    // Find records with access
-    const accessRecords = data.filter(
+    // Return the first record with access
+    const accessRecord = data.find(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
 
-    if (accessRecords.length === 0) return null;
-
-    // Prefer a record that has both access AND a profile_name
-    // This handles cases where a user has multiple records (e.g., from different Salesforce accounts)
-    const recordWithProfile = accessRecords.find(record => record.profile_name);
-
-    // Also prefer agency admin records as they have more permissions
-    const agencyAdminRecord = accessRecords.find(record => record.marketing_cloud_agency_admin === true && record.profile_name);
-
-    return agencyAdminRecord || recordWithProfile || accessRecords[0];
+    return accessRecord || data[0];
   },
 
   /**
@@ -240,21 +231,12 @@ export const authService = {
 
     if (!hasAccess) return null;
 
-    // Find records with access
-    const accessRecords = data.filter(
+    // Return the first record with access (or just the first record for user info)
+    const accessRecord = data.find(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
 
-    if (accessRecords.length === 0) return null;
-
-    // Prefer a record that has both access AND a profile_name
-    // This handles cases where a user has multiple records (e.g., from different Salesforce accounts)
-    const recordWithProfile = accessRecords.find(record => record.profile_name);
-
-    // Also prefer agency admin records as they have more permissions
-    const agencyAdminRecord = accessRecords.find(record => record.marketing_cloud_agency_admin === true && record.profile_name);
-
-    return agencyAdminRecord || recordWithProfile || accessRecords[0];
+    return accessRecord || data[0];
   },
 
   /**
