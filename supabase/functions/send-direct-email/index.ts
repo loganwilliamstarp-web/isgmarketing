@@ -75,11 +75,40 @@ serve(async (req) => {
     // Get account data for merge field processing
     const account = email.account || {}
 
-    // Apply merge fields to subject and body (pass emailLog.id for star rating URLs after we create the log)
-    // Note: For direct emails, we'll create the log first then apply merge fields
-    const processedSubject = applyMergeFields(email.subject || '', email, account, null)
-    const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account, null)
-    const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account, null)
+    const recipientEmail = email.to_email
+    const recipientName = email.to_name
+
+    // Use from email/name from scheduled email record (or body as fallback)
+    const senderEmail = email.from_email || fromEmail
+    const senderName = email.from_name || fromName
+
+    // Create email log first (so we have ID for star rating URLs)
+    const { data: emailLog, error: logError } = await supabaseClient
+      .from('email_logs')
+      .insert({
+        owner_id: email.owner_id,
+        account_id: email.account_id,
+        to_email: recipientEmail,
+        to_name: recipientName,
+        from_email: senderEmail,
+        from_name: senderName,
+        subject: email.subject || '',
+        body_html: bodyHtml || '',
+        body_text: bodyText || '',
+        status: 'Queued',
+        queued_at: new Date().toISOString()
+      })
+      .select('id')
+      .single()
+
+    if (logError || !emailLog) {
+      throw new Error(`Failed to create email log: ${logError?.message}`)
+    }
+
+    // Now apply merge fields with the email log ID (for star rating URLs)
+    const processedSubject = applyMergeFields(email.subject || '', email, account, emailLog.id)
+    const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account, emailLog.id)
+    const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account, emailLog.id)
 
     // Wrap body in proper HTML with footer
     const htmlContent = `
@@ -90,35 +119,15 @@ serve(async (req) => {
       </div>
     `.trim()
 
-    const recipientEmail = email.to_email
-    const recipientName = email.to_name
-
-    // Use from email/name from scheduled email record (or body as fallback)
-    const senderEmail = email.from_email || fromEmail
-    const senderName = email.from_name || fromName
-
-    // Create email log
-    const { data: emailLog, error: logError } = await supabaseClient
+    // Update email log with processed content
+    await supabaseClient
       .from('email_logs')
-      .insert({
-        owner_id: email.owner_id,
-        account_id: email.account_id,
-        to_email: recipientEmail,
-        to_name: recipientName,
-        from_email: senderEmail,
-        from_name: senderName,
+      .update({
         subject: processedSubject,
         body_html: htmlContent,
-        body_text: processedBodyText,
-        status: 'Queued',
-        queued_at: new Date().toISOString()
+        body_text: processedBodyText
       })
-      .select('id')
-      .single()
-
-    if (logError || !emailLog) {
-      throw new Error(`Failed to create email log: ${logError?.message}`)
-    }
+      .eq('id', emailLog.id)
 
     // Build Message-ID for reply tracking
     const domainPart = senderEmail?.split('@')[1] || 'isgmarketing.com'
@@ -369,8 +378,10 @@ function applyMergeFields(content: string, email: any, account: any, emailLogId?
 
   let result = content
   for (const [field, value] of Object.entries(mergeFields)) {
-    // Case-insensitive replacement
-    result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value)
+    // Case-insensitive replacement - also handle spaces inside braces like {{ field }}
+    const fieldName = field.replace(/^\{\{|\}\}$/g, '') // Extract field name
+    const pattern = `\\{\\{\\s*${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`
+    result = result.replace(new RegExp(pattern, 'gi'), value)
   }
 
   return result

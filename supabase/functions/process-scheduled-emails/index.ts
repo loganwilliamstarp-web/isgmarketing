@@ -1220,8 +1220,10 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
 
   let result = content
   for (const [field, value] of Object.entries(mergeFields)) {
-    // Case-insensitive replacement
-    result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value)
+    // Case-insensitive replacement - handle spaces inside braces like {{ field }}
+    const fieldName = field.slice(2, -2) // Remove {{ and }}
+    const pattern = new RegExp(`\\{\\{\\s*${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'gi')
+    result = result.replace(pattern, value)
   }
 
   return result

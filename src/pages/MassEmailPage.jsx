@@ -119,6 +119,11 @@ const TemplateEditorModal = ({ template, onSave, onClose, theme: t }) => {
     { key: '{{policy_expiration}}', label: 'Expiration Date' },
     { key: '{{agent_name}}', label: 'Agent Name' },
     { key: '{{agent_phone}}', label: 'Agent Phone' },
+    { key: '{{rating_url_1}}', label: '1 Star Rating Link' },
+    { key: '{{rating_url_2}}', label: '2 Star Rating Link' },
+    { key: '{{rating_url_3}}', label: '3 Star Rating Link' },
+    { key: '{{rating_url_4}}', label: '4 Star Rating Link' },
+    { key: '{{rating_url_5}}', label: '5 Star Rating Link' },
   ];
 
   const insertMergeField = (field) => {
