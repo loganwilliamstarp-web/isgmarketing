@@ -12,7 +12,7 @@ export const senderDomainsService = {
    * @param {Object} body - Request body
    * @returns {Promise<Object>} Response from edge function
    */
-  async callEdgeFunction(action, body = {}) {
+  async callEdgeFunction(action, body = {}, authenticatedUserId = null) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       throw new Error('Not authenticated');
@@ -27,7 +27,7 @@ export const senderDomainsService = {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ ...body, authenticatedUserId })
       }
     );
 
@@ -42,10 +42,11 @@ export const senderDomainsService = {
   /**
    * Get all sender domains for a user
    * @param {string} targetOwnerId - Optional owner ID (for impersonation). If not provided, uses authenticated user.
+   * @param {string} authenticatedUserId - The current user's ID from AuthContext (user_unique_id)
    * @returns {Promise<Array>} List of sender domains
    */
-  async getAll(targetOwnerId = null) {
-    const result = await this.callEdgeFunction('list', { targetOwnerId });
+  async getAll(targetOwnerId = null, authenticatedUserId = null) {
+    const result = await this.callEdgeFunction('list', { targetOwnerId }, authenticatedUserId);
     return result.domains || [];
   },
 

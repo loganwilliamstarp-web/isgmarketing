@@ -67,22 +67,39 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Look up user in users table by email (since Supabase auth ID differs from user_unique_id)
-    // Get all records for this email, then prefer ones with agency admin access
-    const { data: userRecords } = await supabaseAdmin
-      .from('users')
-      .select('user_unique_id, marketing_cloud_agency_admin')
-      .eq('email', authenticatedEmail)
+    // Look up user in users table
+    // If frontend provided authenticatedUserId, use that (it already determined the correct record)
+    // Otherwise fall back to email lookup with preference for agency admin records
+    let userData = null
 
-    if (!userRecords || userRecords.length === 0) {
+    if (body.authenticatedUserId) {
+      // Frontend provided the user ID - look up by ID directly
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('user_unique_id, marketing_cloud_agency_admin')
+        .eq('user_unique_id', body.authenticatedUserId)
+        .single()
+      userData = data
+    }
+
+    if (!userData) {
+      // Fallback: look up by email, prefer agency admin records
+      const { data: userRecords } = await supabaseAdmin
+        .from('users')
+        .select('user_unique_id, marketing_cloud_agency_admin')
+        .eq('email', authenticatedEmail)
+
+      if (userRecords && userRecords.length > 0) {
+        userData = userRecords.find(r => r.marketing_cloud_agency_admin === true) || userRecords[0]
+      }
+    }
+
+    if (!userData) {
       return new Response(
         JSON.stringify({ error: 'User not found in users table' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-
-    // Prefer record with agency admin access, otherwise use first record
-    const userData = userRecords.find(r => r.marketing_cloud_agency_admin === true) || userRecords[0]
 
     const authenticatedUserId = userData.user_unique_id
     const isAdmin = userData.marketing_cloud_agency_admin === true

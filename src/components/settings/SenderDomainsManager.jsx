@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { senderDomainsService } from '../../services';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Status badge component
 const StatusBadge = ({ status, theme: t }) => {
@@ -693,6 +694,7 @@ const DomainDetailsPanel = ({ domain, onVerify, onDelete, onUpdate, isVerifying,
 
 // Main Component
 const SenderDomainsManager = ({ theme: t }) => {
+  const { user } = useAuth();
   const [domains, setDomains] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -703,13 +705,13 @@ const SenderDomainsManager = ({ theme: t }) => {
   // Load domains
   useEffect(() => {
     loadDomains();
-  }, []);
+  }, [user?.id]);
 
   const loadDomains = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await senderDomainsService.getAll();
+      const data = await senderDomainsService.getAll(null, user?.id);
       setDomains(data);
     } catch (err) {
       setError(err.message);
