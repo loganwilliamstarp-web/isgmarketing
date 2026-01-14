@@ -98,6 +98,28 @@ serve(async (req) => {
       dryRun
     }
 
+    console.log('[Validation] Starting validation run...')
+
+    // First check if the validation columns exist
+    const { data: testQuery, error: schemaError } = await supabaseClient
+      .from('accounts')
+      .select('account_unique_id, email_validation_status')
+      .limit(1)
+
+    if (schemaError) {
+      console.error('[Validation] Schema error - columns may not exist:', schemaError.message)
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Database schema error: ${schemaError.message}. Have you run the migration to add email_validation_status column?`,
+          ...results
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('[Validation] Schema check passed, querying accounts...')
+
     // Get accounts that need validation
     const expiryDate = new Date()
     expiryDate.setDate(expiryDate.getDate() - VALIDATION_EXPIRY_DAYS)
@@ -117,12 +139,15 @@ serve(async (req) => {
     const { data: accounts, error: fetchError } = await query
 
     if (fetchError) {
+      console.error('[Validation] Fetch error:', fetchError.message)
       results.errors.push(`Failed to fetch accounts: ${fetchError.message}`)
       return new Response(
         JSON.stringify({ success: false, ...results }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log(`[Validation] Found ${accounts?.length || 0} accounts to validate`)
 
     if (!accounts || accounts.length === 0) {
       return new Response(
