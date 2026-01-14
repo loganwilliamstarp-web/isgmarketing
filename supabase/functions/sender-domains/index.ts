@@ -44,7 +44,7 @@ serve(async (req) => {
       )
     }
 
-    const authenticatedUserId = user.id
+    const authenticatedEmail = user.email
 
     // Parse request
     const url = new URL(req.url)
@@ -67,14 +67,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Check if user is admin (can query other users' data)
+    // Look up user in users table by email (since Supabase auth ID differs from user_unique_id)
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('marketing_cloud_agency_admin')
-      .eq('user_unique_id', authenticatedUserId)
+      .select('user_unique_id, marketing_cloud_agency_admin')
+      .eq('email', authenticatedEmail)
+      .limit(1)
       .single()
 
-    const isAdmin = userData?.marketing_cloud_agency_admin === true
+    if (!userData) {
+      return new Response(
+        JSON.stringify({ error: 'User not found in users table' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const authenticatedUserId = userData.user_unique_id
+    const isAdmin = userData.marketing_cloud_agency_admin === true
 
     // For list and verified actions, allow admins to query a target user's domains
     // Otherwise, use the authenticated user's ID
