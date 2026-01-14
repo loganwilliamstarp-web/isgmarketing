@@ -68,19 +68,21 @@ serve(async (req) => {
     )
 
     // Look up user in users table by email (since Supabase auth ID differs from user_unique_id)
-    const { data: userData } = await supabaseAdmin
+    // Get all records for this email, then prefer ones with agency admin access
+    const { data: userRecords } = await supabaseAdmin
       .from('users')
       .select('user_unique_id, marketing_cloud_agency_admin')
       .eq('email', authenticatedEmail)
-      .limit(1)
-      .single()
 
-    if (!userData) {
+    if (!userRecords || userRecords.length === 0) {
       return new Response(
         JSON.stringify({ error: 'User not found in users table' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // Prefer record with agency admin access, otherwise use first record
+    const userData = userRecords.find(r => r.marketing_cloud_agency_admin === true) || userRecords[0]
 
     const authenticatedUserId = userData.user_unique_id
     const isAdmin = userData.marketing_cloud_agency_admin === true
