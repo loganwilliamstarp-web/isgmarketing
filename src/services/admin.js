@@ -248,17 +248,24 @@ export const adminService = {
    * If the master automation doesn't exist, create it first
    */
   async updateMasterAutomation(defaultKey, updates) {
+    console.log('updateMasterAutomation called with:', { defaultKey, updates });
+
     // First check if master automation exists (use maybeSingle to avoid error on 0 rows)
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('master_automations')
       .select('id')
       .eq('default_key', defaultKey)
       .maybeSingle();
 
+    console.log('Existence check result:', { existing, checkError });
+
+    if (checkError) throw checkError;
+
     let data;
     let error;
 
     if (existing) {
+      console.log('Updating existing master automation');
       // Update existing master automation
       const result = await supabase
         .from('master_automations')
@@ -267,12 +274,13 @@ export const adminService = {
           updated_at: new Date().toISOString()
         })
         .eq('default_key', defaultKey)
-        .select()
-        .single();
+        .select();
 
-      data = result.data;
+      console.log('Update result:', result);
+      data = result.data?.[0];
       error = result.error;
     } else {
+      console.log('Creating new master automation');
       // Create new master automation from the updates
       const result = await supabase
         .from('master_automations')
@@ -282,17 +290,20 @@ export const adminService = {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .select()
-        .single();
+        .select();
 
-      data = result.data;
+      console.log('Insert result:', result);
+      data = result.data?.[0];
       error = result.error;
     }
 
     if (error) throw error;
 
     // Explicitly sync to all users
-    await supabase.rpc('sync_master_automation_to_users', { p_default_key: defaultKey });
+    console.log('Syncing to users...');
+    const syncResult = await supabase.rpc('sync_master_automation_to_users', { p_default_key: defaultKey });
+    console.log('Sync result:', syncResult);
+    if (syncResult.error) throw syncResult.error;
 
     return data;
   },
