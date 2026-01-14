@@ -274,15 +274,18 @@ async function validateEmail(
 
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`[Validation] SendGrid API error ${response.status}: ${errorText}`)
 
-      // Check if it's a "not enabled" error
-      if (response.status === 403 || errorText.includes('not enabled')) {
-        console.warn('[Validation] SendGrid Email Validation API not enabled. Using fallback validation.')
+      // Check if it's a "not enabled" or permission error - fall back gracefully
+      if (response.status === 403 || response.status === 401 || errorText.includes('not enabled') || errorText.includes('authorization')) {
+        console.warn('[Validation] SendGrid Email Validation API not accessible. Using fallback validation.')
         return fallbackValidation(email)
       }
 
       throw new Error(`SendGrid API error: ${response.status} - ${errorText}`)
     }
+
+    console.log(`[Validation] SendGrid API success for ${email}`)
 
     const data: SendGridValidationResponse = await response.json()
     const result = data.result
