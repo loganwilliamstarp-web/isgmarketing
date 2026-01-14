@@ -93,7 +93,7 @@ serve(async (req) => {
 
     switch (action) {
       case 'list':
-        result = await listDomains(supabaseAdmin, ownerId)
+        result = await listDomains(supabaseAdmin, ownerId, authenticatedEmail, isAdmin)
         break
 
       case 'add':
@@ -153,7 +153,25 @@ serve(async (req) => {
 // Domain Management Functions
 // ============================================================================
 
-async function listDomains(supabase: any, ownerId: string) {
+async function listDomains(supabase: any, ownerId: string, userEmail: string, isAdmin: boolean) {
+  // For agency admins, show domains matching their email domain (agency-wide view)
+  // For regular users, show only domains they own
+  if (isAdmin && userEmail) {
+    const emailDomain = userEmail.split('@')[1]?.toLowerCase()
+    if (emailDomain) {
+      // Get domains that match the user's email domain (exact or subdomain)
+      const { data, error } = await supabase
+        .from('sender_domains')
+        .select('*')
+        .or(`domain.eq.${emailDomain},domain.ilike.%.${emailDomain}`)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return { domains: data || [] }
+    }
+  }
+
+  // Fallback: query by owner_id
   const { data, error } = await supabase
     .from('sender_domains')
     .select('*')
