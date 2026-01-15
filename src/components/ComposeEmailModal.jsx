@@ -93,6 +93,18 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
     }
   }, [selectedTemplate]);
 
+  // Group templates by category - must be before early return (hooks rule)
+  const templatesByCategory = useMemo(() => {
+    const groups = {};
+    templates.forEach(tmpl => {
+      const cat = tmpl.category || 'general';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(tmpl);
+    });
+    return groups;
+  }, [templates]);
+
+  // Early return must come after all hooks
   if (!isOpen) return null;
 
   const recipientEmail = account?.person_email || account?.email;
@@ -170,17 +182,6 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
     setSubject('');
     setBody('');
   };
-
-  // Group templates by category
-  const templatesByCategory = useMemo(() => {
-    const groups = {};
-    templates.forEach(tmpl => {
-      const cat = tmpl.category || 'general';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(tmpl);
-    });
-    return groups;
-  }, [templates]);
 
   const categoryLabels = {
     engagement: 'Engagement',
