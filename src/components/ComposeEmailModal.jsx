@@ -1,12 +1,46 @@
 // src/components/ComposeEmailModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { userSettingsService } from '../services/userSettings';
+import { templatesService } from '../services/templates';
+
+// Helper to strip HTML for plain text preview
+const htmlToPlainText = (html) => {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#9733;/g, '★')
+    .replace(/&#9734;/g, '☆')
+    .trim();
+};
+
+// Check if template has complex HTML (star ratings, tables, etc.)
+const hasComplexHtml = (html) => {
+  if (!html) return false;
+  return /<table/i.test(html) ||
+         /<div[^>]+style/i.test(html) ||
+         /\{\{\s*rating_url_/i.test(html);
+};
 
 const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending }) => {
   const [ownerSettings, setOwnerSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [useTemplate, setUseTemplate] = useState(false);
   const [error, setError] = useState(null);
 
   // Fetch settings for the account owner when modal opens
@@ -23,6 +57,19 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
         .finally(() => {
           setLoadingSettings(false);
         });
+
+      // Also fetch templates for this owner
+      setLoadingTemplates(true);
+      templatesService.getAll(account.owner_id)
+        .then(data => {
+          setTemplates(data || []);
+        })
+        .catch(err => {
+          console.error('Failed to load templates:', err);
+        })
+        .finally(() => {
+          setLoadingTemplates(false);
+        });
     }
   }, [isOpen, account?.owner_id]);
 
@@ -31,9 +78,20 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
     if (isOpen) {
       setSubject('');
       setBody('');
+      setSelectedTemplate(null);
+      setUseTemplate(false);
       setError(null);
     }
   }, [isOpen]);
+
+  // When a template is selected, populate subject and body
+  useEffect(() => {
+    if (selectedTemplate) {
+      setSubject(selectedTemplate.subject || '');
+      // For display in textarea, show plain text version
+      setBody(htmlToPlainText(selectedTemplate.body_html || selectedTemplate.body_text || ''));
+    }
+  }, [selectedTemplate]);
 
   if (!isOpen) return null;
 
@@ -41,6 +99,9 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
   const recipientName = account?.primary_contact_first_name
     ? `${account.primary_contact_first_name} ${account.primary_contact_last_name || ''}`.trim()
     : account?.name;
+
+  // Check if selected template has complex HTML that shouldn't be edited
+  const isComplexTemplate = selectedTemplate && hasComplexHtml(selectedTemplate.body_html);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,8 +112,13 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
       return;
     }
 
-    if (!body.trim()) {
+    if (!useTemplate && !body.trim()) {
       setError('Please enter a message');
+      return;
+    }
+
+    if (useTemplate && !selectedTemplate) {
+      setError('Please select a template');
       return;
     }
 
@@ -61,11 +127,20 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
       return;
     }
 
-    // Convert newlines to HTML paragraphs
-    const bodyHtml = body
-      .split('\n\n')
-      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
-      .join('');
+    let bodyHtml, bodyText;
+
+    if (useTemplate && selectedTemplate) {
+      // Use the original template HTML (preserves star ratings, tables, etc.)
+      bodyHtml = selectedTemplate.body_html;
+      bodyText = htmlToPlainText(bodyHtml);
+    } else {
+      // Convert newlines to HTML paragraphs for custom message
+      bodyHtml = body
+        .split('\n\n')
+        .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+      bodyText = body.trim();
+    }
 
     try {
       await onSend({
@@ -76,12 +151,44 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
         fromName: ownerSettings?.from_name,
         subject: subject.trim(),
         bodyHtml,
-        bodyText: body.trim()
+        bodyText
       });
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to send email');
     }
+  };
+
+  const handleTemplateSelect = (template) => {
+    setSelectedTemplate(template);
+    setUseTemplate(true);
+  };
+
+  const handleClearTemplate = () => {
+    setSelectedTemplate(null);
+    setUseTemplate(false);
+    setSubject('');
+    setBody('');
+  };
+
+  // Group templates by category
+  const templatesByCategory = useMemo(() => {
+    const groups = {};
+    templates.forEach(tmpl => {
+      const cat = tmpl.category || 'general';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(tmpl);
+    });
+    return groups;
+  }, [templates]);
+
+  const categoryLabels = {
+    engagement: 'Engagement',
+    welcome: 'Welcome',
+    renewal: 'Renewal',
+    cross_sell: 'Cross-Sell',
+    policy_update: 'Policy Update',
+    general: 'General'
   };
 
   return (
@@ -105,7 +212,7 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
           backgroundColor: t.bgCard,
           borderRadius: '12px',
           width: '100%',
-          maxWidth: '600px',
+          maxWidth: '700px',
           maxHeight: '90vh',
           overflow: 'auto',
           boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
@@ -181,6 +288,117 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
             </div>
           </div>
 
+          {/* Template Selection */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '13px', color: t.textSecondary, marginBottom: '6px' }}>
+              Template (Optional)
+            </label>
+
+            {selectedTemplate ? (
+              // Show selected template
+              <div
+                style={{
+                  padding: '12px',
+                  backgroundColor: `${t.primary}10`,
+                  border: `1px solid ${t.primary}40`,
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
+                    {selectedTemplate.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '2px' }}>
+                    {selectedTemplate.category && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 6px',
+                        backgroundColor: t.bgHover,
+                        borderRadius: '4px',
+                        marginRight: '8px',
+                        textTransform: 'capitalize'
+                      }}>
+                        {selectedTemplate.category.replace('_', ' ')}
+                      </span>
+                    )}
+                    {isComplexTemplate && (
+                      <span style={{ color: t.warning }}>
+                        Contains star rating
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearTemplate}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '6px',
+                    color: t.textSecondary,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              // Template dropdown
+              <div>
+                {loadingTemplates ? (
+                  <div style={{ padding: '10px', color: t.textMuted, fontSize: '14px' }}>
+                    Loading templates...
+                  </div>
+                ) : templates.length > 0 ? (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const tmpl = templates.find(t => t.id.toString() === e.target.value);
+                      if (tmpl) handleTemplateSelect(tmpl);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      backgroundColor: t.bg,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      color: t.text,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Write custom message...</option>
+                    {Object.entries(templatesByCategory).map(([category, tmplList]) => (
+                      <optgroup key={category} label={categoryLabels[category] || category}>
+                        {tmplList.map(tmpl => (
+                          <option key={tmpl.id} value={tmpl.id}>
+                            {tmpl.name}
+                            {hasComplexHtml(tmpl.body_html) ? ' (Star Rating)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{
+                    padding: '10px 12px',
+                    backgroundColor: t.bgHover,
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    color: t.textMuted
+                  }}>
+                    No templates available. Writing custom message.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Subject */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '13px', color: t.textSecondary, marginBottom: '6px' }}>
@@ -203,36 +421,70 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
                 boxSizing: 'border-box'
               }}
             />
+            {useTemplate && selectedTemplate && (
+              <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                Merge fields like {'{{first_name}}'} will be replaced with account data.
+              </p>
+            )}
           </div>
 
           {/* Body */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '13px', color: t.textSecondary, marginBottom: '6px' }}>
-              Message
+              Message {isComplexTemplate && <span style={{ color: t.warning }}>(Preview Only)</span>}
             </label>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Type your message..."
-              rows={10}
-              style={{
-                width: '100%',
-                padding: '12px',
-                backgroundColor: t.bg,
-                border: `1px solid ${t.border}`,
-                borderRadius: '8px',
-                fontSize: '14px',
-                color: t.text,
-                outline: 'none',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                lineHeight: '1.5',
-                boxSizing: 'border-box'
-              }}
-            />
-            <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
-              The account owner's email signature will be added automatically.
-            </p>
+
+            {isComplexTemplate ? (
+              // Read-only preview for complex templates
+              <div>
+                <div
+                  style={{
+                    padding: '12px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    color: t.text,
+                    lineHeight: '1.6',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: '200px',
+                    overflow: 'auto'
+                  }}
+                >
+                  {body || 'Template content preview...'}
+                </div>
+                <p style={{ fontSize: '11px', color: t.warning, marginTop: '4px' }}>
+                  This template contains special formatting (star ratings). The full HTML will be sent - edit in Templates page if needed.
+                </p>
+              </div>
+            ) : (
+              // Editable textarea for simple templates or custom messages
+              <div>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="Type your message..."
+                  rows={10}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: t.bg,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    color: t.text,
+                    outline: 'none',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: '1.5',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <p style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                  The account owner's email signature will be added automatically.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Error message */}

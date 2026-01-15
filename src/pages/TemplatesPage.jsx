@@ -35,6 +35,9 @@ const htmlToPlainText = (html) => {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    // Decode star symbols for star rating emails
+    .replace(/&#9733;/g, '★')
+    .replace(/&#9734;/g, '☆')
     .trim();
 };
 
@@ -42,6 +45,9 @@ const htmlToPlainText = (html) => {
 const plainTextToHtml = (text) => {
   if (!text) return '';
   return text
+    // Encode star symbols back to HTML entities before wrapping in HTML
+    .replace(/★/g, '&#9733;')
+    .replace(/☆/g, '&#9734;')
     .split('\n\n')
     .map(paragraph => paragraph.trim())
     .filter(paragraph => paragraph)
@@ -49,27 +55,57 @@ const plainTextToHtml = (text) => {
     .join('\n\n');
 };
 
+// Check if HTML content has complex structure that shouldn't be converted to plain text
+const hasComplexHtml = (html) => {
+  if (!html) return false;
+  // Check for tables, divs with styles, or specific merge fields that indicate complex templates
+  return /<table/i.test(html) ||
+         /<div[^>]+style/i.test(html) ||
+         /\{\{\s*rating_url_/i.test(html);
+};
+
 // Template editor modal
 const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
-  // Convert HTML to plain text for editing
-  const [body, setBody] = useState(htmlToPlainText(template?.body_html || template?.body_text || ''));
+
+  // Check if this template has complex HTML that needs to be preserved
+  const originalHtml = template?.body_html || '';
+  const isComplexTemplate = hasComplexHtml(originalHtml);
+
+  // For complex templates, allow editing raw HTML; for simple templates, use plain text
+  const [editMode, setEditMode] = useState(isComplexTemplate ? 'html' : 'text');
+  const [body, setBody] = useState(
+    isComplexTemplate
+      ? originalHtml
+      : htmlToPlainText(originalHtml || template?.body_text || '')
+  );
   const [category, setCategory] = useState(template?.category || 'general');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Convert plain text back to HTML when saving
-      const bodyHtml = plainTextToHtml(body);
-      console.log('Template save - body_text:', JSON.stringify(body));
-      console.log('Template save - body_html:', bodyHtml);
+      let bodyHtml, bodyText;
+
+      if (editMode === 'html') {
+        // In HTML mode, use the raw HTML as-is
+        bodyHtml = body;
+        bodyText = htmlToPlainText(body);
+      } else {
+        // In plain text mode, convert to HTML
+        bodyHtml = plainTextToHtml(body);
+        bodyText = body;
+      }
+
+      console.log('Template save - editMode:', editMode);
+      console.log('Template save - body_html:', bodyHtml.substring(0, 200) + '...');
+
       await onSave({
         name,
         subject,
         body_html: bodyHtml,
-        body_text: body, // Plain text version is what user typed
+        body_text: bodyText,
         category
       });
       onClose();
@@ -78,6 +114,21 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Switch between edit modes
+  const switchToHtmlMode = () => {
+    if (editMode === 'text') {
+      setBody(plainTextToHtml(body));
+    }
+    setEditMode('html');
+  };
+
+  const switchToTextMode = () => {
+    if (editMode === 'html') {
+      setBody(htmlToPlainText(body));
+    }
+    setEditMode('text');
   };
 
   // Available merge fields
@@ -234,13 +285,61 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
           </div>
 
           <div>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
-              Email Body
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                Email Body
+              </label>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={switchToTextMode}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: editMode === 'text' ? t.primary : t.bgHover,
+                    border: `1px solid ${editMode === 'text' ? t.primary : t.border}`,
+                    borderRadius: '6px',
+                    color: editMode === 'text' ? '#fff' : t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  Plain Text
+                </button>
+                <button
+                  onClick={switchToHtmlMode}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: editMode === 'html' ? t.primary : t.bgHover,
+                    border: `1px solid ${editMode === 'html' ? t.primary : t.border}`,
+                    borderRadius: '6px',
+                    color: editMode === 'html' ? '#fff' : t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  HTML
+                </button>
+              </div>
+            </div>
+            {isComplexTemplate && editMode === 'html' && (
+              <div style={{
+                padding: '8px 12px',
+                marginBottom: '8px',
+                backgroundColor: `${t.warning}15`,
+                border: `1px solid ${t.warning}30`,
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: t.text
+              }}>
+                This template has special HTML formatting (star ratings, tables). Edit carefully to preserve the structure.
+              </div>
+            )}
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your email content here. Use merge fields like {{first_name}} for personalization."
+              placeholder={editMode === 'html'
+                ? "Enter HTML content here. Use merge fields like {{first_name}} for personalization."
+                : "Write your email content here. Use merge fields like {{first_name}} for personalization."
+              }
               rows={12}
               style={{
                 width: '100%',
@@ -249,9 +348,9 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
                 border: `1px solid ${t.border}`,
                 borderRadius: '8px',
                 color: t.text,
-                fontSize: '14px',
+                fontSize: editMode === 'html' ? '13px' : '14px',
                 resize: 'vertical',
-                fontFamily: 'inherit',
+                fontFamily: editMode === 'html' ? 'monospace' : 'inherit',
                 lineHeight: '1.6'
               }}
             />
