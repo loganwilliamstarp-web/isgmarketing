@@ -21,3 +21,11 @@ verify_jwt = false
 # Email validation - called by pg_cron daily
 [functions.validate-emails]
 verify_jwt = false
+
+# Star rating - called from email links (no auth)
+[functions.star-rating]
+verify_jwt = false
+
+# Submit feedback - called from star-rating thank you page
+[functions.submit-feedback]
+verify_jwt = false

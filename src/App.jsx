@@ -24,6 +24,7 @@ const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
 const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -798,6 +799,13 @@ const App = () => {
             <Route path="/oauth-callback" element={
               <Suspense fallback={<div>Loading...</div>}>
                 <OAuthCallbackPage />
+              </Suspense>
+            } />
+
+            {/* Public feedback page - accessed from star rating emails */}
+            <Route path="/feedback" element={
+              <Suspense fallback={<div>Loading...</div>}>
+                <FeedbackPage />
               </Suspense>
             } />
 
