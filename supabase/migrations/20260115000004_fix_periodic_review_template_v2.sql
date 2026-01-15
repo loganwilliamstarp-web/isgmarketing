@@ -43,27 +43,27 @@ SET
               <tr>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_1}}" style="text-decoration: none; display: inline-block;" title="1 Star">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_2}}" style="text-decoration: none; display: inline-block;" title="2 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_3}}" style="text-decoration: none; display: inline-block;" title="3 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_4}}" style="text-decoration: none; display: inline-block;" title="4 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_5}}" style="text-decoration: none; display: inline-block;" title="5 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
               </tr>
@@ -138,27 +138,27 @@ SET
               <tr>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_1}}" style="text-decoration: none; display: inline-block;" title="1 Star">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_2}}" style="text-decoration: none; display: inline-block;" title="2 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_3}}" style="text-decoration: none; display: inline-block;" title="3 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_4}}" style="text-decoration: none; display: inline-block;" title="4 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
                 <td style="padding: 0 6px;">
                   <a href="{{rating_url_5}}" style="text-decoration: none; display: inline-block;" title="5 Stars">
-                    <span style="font-size: 42px; color: #14b8a6; line-height: 1;">&#9733;</span>
+                    <span style="font-size: 42px; color: #6b7280; line-height: 1;">&#9733;</span>
                   </a>
                 </td>
               </tr>
