@@ -2,9 +2,11 @@
 // Public page for star rating thank-you and feedback collection
 // Accessed via redirect from star-rating edge function
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+
+// Supabase URL for direct function calls (public, no auth required)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 const FeedbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -85,15 +87,24 @@ const FeedbackPage = () => {
     setError(null);
 
     try {
-      const { error: submitError } = await supabase.functions.invoke('submit-feedback', {
-        body: {
+      // Call the edge function directly via fetch (no auth required)
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           emailLogId,
           accountId,
           feedback: feedback.trim()
-        }
+        })
       });
 
-      if (submitError) throw submitError;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to submit');
+      }
+
       setSubmitted(true);
     } catch (err) {
       console.error('Failed to submit feedback:', err);
