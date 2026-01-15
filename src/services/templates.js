@@ -6,9 +6,14 @@ export const templatesService = {
   /**
    * Get all templates for a user
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Query options
+   * @param {string} options.category - Filter by category
+   * @param {boolean} options.isDefault - Filter by default status
+   * @param {string} options.search - Search in name/subject
+   * @param {boolean} options.includeOwnerInfo - Include owner name/email for grouping (agency admin view)
    */
   async getAll(ownerIds, options = {}) {
-    const { category, isDefault, search } = options;
+    const { category, isDefault, search, includeOwnerInfo = false } = options;
 
     let query = supabase
       .from('email_templates')
@@ -16,21 +21,46 @@ export const templatesService = {
       .order('is_default', { ascending: false })
       .order('name');
     query = applyOwnerFilter(query, ownerIds);
-    
+
     if (category) {
       query = query.eq('category', category);
     }
-    
+
     if (typeof isDefault === 'boolean') {
       query = query.eq('is_default', isDefault);
     }
-    
+
     if (search) {
       query = query.or(`name.ilike.%${search}%,subject.ilike.%${search}%`);
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
+
+    // If we need owner info (for agency admin grouped view), fetch user details
+    if (includeOwnerInfo && data && data.length > 0) {
+      const uniqueOwnerIds = [...new Set(data.map(t => t.owner_id))];
+      const { data: owners, error: ownerError } = await supabase
+        .from('users')
+        .select('user_unique_id, first_name, last_name, email')
+        .in('user_unique_id', uniqueOwnerIds);
+
+      if (ownerError) throw ownerError;
+
+      const ownerMap = {};
+      owners.forEach(owner => {
+        ownerMap[owner.user_unique_id] = {
+          ownerName: `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || owner.email,
+          ownerEmail: owner.email
+        };
+      });
+
+      return data.map(t => ({
+        ...t,
+        ...(ownerMap[t.owner_id] || {})
+      }));
+    }
+
     return data;
   },
 

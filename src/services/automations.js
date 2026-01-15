@@ -41,8 +41,12 @@ export const automationsService = {
   /**
    * Get all automations with enrollment stats
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {Object} options - Optional settings
+   * @param {boolean} options.includeOwnerInfo - Include owner name/email for grouping (agency admin view)
    */
-  async getAllWithStats(ownerIds) {
+  async getAllWithStats(ownerIds, options = {}) {
+    const { includeOwnerInfo = false } = options;
+
     let query = supabase
       .from('automations')
       .select('*')
@@ -50,17 +54,17 @@ export const automationsService = {
       .order('name');
     query = applyOwnerFilter(query, ownerIds);
     const { data: automations, error } = await query;
-    
+
     if (error) throw error;
 
     // Get enrollment counts for each automation
     const automationIds = automations.map(a => a.id);
-    
+
     const { data: enrollmentCounts, error: countError } = await supabase
       .from('automation_enrollments')
       .select('automation_id, status')
       .in('automation_id', automationIds);
-    
+
     if (countError) throw countError;
 
     // Calculate stats per automation
@@ -73,9 +77,29 @@ export const automationsService = {
       statsMap[e.automation_id][e.status.toLowerCase()]++;
     });
 
+    // If we need owner info (for agency admin grouped view), fetch user details
+    let ownerMap = {};
+    if (includeOwnerInfo && automations.length > 0) {
+      const uniqueOwnerIds = [...new Set(automations.map(a => a.owner_id))];
+      const { data: owners, error: ownerError } = await supabase
+        .from('users')
+        .select('user_unique_id, first_name, last_name, email')
+        .in('user_unique_id', uniqueOwnerIds);
+
+      if (ownerError) throw ownerError;
+
+      owners.forEach(owner => {
+        ownerMap[owner.user_unique_id] = {
+          ownerName: `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || owner.email,
+          ownerEmail: owner.email
+        };
+      });
+    }
+
     return automations.map(a => ({
       ...a,
-      enrollmentStats: statsMap[a.id] || { total: 0, active: 0, completed: 0, exited: 0 }
+      enrollmentStats: statsMap[a.id] || { total: 0, active: 0, completed: 0, exited: 0 },
+      ...(includeOwnerInfo && ownerMap[a.owner_id] ? ownerMap[a.owner_id] : {})
     }));
   },
 

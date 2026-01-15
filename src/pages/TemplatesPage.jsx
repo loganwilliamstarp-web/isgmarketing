@@ -8,6 +8,7 @@ import {
 } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterTemplates, useMasterTemplateMutations } from '../hooks/useAdmin';
+import CollapsibleAgentSection, { AgentGroupControls, groupItemsByOwner } from '../components/CollapsibleAgentSection';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -839,11 +840,14 @@ const TemplatesPage = ({ t }) => {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [syncingKey, setSyncingKey] = useState(null);
+  const [expandAllTrigger, setExpandAllTrigger] = useState(null); // null, 'expand', or 'collapse'
 
   // Check if admin is viewing multiple users (master view mode)
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAgencyAdmin, user } = useAuth();
   const { isMultiOwner } = useEffectiveOwner();
   const showMasterView = isAdmin && isMultiOwner;
+  // Agency admin viewing all agents gets grouped view
+  const showAgencyGroupedView = !isAdmin && isAgencyAdmin && isMultiOwner;
 
   // Fetch master templates (for admin master view)
   const {
@@ -852,8 +856,8 @@ const TemplatesPage = ({ t }) => {
     error: masterError
   } = useMasterTemplates();
 
-  // Fetch user templates
-  const { data: templates, isLoading, error } = useTemplates();
+  // Fetch user templates (include owner info for agency admin grouped view)
+  const { data: templates, isLoading, error } = useTemplates({ includeOwnerInfo: showAgencyGroupedView });
   const { data: categories } = useTemplateCategories();
 
   // Mutations for user templates
@@ -1137,6 +1141,218 @@ const TemplatesPage = ({ t }) => {
             onClose={() => setShowCreateModal(false)}
             theme={t}
             isSubmitting={createMasterTemplate.isPending}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // AGENCY ADMIN GROUPED VIEW - Agency admin viewing all agents
+  if (showAgencyGroupedView) {
+    // Group templates by owner
+    const agentGroups = groupItemsByOwner(templates || [], user?.id);
+
+    // Apply filters to grouped templates
+    const filteredAgentGroups = agentGroups.map(group => ({
+      ...group,
+      items: group.items.filter(tmpl => {
+        if (categoryFilter !== 'all' && tmpl.category !== categoryFilter) return false;
+        if (searchQuery && !tmpl.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            !tmpl.subject.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        return true;
+      })
+    })).filter(group => group.items.length > 0);
+
+    const totalFilteredTemplates = filteredAgentGroups.reduce((sum, g) => sum + g.items.length, 0);
+
+    // Handle expand/collapse all
+    const handleExpandAll = () => {
+      setExpandAllTrigger('expand');
+      setTimeout(() => setExpandAllTrigger(null), 100);
+    };
+
+    const handleCollapseAll = () => {
+      setExpandAllTrigger('collapse');
+      setTimeout(() => setExpandAllTrigger(null), 100);
+    };
+
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
+              Email Templates
+            </h1>
+            <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
+              View and manage email templates for all agents in your agency
+            </p>
+          </div>
+        </div>
+
+        {/* Error state */}
+        {error && (
+          <div style={{
+            padding: '16px',
+            backgroundColor: `${t.danger}15`,
+            border: `1px solid ${t.danger}30`,
+            borderRadius: '8px',
+            marginBottom: '24px',
+            color: t.danger,
+            fontSize: '14px'
+          }}>
+            Failed to load templates. Please try refreshing the page.
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          marginBottom: '24px',
+          alignItems: 'center'
+        }}>
+          {/* Search */}
+          <div style={{ position: 'relative', flex: 1, maxWidth: '300px' }}>
+            <input
+              type="text"
+              placeholder="Search templates..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px 10px 36px',
+                backgroundColor: t.bgInput,
+                border: `1px solid ${t.border}`,
+                borderRadius: '8px',
+                color: t.text,
+                fontSize: '14px'
+              }}
+            />
+            <span style={{
+              position: 'absolute',
+              left: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: t.textMuted
+            }}>
+              🔍
+            </span>
+          </div>
+
+          {/* Category filter */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            style={{
+              padding: '10px 12px',
+              backgroundColor: t.bgInput,
+              border: `1px solid ${t.border}`,
+              borderRadius: '8px',
+              color: t.text,
+              fontSize: '14px',
+              minWidth: '150px'
+            }}
+          >
+            <option value="all">All Categories</option>
+            <option value="welcome">Welcome</option>
+            <option value="renewal">Renewal</option>
+            <option value="cross_sell">Cross-Sell</option>
+            <option value="engagement">Engagement</option>
+            <option value="policy_update">Policy Update</option>
+            <option value="general">General</option>
+          </select>
+
+          {/* Stats */}
+          <span style={{ fontSize: '13px', color: t.textMuted }}>
+            {totalFilteredTemplates} template{totalFilteredTemplates !== 1 ? 's' : ''} across {filteredAgentGroups.length} agent{filteredAgentGroups.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Expand/Collapse Controls */}
+        {!isLoading && filteredAgentGroups.length > 0 && (
+          <AgentGroupControls
+            onExpandAll={handleExpandAll}
+            onCollapseAll={handleCollapseAll}
+            theme={t}
+          />
+        )}
+
+        {/* Loading State */}
+        {isLoading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{
+                padding: '20px',
+                backgroundColor: t.bgCard,
+                borderRadius: '12px',
+                border: `1px solid ${t.border}`
+              }}>
+                <Skeleton width="80px" height="20px" />
+                <div style={{ marginTop: '12px' }}><Skeleton width="180px" height="18px" /></div>
+                <div style={{ marginTop: '8px' }}><Skeleton width="220px" height="14px" /></div>
+                <div style={{ marginTop: '8px' }}><Skeleton height="40px" /></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Agent Groups */}
+        {!isLoading && filteredAgentGroups.length > 0 && filteredAgentGroups.map((group) => (
+          <CollapsibleAgentSection
+            key={group.agentId}
+            agentId={group.agentId}
+            agentName={group.agentName}
+            agentEmail={group.agentEmail}
+            itemCount={group.items.length}
+            isCurrentUser={group.agentId === user?.id}
+            forceExpanded={expandAllTrigger === 'expand'}
+            forceCollapsed={expandAllTrigger === 'collapse'}
+            theme={t}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', padding: '16px' }}>
+              {group.items.map((template) => (
+                <TemplateCard
+                  key={template.id}
+                  template={template}
+                  onEdit={handleEditTemplate}
+                  onDuplicate={handleDuplicateTemplate}
+                  onDelete={handleDeleteTemplate}
+                  theme={t}
+                />
+              ))}
+            </div>
+          </CollapsibleAgentSection>
+        ))}
+
+        {/* Empty State */}
+        {!isLoading && filteredAgentGroups.length === 0 && (
+          <div style={{
+            padding: '60px 20px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
+              {searchQuery || categoryFilter !== 'all' ? 'No templates found' : 'No templates yet'}
+            </h3>
+            <p style={{ fontSize: '14px', color: t.textSecondary }}>
+              {searchQuery || categoryFilter !== 'all'
+                ? 'Try adjusting your search or filter criteria.'
+                : 'No templates have been created by agents in your agency yet.'
+              }
+            </p>
+          </div>
+        )}
+
+        {/* Template Editor Modal */}
+        {editorOpen && (
+          <TemplateEditor
+            template={editingTemplate}
+            onSave={handleSaveTemplate}
+            onClose={() => setEditorOpen(false)}
+            theme={t}
           />
         )}
       </div>

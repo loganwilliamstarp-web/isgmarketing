@@ -18,13 +18,16 @@ export function useAutomations(options = {}) {
 
 /**
  * Get all automations with enrollment stats
+ * @param {Object} options - Query options
+ * @param {boolean} options.includeOwnerInfo - Include owner name/email for grouping (agency admin view)
  */
-export function useAutomationsWithStats() {
+export function useAutomationsWithStats(options = {}) {
   const { ownerIds, filterKey } = useEffectiveOwner();
+  const { includeOwnerInfo = false } = options;
 
   return useQuery({
-    queryKey: ['automations', filterKey, 'withStats'],
-    queryFn: () => automationsService.getAllWithStats(ownerIds),
+    queryKey: ['automations', filterKey, 'withStats', { includeOwnerInfo }],
+    queryFn: () => automationsService.getAllWithStats(ownerIds, { includeOwnerInfo }),
     enabled: ownerIds.length > 0
   });
 }

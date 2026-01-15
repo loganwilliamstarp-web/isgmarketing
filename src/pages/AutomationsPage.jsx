@@ -8,6 +8,7 @@ import {
 } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterAutomations, useMasterAutomationMutations } from '../hooks/useAdmin';
+import CollapsibleAgentSection, { AgentGroupControls, groupItemsByOwner } from '../components/CollapsibleAgentSection';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -494,11 +495,14 @@ const AutomationsPage = ({ t }) => {
   const [tab, setTab] = useState('automations');
   const [syncingKey, setSyncingKey] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [expandAllTrigger, setExpandAllTrigger] = useState(null); // null, 'expand', or 'collapse'
 
   // Check if admin is viewing multiple users (master view mode)
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAgencyAdmin, user } = useAuth();
   const { isMultiOwner } = useEffectiveOwner();
   const showMasterView = isAdmin && isMultiOwner;
+  // Agency admin viewing all agents gets grouped view
+  const showAgencyGroupedView = !isAdmin && isAgencyAdmin && isMultiOwner;
 
   // Check for verified sender domains (only needed for user view)
   const { data: verifiedDomains, isLoading: loadingDomains } = useVerifiedSenderDomains();
@@ -512,11 +516,12 @@ const AutomationsPage = ({ t }) => {
   } = useMasterAutomations();
 
   // Fetch user automations with stats (for user view)
+  // Include owner info when agency admin is viewing all agents (for grouping)
   const {
     data: automations,
     isLoading,
     error
-  } = useAutomationsWithStats();
+  } = useAutomationsWithStats({ includeOwnerInfo: showAgencyGroupedView });
 
   // Mutations for user automations
   const {
@@ -734,6 +739,199 @@ const AutomationsPage = ({ t }) => {
             </h3>
             <p style={{ fontSize: '14px', color: t.textSecondary }}>
               Master automations will appear here when configured.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // AGENCY ADMIN GROUPED VIEW - Agency admin viewing all agents
+  if (showAgencyGroupedView) {
+    // Group automations by owner
+    const agentGroups = groupItemsByOwner(automations || [], user?.id);
+
+    // Handle expand/collapse all
+    const handleExpandAll = () => {
+      setExpandAllTrigger('expand');
+      // Reset trigger after a tick
+      setTimeout(() => setExpandAllTrigger(null), 100);
+    };
+
+    const handleCollapseAll = () => {
+      setExpandAllTrigger('collapse');
+      // Reset trigger after a tick
+      setTimeout(() => setExpandAllTrigger(null), 100);
+    };
+
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
+              Automations
+            </h1>
+            <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
+              View and manage automations for all agents in your agency
+            </p>
+          </div>
+        </div>
+
+        {/* Error state */}
+        {error && (
+          <div style={{
+            padding: '16px',
+            backgroundColor: `${t.danger}15`,
+            border: `1px solid ${t.danger}30`,
+            borderRadius: '8px',
+            marginBottom: '24px',
+            color: t.danger,
+            fontSize: '14px'
+          }}>
+            Failed to load automations. Please try refreshing the page.
+          </div>
+        )}
+
+        {/* Quick Stats */}
+        {!isLoading && automations && (
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`
+          }}>
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: t.success }}>{activeAutomations.length}</div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>Active</div>
+            </div>
+            <div style={{ width: '1px', backgroundColor: t.border }} />
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: t.warning }}>{pausedAutomations.length}</div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>Paused</div>
+            </div>
+            <div style={{ width: '1px', backgroundColor: t.border }} />
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: t.textMuted }}>{draftAutomations.length}</div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>Drafts</div>
+            </div>
+            <div style={{ width: '1px', backgroundColor: t.border }} />
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: t.textMuted }}>{agentGroups.length}</div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>Agents</div>
+            </div>
+            <div style={{ width: '1px', backgroundColor: t.border }} />
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: t.primary }}>
+                {automations.reduce((sum, a) => sum + (a.stats?.totalSent || 0), 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '12px', color: t.textSecondary }}>Total Sent</div>
+            </div>
+          </div>
+        )}
+
+        {/* Expand/Collapse Controls */}
+        {!isLoading && agentGroups.length > 0 && (
+          <AgentGroupControls
+            onExpandAll={handleExpandAll}
+            onCollapseAll={handleCollapseAll}
+            theme={t}
+          />
+        )}
+
+        {/* Loading State */}
+        {isLoading && (
+          <div style={{
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            padding: '20px'
+          }}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} style={{ display: 'flex', gap: '16px', padding: '16px 0', borderTop: i > 0 ? `1px solid ${t.border}` : 'none' }}>
+                <Skeleton width="36px" height="36px" />
+                <div style={{ flex: 1 }}>
+                  <Skeleton width="200px" height="16px" />
+                  <div style={{ marginTop: '8px' }}><Skeleton width="120px" height="12px" /></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Agent Groups */}
+        {!isLoading && agentGroups.length > 0 && agentGroups.map((group) => (
+          <CollapsibleAgentSection
+            key={group.agentId}
+            agentId={group.agentId}
+            agentName={group.agentName}
+            agentEmail={group.agentEmail}
+            itemCount={group.items.length}
+            isCurrentUser={group.agentId === user?.id}
+            forceExpanded={expandAllTrigger === 'expand'}
+            forceCollapsed={expandAllTrigger === 'collapse'}
+            theme={t}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: t.bgHover }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Automation
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Status
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Sent
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Open Rate
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Click Rate
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Enrolled
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: t.textSecondary }}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.items.map((automation) => (
+                  <AutomationRow
+                    key={automation.id}
+                    automation={automation}
+                    onEdit={handleEditAutomation}
+                    onToggle={handleToggleAutomation}
+                    onDelete={handleDeleteAutomation}
+                    hasVerifiedDomain={hasVerifiedDomain}
+                    theme={t}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </CollapsibleAgentSection>
+        ))}
+
+        {/* Empty State */}
+        {!isLoading && agentGroups.length === 0 && (
+          <div style={{
+            padding: '60px 20px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
+              No automations found
+            </h3>
+            <p style={{ fontSize: '14px', color: t.textSecondary }}>
+              No automations have been created by agents in your agency yet.
             </p>
           </div>
         )}
