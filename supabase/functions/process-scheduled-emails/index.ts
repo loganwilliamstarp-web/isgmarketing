@@ -374,7 +374,7 @@ async function runDailyRefresh(
             const template = templateMap[emailStep.templateId] || {}
 
             newEmails.push({
-              owner_id: account.owner_id,
+              owner_id: automation.owner_id,
               automation_id: automation.id,
               account_id: account.account_unique_id,
               template_id: emailStep.templateId,
@@ -474,7 +474,7 @@ async function runDailyRefresh(
                 const template = templateMap[emailStep.templateId] || {}
 
                 newEmails.push({
-                  owner_id: account.owner_id,
+                  owner_id: automation.owner_id,
                   automation_id: automation.id,
                   account_id: account.account_unique_id,
                   template_id: emailStep.templateId,

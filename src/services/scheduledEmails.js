@@ -380,11 +380,10 @@ export const scheduledEmailsService = {
   /**
    * Send a direct email immediately (not from automation)
    * Creates a scheduled email and sends it right away
-   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (used for permission check)
    * @param {Object} emailData - Email data including to_email, to_name, subject, body, etc.
    */
   async sendDirectEmail(ownerIds, emailData) {
-    const ownerId = getFirstOwnerId(ownerIds);
     const {
       accountId,
       toEmail,
@@ -396,11 +395,26 @@ export const scheduledEmailsService = {
       bodyText
     } = emailData;
 
+    // Look up the account's actual owner_id for correct attribution
+    // This ensures Google review links and other owner-specific settings work correctly
+    let actualOwnerId = getFirstOwnerId(ownerIds);
+    if (accountId) {
+      const { data: account } = await supabase
+        .from('accounts')
+        .select('owner_id')
+        .eq('account_unique_id', accountId)
+        .single();
+
+      if (account?.owner_id) {
+        actualOwnerId = account.owner_id;
+      }
+    }
+
     // Create a scheduled email with immediate send
     const { data: scheduledEmail, error: createError } = await supabase
       .from('scheduled_emails')
       .insert({
-        owner_id: ownerId,
+        owner_id: actualOwnerId,
         account_id: accountId,
         to_email: toEmail,
         to_name: toName || '',

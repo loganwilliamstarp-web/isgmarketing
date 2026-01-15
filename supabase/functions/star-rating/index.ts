@@ -59,11 +59,19 @@ serve(async (req) => {
     }
 
     // Get user settings for Google review link and min stars threshold
-    const { data: userSettings } = await supabaseClient
+    const { data: userSettings, error: settingsError } = await supabaseClient
       .from('user_settings')
       .select('google_review_link, google_review_min_stars')
       .eq('user_id', emailLog.owner_id)
       .single()
+
+    console.log('Star rating debug:', {
+      emailLogId,
+      rating,
+      owner_id: emailLog.owner_id,
+      userSettings,
+      settingsError: settingsError?.message
+    })
 
     const googleReviewLink = userSettings?.google_review_link || ''
     const minStarsForReview = userSettings?.google_review_min_stars || 5 // Default to 5 stars only
