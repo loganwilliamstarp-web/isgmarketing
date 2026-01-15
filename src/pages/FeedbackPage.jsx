@@ -5,8 +5,9 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-// Supabase URL for direct function calls (public, no auth required)
+// Supabase config for direct function calls (public, no auth required)
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const FeedbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -87,11 +88,12 @@ const FeedbackPage = () => {
     setError(null);
 
     try {
-      // Call the edge function directly via fetch (no auth required)
+      // Call the edge function directly via fetch (requires apikey header)
       const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-feedback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           emailLogId,
