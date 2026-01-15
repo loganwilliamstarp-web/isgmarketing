@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
  * @param {string} props.agentName - The agent's display name
  * @param {string} props.agentEmail - The agent's email (optional, for display)
  * @param {number} props.itemCount - Number of items in this section
+ * @param {number} props.activeCount - Number of active items (shown as green badge if >= 1)
  * @param {boolean} props.isCurrentUser - Whether this is the current logged-in user's section
  * @param {boolean} props.defaultExpanded - Whether to start expanded (defaults to false unless isCurrentUser)
  * @param {boolean} props.forceExpanded - External control to force expanded state (for Expand All)
@@ -22,6 +23,7 @@ const CollapsibleAgentSection = ({
   agentName,
   agentEmail,
   itemCount,
+  activeCount = 0,
   isCurrentUser = false,
   defaultExpanded,
   forceExpanded,
@@ -157,6 +159,27 @@ const CollapsibleAgentSection = ({
             </div>
           )}
         </div>
+
+        {/* Active Count Badge (green) */}
+        {activeCount >= 1 && (
+          <div
+            style={{
+              padding: '4px 10px',
+              backgroundColor: `${t.success}15`,
+              borderRadius: '20px',
+              fontSize: '13px',
+              color: t.success,
+              fontWeight: '600',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <span style={{ fontSize: '8px' }}>●</span>
+            {activeCount} active
+          </div>
+        )}
 
         {/* Item Count Badge */}
         <div

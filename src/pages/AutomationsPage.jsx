@@ -869,6 +869,7 @@ const AutomationsPage = ({ t }) => {
             agentName={group.agentName}
             agentEmail={group.agentEmail}
             itemCount={group.items.length}
+            activeCount={group.items.filter(a => a.status === 'active').length}
             isCurrentUser={group.agentId === user?.id}
             forceExpanded={expandAllTrigger === 'expand'}
             forceCollapsed={expandAllTrigger === 'collapse'}
