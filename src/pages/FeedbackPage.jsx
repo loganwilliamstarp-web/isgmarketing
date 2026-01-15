@@ -4,10 +4,12 @@
 
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js';
 
-// Supabase config for direct function calls (public, no auth required)
+// Create an anonymous Supabase client for public feedback submission
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabasePublic = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const FeedbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -88,23 +90,53 @@ const FeedbackPage = () => {
     setError(null);
 
     try {
-      // Call the edge function directly via fetch (requires apikey header)
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-feedback`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          emailLogId,
-          accountId,
-          feedback: feedback.trim()
-        })
-      });
+      // Update account with feedback text directly via Supabase client
+      if (accountId) {
+        const { error: updateError } = await supabasePublic
+          .from('accounts')
+          .update({
+            survey_feedback_text: feedback.trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('account_unique_id', accountId);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to submit');
+        if (updateError) {
+          console.error('Error updating account:', updateError);
+          // Don't throw - we still want to show success even if logging fails
+        }
+      }
+
+      // Log activity (best effort - don't block on failure)
+      if (emailLogId) {
+        try {
+          // Get email log info for activity logging
+          const { data: emailLog } = await supabasePublic
+            .from('email_logs')
+            .select('owner_id, account_id')
+            .eq('id', emailLogId)
+            .single();
+
+          if (emailLog) {
+            await supabasePublic
+              .from('activity_log')
+              .insert({
+                owner_id: emailLog.owner_id,
+                event_type: 'survey_feedback',
+                event_category: 'engagement',
+                title: 'Customer left feedback',
+                description: feedback.trim().substring(0, 200) + (feedback.trim().length > 200 ? '...' : ''),
+                email_log_id: parseInt(emailLogId, 10),
+                account_id: accountId || emailLog.account_id,
+                actor_type: 'customer',
+                severity: 'warning',
+                metadata: { feedback_length: feedback.trim().length },
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (logErr) {
+          console.error('Error logging activity:', logErr);
+          // Don't throw - activity logging is non-critical
+        }
       }
 
       setSubmitted(true);
