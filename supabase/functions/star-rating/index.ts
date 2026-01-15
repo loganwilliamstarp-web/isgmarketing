@@ -12,7 +12,7 @@ const corsHeaders = {
 }
 
 // App URL for redirects (feedback page is hosted on the main app)
-const APP_URL = Deno.env.get('APP_URL') || 'https://app.isgmarketing.com'
+const APP_URL = Deno.env.get('APP_URL') || 'https://isgmarketing-production.up.railway.app'
 
 serve(async (req) => {
   // Handle CORS preflight
