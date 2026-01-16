@@ -82,6 +82,7 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
   );
   const [category, setCategory] = useState(template?.category || 'general');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -145,6 +146,14 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
 
   const insertMergeField = (field) => {
     setBody(body + field);
+  };
+
+  // Get HTML content for preview
+  const getPreviewHtml = () => {
+    if (editMode === 'html') {
+      return body;
+    }
+    return plainTextToHtml(body);
   };
 
   return (
@@ -318,6 +327,21 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
                 >
                   HTML
                 </button>
+                <button
+                  onClick={() => setShowPreview(true)}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: t.bgHover,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '6px',
+                    color: t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    marginLeft: '8px'
+                  }}
+                >
+                  Preview
+                </button>
               </div>
             </div>
             {isComplexTemplate && editMode === 'html' && (
@@ -398,6 +422,105 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
           </button>
         </div>
       </div>
+
+      {/* HTML Preview Modal */}
+      {showPreview && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 200 }}
+            onClick={() => setShowPreview(false)}
+          />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '700px',
+            maxHeight: '85vh',
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            zIndex: 201,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            {/* Preview Header */}
+            <div style={{
+              padding: '14px 20px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#f9fafb'
+            }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#111827', margin: 0 }}>
+                Email Preview
+              </h3>
+              <button
+                onClick={() => setShowPreview(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  padding: '4px 8px',
+                  borderRadius: '4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Preview Content - iframe for isolated rendering */}
+            <div style={{ flex: 1, overflow: 'auto', backgroundColor: '#f3f4f6', padding: '20px' }}>
+              <div style={{
+                backgroundColor: '#fff',
+                borderRadius: '8px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                overflow: 'hidden'
+              }}>
+                <iframe
+                  srcDoc={getPreviewHtml()}
+                  title="Email Preview"
+                  style={{
+                    width: '100%',
+                    height: '500px',
+                    border: 'none'
+                  }}
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            </div>
+
+            {/* Preview Footer */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              backgroundColor: '#f9fafb'
+            }}>
+              <button
+                onClick={() => setShowPreview(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: t.primary,
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500'
+                }}
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 };
