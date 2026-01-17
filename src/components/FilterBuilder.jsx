@@ -457,6 +457,19 @@ export const FilterRule = ({ rule, index, onUpdate, onRemove, theme: t }) => {
               style={{ ...inputStyle, width: '160px' }}
             />
           )}
+
+          {field?.type === 'boolean' && (
+            <select
+              value={rule.value || ''}
+              onChange={(e) => onUpdate(index, { ...rule, value: e.target.value })}
+              style={selectStyle}
+            >
+              <option value="">Select value...</option>
+              {field.options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          )}
         </>
       )}
 
