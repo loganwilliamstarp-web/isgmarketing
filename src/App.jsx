@@ -25,6 +25,7 @@ const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -447,6 +448,7 @@ const AppLayout = () => {
   // Navigation items with proper URLs
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', path: `/${userId}/dashboard` },
+    { id: 'reports', label: 'Reports', icon: '📈', path: `/${userId}/reports` },
     { id: 'automations', label: 'Automations', icon: '⚡', path: `/${userId}/automations` },
     { id: 'templates', label: 'Templates', icon: '📝', path: `/${userId}/templates` },
     { id: 'mass-email', label: 'Mass Email', icon: '📧', path: `/${userId}/mass-email` },
@@ -706,6 +708,7 @@ const AppLayout = () => {
               <Suspense fallback={<PageLoader t={t} />}>
                 <Routes>
                   <Route path="dashboard" element={<DashboardPage t={t} />} />
+                  <Route path="reports" element={<ReportsPage t={t} />} />
                   <Route path="automations" element={<AutomationsPage t={t} />} />
                   <Route path="automations/new" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="automations/master/:defaultKey" element={<WorkflowBuilderPage t={t} />} />
