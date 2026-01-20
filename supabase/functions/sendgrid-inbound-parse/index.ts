@@ -936,7 +936,7 @@ async function injectIntoGmail(
 }
 
 // ============================================================================
-// MICROSOFT INJECTION - Use Graph API
+// MICROSOFT INJECTION - Use Graph API to create message in inbox
 // ============================================================================
 
 async function injectIntoMicrosoft(
@@ -944,39 +944,23 @@ async function injectIntoMicrosoft(
   params: InjectionParams
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    // Build message payload
-    // Note: Microsoft Graph API doesn't allow setting 'from' to external addresses
-    // (would require send-as permissions). Instead we:
-    // 1. Don't set 'from' (it will be blank/system)
-    // 2. Set 'replyTo' to the contact's actual email so replies go to them
-    // 3. Include sender info in the subject/body for clarity
-
     const fromName = params.fromName || params.fromEmail
     const contactEmail = params.originalRecipientEmail || params.fromEmail
 
-    // Prepend sender info to body so it's clear who the reply is from
-    const senderHeader = `<div style="padding: 10px; margin-bottom: 15px; border-left: 3px solid #4a90d9; background: #f5f8fa;">
-      <strong>Reply from:</strong> ${fromName} &lt;${contactEmail}&gt;
-    </div>`
-
-    const enhancedHtml = params.bodyHtml
-      ? `${senderHeader}${params.bodyHtml}`
-      : `${senderHeader}<pre style="white-space: pre-wrap;">${params.bodyText || ''}</pre>`
-
-    const messagePayload: Record<string, any> = {
+    // Build message payload with isDraft explicitly set to false
+    const messagePayload = {
       subject: params.subject,
       body: {
         contentType: 'HTML',
-        content: enhancedHtml
+        content: params.bodyHtml || `<pre>${params.bodyText || ''}</pre>`
       },
-      // Set sender to show who the reply is from
+      // Set sender/from to show who the reply is from
       sender: {
         emailAddress: {
           name: fromName,
           address: contactEmail
         }
       },
-      // Set from to the contact's email as well
       from: {
         emailAddress: {
           name: fromName,
@@ -985,9 +969,8 @@ async function injectIntoMicrosoft(
       },
       receivedDateTime: params.receivedAt,
       isRead: false,
-      isDraft: false,
-      // CRITICAL: Set replyTo to the contact's actual email
-      // This ensures when user clicks "Reply", it goes to the contact, not a tracking address
+      isDraft: false,  // Explicitly set to false
+      // Set replyTo so replies go back to the contact
       replyTo: [{
         emailAddress: {
           name: fromName,
@@ -996,16 +979,18 @@ async function injectIntoMicrosoft(
       }]
     }
 
-    // Microsoft Graph API - Create message
-    // https://learn.microsoft.com/en-us/graph/api/user-post-messages
-    const createResponse = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(messagePayload)
-    })
+    // Create message directly in inbox folder
+    const createResponse = await fetch(
+      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messagePayload)
+      }
+    )
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text()
@@ -1014,31 +999,8 @@ async function injectIntoMicrosoft(
     }
 
     const message = await createResponse.json()
-
-    // Move to Inbox folder
-    const moveResponse = await fetch(
-      `https://graph.microsoft.com/v1.0/me/messages/${message.id}/move`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          destinationId: 'inbox'
-        })
-      }
-    )
-
-    if (moveResponse.ok) {
-      const movedMessage = await moveResponse.json()
-      console.log(`Microsoft injection successful: ${movedMessage.id}`)
-      return { success: true, messageId: movedMessage.id }
-    } else {
-      // Message was created but couldn't be moved - still partial success
-      console.log(`Microsoft injection partial success: ${message.id} (move failed)`)
-      return { success: true, messageId: message.id }
-    }
+    console.log(`Microsoft injection successful: ${message.id}, isDraft: ${message.isDraft}`)
+    return { success: true, messageId: message.id }
   } catch (err: any) {
     console.error('Microsoft injection error:', err)
     return { success: false, error: err.message }
