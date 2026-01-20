@@ -757,21 +757,29 @@ async function forwardViaSendGrid(
 
   // Look up the user's verified sender domain to use for the from address
   // This ensures emails come from a trusted domain (their own) rather than isg-replies.com
+  // Match by the user's email domain (e.g., user@isgdfw.com -> isgdfw.com)
   let fromEmail = fallbackFromEmail
-  const { data: senderDomain } = await supabase
-    .from('sender_domains')
-    .select('domain, default_from_email')
-    .eq('owner_id', params.ownerId)
-    .eq('status', 'verified')
-    .limit(1)
-    .single()
+  const userEmailDomain = ownerEmail.split('@')[1]?.toLowerCase()
 
-  if (senderDomain?.domain) {
-    // Use replies@{their-verified-domain} as the sender
-    fromEmail = `replies@${senderDomain.domain}`
-    console.log(`[SendGrid Fallback] Using user's verified domain: ${fromEmail}`)
+  if (userEmailDomain) {
+    // Find a verified sender domain matching the user's email domain
+    const { data: senderDomain } = await supabase
+      .from('sender_domains')
+      .select('domain')
+      .eq('status', 'verified')
+      .eq('domain', userEmailDomain)
+      .limit(1)
+      .single()
+
+    if (senderDomain?.domain) {
+      // Use replies@{their-verified-domain} as the sender
+      fromEmail = `replies@${senderDomain.domain}`
+      console.log(`[SendGrid Fallback] Using verified domain matching user's email: ${fromEmail}`)
+    } else {
+      console.log(`[SendGrid Fallback] No verified domain found for ${userEmailDomain}, using fallback: ${fallbackFromEmail}`)
+    }
   } else {
-    console.log(`[SendGrid Fallback] No verified domain found for owner ${params.ownerId}, using fallback: ${fallbackFromEmail}`)
+    console.log(`[SendGrid Fallback] Could not extract domain from ownerEmail: ${ownerEmail}`)
   }
 
   console.log('[SendGrid Fallback] Starting forward:', {
