@@ -1,7 +1,7 @@
 // supabase/functions/email-oauth/index.ts
 // Edge function for managing Gmail and Microsoft 365 OAuth connections
-// Connections are at the agency level (profile_name) - shared across all agency users
-// Used for inbox injection feature - replies are injected into agency's shared inbox
+// Connections are per-user (owner_id) - each user connects their own email
+// Used for inbox injection feature - replies are injected into the sender's inbox
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -175,7 +175,7 @@ function handleInitiate(provider: string | null, url: URL): Response {
 
 /**
  * Handle OAuth callback - exchange code for tokens and store
- * Connections are stored at the agency level using agency_id (profile_name)
+ * Connections are stored per-user using owner_id
  */
 async function handleCallback(
   provider: string | null,
@@ -204,8 +204,8 @@ async function handleCallback(
     )
   }
 
-  // Parse state - now uses agency_id instead of owner_id
-  let state: { agency_id?: string; owner_id?: string; redirect_after?: string }
+  // Parse state - uses owner_id for per-user connections
+  let state: { owner_id?: string; redirect_after?: string }
   try {
     state = JSON.parse(stateParam)
   } catch {
@@ -215,15 +215,12 @@ async function handleCallback(
     )
   }
 
-  // Support both agency_id (new) and owner_id (legacy)
-  // Map PT1 -> ISG Retail for legacy compatibility
-  const rawAgencyId = state.agency_id || state.owner_id
-  const agencyId = rawAgencyId === 'PT1' ? 'ISG Retail' : rawAgencyId
+  const ownerId = state.owner_id
   const { redirect_after } = state
 
-  if (!agencyId) {
+  if (!ownerId) {
     return Response.redirect(
-      `${frontendUrl}/settings?tab=integrations&oauth=error&error=missing_agency_id`,
+      `${frontendUrl}/settings?tab=integrations&oauth=error&error=missing_owner_id`,
       302
     )
   }
@@ -251,12 +248,11 @@ async function handleCallback(
     const encryptedAccessToken = await encryptToken(tokens.access_token)
     const encryptedRefreshToken = await encryptToken(tokens.refresh_token)
 
-    // Store in database (upsert) - using agency_id for agency-level connections
+    // Store in database (upsert) - using owner_id for per-user connections
     const { error: dbError } = await supabase
       .from('email_provider_connections')
       .upsert({
-        agency_id: agencyId,
-        owner_id: agencyId, // Keep for backwards compatibility
+        owner_id: ownerId,
         provider,
         access_token_encrypted: encryptedAccessToken,
         refresh_token_encrypted: encryptedRefreshToken,
@@ -268,7 +264,7 @@ async function handleCallback(
         last_error: null,
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'agency_id,provider'
+        onConflict: 'owner_id,provider'
       })
 
     if (dbError) {
@@ -293,15 +289,15 @@ async function handleCallback(
 }
 
 /**
- * Get OAuth connection status for an agency
+ * Get OAuth connection status for a user
  */
 async function handleStatus(req: Request, supabase: any): Promise<Response> {
   const url = new URL(req.url)
-  const agencyId = url.searchParams.get('agency_id') || url.searchParams.get('owner_id')
+  const ownerId = url.searchParams.get('owner_id')
 
-  if (!agencyId) {
+  if (!ownerId) {
     return new Response(
-      JSON.stringify({ error: 'Missing agency_id parameter' }),
+      JSON.stringify({ error: 'Missing owner_id parameter' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -309,7 +305,7 @@ async function handleStatus(req: Request, supabase: any): Promise<Response> {
   const { data, error } = await supabase
     .from('email_provider_connections')
     .select('provider, provider_email, status, last_error, last_used_at, created_at, updated_at')
-    .eq('agency_id', agencyId)
+    .eq('owner_id', ownerId)
 
   if (error) {
     return new Response(
@@ -341,7 +337,7 @@ async function handleStatus(req: Request, supabase: any): Promise<Response> {
 }
 
 /**
- * Disconnect an OAuth provider for an agency
+ * Disconnect an OAuth provider for a user
  */
 async function handleDisconnect(
   req: Request,
@@ -356,11 +352,11 @@ async function handleDisconnect(
   }
 
   const body = await req.json()
-  const agencyId = body.agency_id || body.owner_id
+  const ownerId = body.owner_id
 
-  if (!agencyId || !provider) {
+  if (!ownerId || !provider) {
     return new Response(
-      JSON.stringify({ error: 'Missing agency_id or provider' }),
+      JSON.stringify({ error: 'Missing owner_id or provider' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -369,7 +365,7 @@ async function handleDisconnect(
   const { data: connection } = await supabase
     .from('email_provider_connections')
     .select('access_token_encrypted, refresh_token_encrypted')
-    .eq('agency_id', agencyId)
+    .eq('owner_id', ownerId)
     .eq('provider', provider)
     .single()
 
@@ -395,7 +391,7 @@ async function handleDisconnect(
   const { error } = await supabase
     .from('email_provider_connections')
     .delete()
-    .eq('agency_id', agencyId)
+    .eq('owner_id', ownerId)
     .eq('provider', provider)
 
   if (error) {
@@ -412,7 +408,7 @@ async function handleDisconnect(
 }
 
 /**
- * Manually refresh an OAuth token for an agency
+ * Manually refresh an OAuth token for a user
  */
 async function handleRefresh(
   req: Request,
@@ -427,11 +423,11 @@ async function handleRefresh(
   }
 
   const body = await req.json()
-  const agencyId = body.agency_id || body.owner_id
+  const ownerId = body.owner_id
 
-  if (!agencyId || !provider) {
+  if (!ownerId || !provider) {
     return new Response(
-      JSON.stringify({ error: 'Missing agency_id or provider' }),
+      JSON.stringify({ error: 'Missing owner_id or provider' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -440,7 +436,7 @@ async function handleRefresh(
   const { data: connection, error: fetchError } = await supabase
     .from('email_provider_connections')
     .select('*')
-    .eq('agency_id', agencyId)
+    .eq('owner_id', ownerId)
     .eq('provider', provider)
     .single()
 
@@ -480,7 +476,7 @@ async function handleRefresh(
         last_error: null,
         updated_at: new Date().toISOString()
       })
-      .eq('agency_id', agencyId)
+      .eq('owner_id', ownerId)
       .eq('provider', provider)
 
     if (updateError) throw updateError
@@ -499,7 +495,7 @@ async function handleRefresh(
         last_error: err.message,
         updated_at: new Date().toISOString()
       })
-      .eq('agency_id', agencyId)
+      .eq('owner_id', ownerId)
       .eq('provider', provider)
 
     return new Response(

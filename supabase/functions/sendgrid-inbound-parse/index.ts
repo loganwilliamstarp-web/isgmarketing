@@ -563,52 +563,58 @@ interface InjectionParams {
   originalRecipientEmail?: string
 }
 
+const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
+
 async function attemptInboxInjection(
   supabase: any,
   params: InjectionParams
 ): Promise<{ success: boolean; method?: string; error?: string }> {
-  try {
-    // OAuth connections are stored at agency level (profile_name)
-    // First get the user's profile_name from the users table
-    const { data: userData } = await supabase
-      .from('users')
-      .select('profile_name')
-      .eq('user_unique_id', params.ownerId)
-      .single()
+  // Get user data including email for fallback forwarding
+  const { data: userData } = await supabase
+    .from('users')
+    .select('profile_name, email')
+    .eq('user_unique_id', params.ownerId)
+    .single()
 
-    const agencyId = userData?.profile_name
+  const ownerEmail = userData?.email
 
-    if (!agencyId) {
-      console.log(`No agency found for owner ${params.ownerId} - skipping injection`)
-      await supabase
-        .from('email_replies')
-        .update({
-          inbox_injected: false,
-          inbox_injection_error: 'no_agency_found'
-        })
-        .eq('id', params.replyId)
-      return { success: false, error: 'no_agency_found' }
+  // Helper to attempt SendGrid fallback
+  const attemptSendGridFallback = async (reason: string): Promise<{ success: boolean; method?: string; error?: string }> => {
+    if (!ownerEmail) {
+      console.log(`No owner email found for ${params.ownerId} - cannot use SendGrid fallback`)
+      return { success: false, error: `${reason}; no_owner_email_for_fallback` }
     }
 
-    // Check if agency has an active OAuth connection
+    console.log(`OAuth injection failed (${reason}), attempting SendGrid fallback to ${ownerEmail}`)
+    const fallbackResult = await forwardViaSendGrid(supabase, params, ownerEmail)
+
+    // Update injection status with fallback result
+    await supabase
+      .from('email_replies')
+      .update({
+        inbox_injected: fallbackResult.success,
+        inbox_injected_at: fallbackResult.success ? new Date().toISOString() : null,
+        inbox_injection_provider: 'sendgrid_fallback',
+        inbox_injection_error: fallbackResult.error || null
+      })
+      .eq('id', params.replyId)
+
+    return fallbackResult
+  }
+
+  try {
+    // Check if user (owner) has an active OAuth connection
+    // Connections are per-user (owner_id) so replies go to the correct person's inbox
     const { data: connection } = await supabase
       .from('email_provider_connections')
       .select('*')
-      .eq('agency_id', agencyId)
+      .eq('owner_id', params.ownerId)
       .eq('status', 'active')
       .single()
 
     if (!connection) {
-      console.log(`No active OAuth connection for agency ${agencyId} (owner: ${params.ownerId}) - skipping injection`)
-      // Update reply record to indicate no injection attempted
-      await supabase
-        .from('email_replies')
-        .update({
-          inbox_injected: false,
-          inbox_injection_error: 'no_oauth_connection'
-        })
-        .eq('id', params.replyId)
-      return { success: false, error: 'no_oauth_connection' }
+      console.log(`No active OAuth connection for owner ${params.ownerId} - trying SendGrid fallback`)
+      return await attemptSendGridFallback('no_oauth_connection')
     }
 
     // Decrypt access token
@@ -617,8 +623,7 @@ async function attemptInboxInjection(
       accessToken = await decryptToken(connection.access_token_encrypted)
     } catch (err) {
       console.error('Failed to decrypt token:', err)
-      await updateInjectionStatus(supabase, params.replyId, false, connection.provider, 'token_decrypt_failed')
-      return { success: false, error: 'token_decrypt_failed' }
+      return await attemptSendGridFallback('token_decrypt_failed')
     }
 
     // Check if token is expired, refresh if needed
@@ -656,8 +661,7 @@ async function attemptInboxInjection(
             updated_at: new Date().toISOString()
           })
           .eq('id', connection.id)
-        await updateInjectionStatus(supabase, params.replyId, false, connection.provider, 'token_refresh_failed')
-        return { success: false, error: 'token_refresh_failed' }
+        return await attemptSendGridFallback('token_refresh_failed')
       }
     }
 
@@ -670,6 +674,12 @@ async function attemptInboxInjection(
       result = await injectIntoMicrosoft(accessToken, params)
     } else {
       result = { success: false, error: 'unknown_provider' }
+    }
+
+    // If OAuth injection failed, try SendGrid fallback
+    if (!result.success) {
+      console.log(`OAuth injection failed: ${result.error} - trying SendGrid fallback`)
+      return await attemptSendGridFallback(result.error || 'oauth_injection_failed')
     }
 
     // Update email_replies with injection status
@@ -693,14 +703,7 @@ async function attemptInboxInjection(
 
   } catch (error: any) {
     console.error('Inbox injection error:', error.message)
-    await supabase
-      .from('email_replies')
-      .update({
-        inbox_injected: false,
-        inbox_injection_error: error.message
-      })
-      .eq('id', params.replyId)
-    return { success: false, error: error.message }
+    return await attemptSendGridFallback(error.message)
   }
 }
 
@@ -720,6 +723,88 @@ async function updateInjectionStatus(
       inbox_injection_error: error || null
     })
     .eq('id', replyId)
+}
+
+// ============================================================================
+// SENDGRID FALLBACK - Forward reply via SendGrid when OAuth fails
+// ============================================================================
+
+async function forwardViaSendGrid(
+  supabase: any,
+  params: InjectionParams,
+  ownerEmail: string
+): Promise<{ success: boolean; method?: string; error?: string }> {
+  const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
+
+  if (!sendgridApiKey) {
+    console.error('SENDGRID_API_KEY not configured - cannot forward reply')
+    return { success: false, error: 'sendgrid_not_configured' }
+  }
+
+  try {
+    // Build the forwarded email content
+    const fromName = params.fromName || params.fromEmail
+    const forwardHeader = `
+      <div style="padding: 10px; margin-bottom: 15px; border-left: 3px solid #4a90d9; background: #f5f8fa;">
+        <strong>Reply from:</strong> ${fromName} &lt;${params.fromEmail}&gt;<br>
+        <strong>Received:</strong> ${new Date(params.receivedAt).toLocaleString()}
+      </div>
+    `
+
+    const htmlContent = params.bodyHtml
+      ? `${forwardHeader}${params.bodyHtml}`
+      : `${forwardHeader}<pre style="white-space: pre-wrap;">${params.bodyText || ''}</pre>`
+
+    const textContent = params.bodyText
+      ? `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyText}`
+      : `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyHtml?.replace(/<[^>]*>/g, '') || ''}`
+
+    // Use a verified sender domain for the from address
+    // The reply-to will be set to the contact's email so replies go to them
+    const fromEmail = Deno.env.get('SENDGRID_FORWARD_FROM') || 'replies@isg-replies.com'
+
+    const payload = {
+      personalizations: [{
+        to: [{ email: ownerEmail }]
+      }],
+      from: {
+        email: fromEmail,
+        name: `Reply from ${fromName}`
+      },
+      reply_to: {
+        email: params.fromEmail,
+        name: params.fromName || undefined
+      },
+      subject: params.subject.startsWith('Re:') ? params.subject : `Re: ${params.subject}`,
+      content: [
+        { type: 'text/plain', value: textContent },
+        { type: 'text/html', value: htmlContent }
+      ],
+      categories: ['reply_forward', 'inbox_injection_fallback']
+    }
+
+    const response = await fetch(SENDGRID_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sendgridApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (response.ok || response.status === 202) {
+      const messageId = response.headers.get('X-Message-Id') || `sg-fwd-${Date.now()}`
+      console.log(`SendGrid fallback forward successful: ${messageId} to ${ownerEmail}`)
+      return { success: true, method: 'sendgrid_fallback' }
+    } else {
+      const errorText = await response.text()
+      console.error(`SendGrid forward error: ${response.status} - ${errorText}`)
+      return { success: false, method: 'sendgrid_fallback', error: `SendGrid error: ${response.status}` }
+    }
+  } catch (err: any) {
+    console.error('SendGrid fallback error:', err)
+    return { success: false, method: 'sendgrid_fallback', error: err.message }
+  }
 }
 
 // ============================================================================
@@ -812,38 +897,53 @@ async function injectIntoMicrosoft(
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     // Build message payload
-    // Include replyTo so replies go back to the contact
+    // Note: Microsoft Graph API doesn't allow setting 'from' to external addresses
+    // (would require send-as permissions). Instead we:
+    // 1. Don't set 'from' (it will be blank/system)
+    // 2. Set 'replyTo' to the contact's actual email so replies go to them
+    // 3. Include sender info in the subject/body for clarity
+
+    const fromName = params.fromName || params.fromEmail
+    const contactEmail = params.originalRecipientEmail || params.fromEmail
+
+    // Prepend sender info to body so it's clear who the reply is from
+    const senderHeader = `<div style="padding: 10px; margin-bottom: 15px; border-left: 3px solid #4a90d9; background: #f5f8fa;">
+      <strong>Reply from:</strong> ${fromName} &lt;${contactEmail}&gt;
+    </div>`
+
+    const enhancedHtml = params.bodyHtml
+      ? `${senderHeader}${params.bodyHtml}`
+      : `${senderHeader}<pre style="white-space: pre-wrap;">${params.bodyText || ''}</pre>`
+
     const messagePayload: Record<string, any> = {
       subject: params.subject,
       body: {
-        contentType: params.bodyHtml ? 'HTML' : 'Text',
-        content: params.bodyHtml || params.bodyText || ''
+        contentType: 'HTML',
+        content: enhancedHtml
       },
+      // Set sender to show who the reply is from
+      sender: {
+        emailAddress: {
+          name: fromName,
+          address: contactEmail
+        }
+      },
+      // Set from to the contact's email as well
       from: {
         emailAddress: {
-          name: params.fromName || params.fromEmail,
-          address: params.fromEmail
+          name: fromName,
+          address: contactEmail
         }
       },
       receivedDateTime: params.receivedAt,
       isRead: false,
-      isDraft: false
-    }
-
-    // Add replyTo field so replies go back to the contact
-    if (params.originalRecipientEmail) {
-      messagePayload.replyTo = [{
+      isDraft: false,
+      // CRITICAL: Set replyTo to the contact's actual email
+      // This ensures when user clicks "Reply", it goes to the contact, not a tracking address
+      replyTo: [{
         emailAddress: {
-          name: params.fromName || params.originalRecipientEmail,
-          address: params.originalRecipientEmail
-        }
-      }]
-    } else {
-      // Fallback: use the from email
-      messagePayload.replyTo = [{
-        emailAddress: {
-          name: params.fromName || params.fromEmail,
-          address: params.fromEmail
+          name: fromName,
+          address: contactEmail
         }
       }]
     }

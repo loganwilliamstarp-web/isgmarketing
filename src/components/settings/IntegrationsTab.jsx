@@ -1,30 +1,28 @@
 // src/components/settings/IntegrationsTab.jsx
 // Integrations settings tab with Gmail/Microsoft OAuth for inbox injection
-// Only agency admins can connect - connection applies to all users in the agency
+// Each user connects their own email account for reply injection
 
 import React, { useState, useEffect } from 'react';
 import { emailOAuthService } from '../../services/emailOAuth';
 import { useAuth } from '../../contexts/AuthContext';
 
 const IntegrationsTab = ({ userId, theme: t }) => {
-  const { isAdmin, isAgencyAdmin, user, impersonating } = useAuth();
+  const { user, impersonating } = useAuth();
   const [connections, setConnections] = useState({ gmail: null, microsoft: null });
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(null);
   const [disconnecting, setDisconnecting] = useState(null);
   const [error, setError] = useState(null);
 
-  // Only admins and agency admins can manage connections
+  // Users can manage their own connections
   // When impersonating, don't allow managing connections (view only)
-  const canManageConnections = !impersonating?.active && (isAdmin || isAgencyAdmin);
+  const canManageConnections = !impersonating?.active;
 
-  // Use profile_name for agency-level connections
-  // When impersonating, use the target user's profile name
-  // Map PT1 -> ISG Retail for legacy compatibility
-  const rawAgencyId = impersonating?.active && impersonating?.targetProfileName
-    ? impersonating.targetProfileName
-    : user?.profileName;
-  const agencyId = rawAgencyId === 'PT1' ? 'ISG Retail' : rawAgencyId;
+  // Use owner_id for per-user connections
+  // When impersonating, use the target user's owner ID
+  const ownerId = impersonating?.active && impersonating?.targetOwnerId
+    ? impersonating.targetOwnerId
+    : user?.ownerId;
 
   // Check for OAuth callback result in URL
   useEffect(() => {
@@ -42,23 +40,23 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   }, []);
 
   useEffect(() => {
-    if (agencyId) {
+    if (ownerId) {
       loadConnections();
     } else {
       setIsLoading(false);
     }
-  }, [agencyId]);
+  }, [ownerId]);
 
   const loadConnections = async () => {
-    if (!agencyId) {
+    if (!ownerId) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
-      // Get connections by agency (profile_name)
-      const data = await emailOAuthService.getConnectionsByAgency(agencyId);
+      // Get connections by owner_id (per-user)
+      const data = await emailOAuthService.getConnections(ownerId);
       setConnections(data);
     } catch (err) {
       console.error('[IntegrationsTab] Failed to load connections:', err);
@@ -70,15 +68,15 @@ const IntegrationsTab = ({ userId, theme: t }) => {
 
   const handleConnect = async (provider) => {
     if (!canManageConnections) return;
-    if (!agencyId) {
-      setError('Unable to determine agency. Please contact support.');
+    if (!ownerId) {
+      setError('Unable to determine user. Please contact support.');
       return;
     }
 
     setIsConnecting(provider);
     setError(null);
     try {
-      await emailOAuthService.initiateOAuth(provider, agencyId);
+      await emailOAuthService.initiateOAuth(provider, ownerId);
       await loadConnections();
     } catch (err) {
       console.error('[IntegrationsTab] OAuth failed:', err);
@@ -94,7 +92,7 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     setDisconnecting(provider);
     setError(null);
     try {
-      await emailOAuthService.disconnect(provider, agencyId);
+      await emailOAuthService.disconnect(provider, ownerId);
       setConnections(prev => ({ ...prev, [provider]: null }));
     } catch (err) {
       console.error('Failed to disconnect:', err);
@@ -104,15 +102,15 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     }
   };
 
-  // Show a message if no agency is set
-  if (!agencyId) {
+  // Show a message if no owner ID is set
+  if (!ownerId) {
     return (
       <div style={{
         padding: '40px',
         textAlign: 'center',
         color: t.textSecondary
       }}>
-        <p>Unable to determine your agency. Email integrations require an agency to be configured.</p>
+        <p>Unable to determine your user account. Email integrations require you to be logged in.</p>
         <p style={{ fontSize: '13px', marginTop: '8px' }}>Please contact support if this issue persists.</p>
       </div>
     );
@@ -126,23 +124,10 @@ const IntegrationsTab = ({ userId, theme: t }) => {
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
             Email Inbox Sync
           </h3>
-          {canManageConnections && (
-            <span style={{
-              padding: '4px 10px',
-              backgroundColor: t.bgHover,
-              borderRadius: '20px',
-              fontSize: '11px',
-              color: t.textSecondary
-            }}>
-              Agency Admin
-            </span>
-          )}
         </div>
         <p style={{ fontSize: '13px', color: t.textSecondary, marginBottom: '16px' }}>
-          {canManageConnections
-            ? `Connect an email account for your agency (${agencyId}). All users in your agency will have replies delivered to this inbox.`
-            : 'Email replies are delivered to your agency\'s connected inbox. Contact your agency admin to manage this connection.'
-          }
+          Connect your email account to receive replies directly in your inbox. When contacts reply to your
+          marketing emails, the replies will be delivered to your connected email.
         </p>
 
         {/* Info banner */}
@@ -159,13 +144,13 @@ const IntegrationsTab = ({ userId, theme: t }) => {
         }}>
           <span style={{ fontSize: '16px' }}>💡</span>
           <div>
-            <strong>How it works:</strong> When connected, replies to marketing emails from anyone in your agency
-            are automatically delivered to the connected inbox. This allows your team to respond naturally while
-            tracking response rates for campaigns.
+            <strong>How it works:</strong> When connected, replies to your marketing emails
+            are automatically delivered to your inbox. This allows you to respond naturally while
+            the system tracks response rates for campaigns.
           </div>
         </div>
 
-        {/* Admin-only notice for non-admins */}
+        {/* View-only notice when impersonating */}
         {!canManageConnections && (
           <div style={{
             padding: '12px 16px',
@@ -180,10 +165,7 @@ const IntegrationsTab = ({ userId, theme: t }) => {
           }}>
             <span style={{ fontSize: '16px' }}>🔒</span>
             <div>
-              {impersonating?.active
-                ? 'Connection management is disabled while viewing as another user.'
-                : 'Only agency administrators can connect or disconnect email integrations.'
-              }
+              Connection management is disabled while viewing as another user.
             </div>
           </div>
         )}
