@@ -938,6 +938,13 @@ async function injectIntoGmail(
 // ============================================================================
 // MICROSOFT INJECTION - Use Graph API to create message in inbox
 // ============================================================================
+//
+// Note: Microsoft Graph API has limitations:
+// - Cannot set 'from' to an external email (always uses mailbox owner)
+// - Messages created via API appear as drafts (isDraft=true is ignored)
+//
+// Workaround: Add a clear header showing who the reply is from, and set
+// replyTo so hitting "Reply" goes to the contact.
 
 async function injectIntoMicrosoft(
   accessToken: string,
@@ -947,30 +954,29 @@ async function injectIntoMicrosoft(
     const fromName = params.fromName || params.fromEmail
     const contactEmail = params.originalRecipientEmail || params.fromEmail
 
-    // Build message payload with isDraft explicitly set to false
+    // Add a header to the body showing who the reply is from
+    // This is necessary because Graph API won't let us set 'from' to an external address
+    const replyHeader = `<div style="padding: 12px 16px; margin-bottom: 16px; background: #f0f7ff; border-left: 4px solid #0078d4; border-radius: 4px;">
+      <strong style="color: #0078d4;">Reply from:</strong> ${fromName} &lt;${contactEmail}&gt;<br>
+      <span style="color: #666; font-size: 12px;">Received: ${new Date(params.receivedAt).toLocaleString()}</span>
+    </div>`
+
+    const bodyContent = params.bodyHtml
+      ? `${replyHeader}${params.bodyHtml}`
+      : `${replyHeader}<pre style="white-space: pre-wrap; font-family: inherit;">${params.bodyText || ''}</pre>`
+
+    // Build message payload
+    // Note: We cannot set 'from' to external address, so we rely on replyTo and the header
     const messagePayload = {
       subject: params.subject,
       body: {
         contentType: 'HTML',
-        content: params.bodyHtml || `<pre>${params.bodyText || ''}</pre>`
-      },
-      // Set sender/from to show who the reply is from
-      sender: {
-        emailAddress: {
-          name: fromName,
-          address: contactEmail
-        }
-      },
-      from: {
-        emailAddress: {
-          name: fromName,
-          address: contactEmail
-        }
+        content: bodyContent
       },
       receivedDateTime: params.receivedAt,
       isRead: false,
-      isDraft: false,  // Explicitly set to false
-      // Set replyTo so replies go back to the contact
+      isDraft: false,
+      // Set replyTo to the contact's email so "Reply" goes to them
       replyTo: [{
         emailAddress: {
           name: fromName,
