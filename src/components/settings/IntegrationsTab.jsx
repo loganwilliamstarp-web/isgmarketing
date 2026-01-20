@@ -19,10 +19,11 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   const canManageConnections = !impersonating?.active;
 
   // Use owner_id for per-user connections
-  // When impersonating, use the target user's owner ID
-  const ownerId = impersonating?.active && impersonating?.targetOwnerId
-    ? impersonating.targetOwnerId
-    : user?.ownerId;
+  // When impersonating, use the target user's ID
+  // user.id is the Salesforce user_unique_id which maps to owner_id
+  const ownerId = impersonating?.active && impersonating?.targetUserId
+    ? impersonating.targetUserId
+    : user?.id;
 
   // Check for OAuth callback result in URL
   useEffect(() => {
