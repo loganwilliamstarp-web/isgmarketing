@@ -570,13 +570,21 @@ async function attemptInboxInjection(
   params: InjectionParams
 ): Promise<{ success: boolean; method?: string; error?: string }> {
   // Get user data including email for fallback forwarding
-  const { data: userData } = await supabase
+  const { data: userData, error: userLookupError } = await supabase
     .from('users')
     .select('profile_name, email')
     .eq('user_unique_id', params.ownerId)
     .single()
 
   const ownerEmail = userData?.email
+
+  console.log('[Inbox Injection] User lookup for fallback:', {
+    ownerId: params.ownerId,
+    userFound: !!userData,
+    ownerEmail: ownerEmail || '(not found)',
+    profileName: userData?.profile_name,
+    lookupError: userLookupError?.message
+  })
 
   // Helper to attempt SendGrid fallback
   const attemptSendGridFallback = async (reason: string): Promise<{ success: boolean; method?: string; error?: string }> => {
@@ -735,10 +743,24 @@ async function forwardViaSendGrid(
   ownerEmail: string
 ): Promise<{ success: boolean; method?: string; error?: string }> {
   const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
+  const fromEmail = Deno.env.get('SENDGRID_FORWARD_FROM') || 'replies@isg-replies.com'
+
+  console.log('[SendGrid Fallback] Starting forward:', {
+    ownerId: params.ownerId,
+    ownerEmail,
+    fromEmail,
+    subject: params.subject,
+    replyFromEmail: params.fromEmail
+  })
 
   if (!sendgridApiKey) {
     console.error('SENDGRID_API_KEY not configured - cannot forward reply')
     return { success: false, error: 'sendgrid_not_configured' }
+  }
+
+  if (!ownerEmail) {
+    console.error('[SendGrid Fallback] ownerEmail is empty/null - cannot forward')
+    return { success: false, error: 'no_owner_email' }
   }
 
   try {
@@ -759,9 +781,8 @@ async function forwardViaSendGrid(
       ? `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyText}`
       : `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyHtml?.replace(/<[^>]*>/g, '') || ''}`
 
-    // Use a verified sender domain for the from address
+    // fromEmail is already set above from SENDGRID_FORWARD_FROM env var
     // The reply-to will be set to the contact's email so replies go to them
-    const fromEmail = Deno.env.get('SENDGRID_FORWARD_FROM') || 'replies@isg-replies.com'
 
     const payload = {
       personalizations: [{
