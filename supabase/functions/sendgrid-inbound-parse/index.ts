@@ -743,15 +743,7 @@ async function forwardViaSendGrid(
   ownerEmail: string
 ): Promise<{ success: boolean; method?: string; error?: string }> {
   const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
-  const fromEmail = Deno.env.get('SENDGRID_FORWARD_FROM') || 'replies@isg-replies.com'
-
-  console.log('[SendGrid Fallback] Starting forward:', {
-    ownerId: params.ownerId,
-    ownerEmail,
-    fromEmail,
-    subject: params.subject,
-    replyFromEmail: params.fromEmail
-  })
+  const fallbackFromEmail = Deno.env.get('SENDGRID_FORWARD_FROM') || 'replies@isg-replies.com'
 
   if (!sendgridApiKey) {
     console.error('SENDGRID_API_KEY not configured - cannot forward reply')
@@ -762,6 +754,33 @@ async function forwardViaSendGrid(
     console.error('[SendGrid Fallback] ownerEmail is empty/null - cannot forward')
     return { success: false, error: 'no_owner_email' }
   }
+
+  // Look up the user's verified sender domain to use for the from address
+  // This ensures emails come from a trusted domain (their own) rather than isg-replies.com
+  let fromEmail = fallbackFromEmail
+  const { data: senderDomain } = await supabase
+    .from('sender_domains')
+    .select('domain, default_from_email')
+    .eq('owner_id', params.ownerId)
+    .eq('status', 'verified')
+    .limit(1)
+    .single()
+
+  if (senderDomain?.domain) {
+    // Use replies@{their-verified-domain} as the sender
+    fromEmail = `replies@${senderDomain.domain}`
+    console.log(`[SendGrid Fallback] Using user's verified domain: ${fromEmail}`)
+  } else {
+    console.log(`[SendGrid Fallback] No verified domain found for owner ${params.ownerId}, using fallback: ${fallbackFromEmail}`)
+  }
+
+  console.log('[SendGrid Fallback] Starting forward:', {
+    ownerId: params.ownerId,
+    ownerEmail,
+    fromEmail,
+    subject: params.subject,
+    replyFromEmail: params.fromEmail
+  })
 
   try {
     // Build the forwarded email content
