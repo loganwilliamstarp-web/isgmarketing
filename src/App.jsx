@@ -28,6 +28,7 @@ const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const TimelinePage = lazy(() => import('./pages/TimelinePage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -756,27 +757,6 @@ const AppLayout = () => {
     </ThemeContext.Provider>
   );
 };
-
-// ============================================
-// PLACEHOLDER PAGES
-// ============================================
-const TimelinePage = ({ t }) => (
-  <div>
-    <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>Activity Timeline</h1>
-    <p style={{ color: t.textSecondary, fontSize: '14px' }}>View all email activity across your organization</p>
-    <div style={{
-      marginTop: '24px',
-      padding: '60px',
-      textAlign: 'center',
-      backgroundColor: t.bgCard,
-      borderRadius: '12px',
-      border: `1px solid ${t.border}`
-    }}>
-      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div>
-      <p style={{ color: t.textMuted }}>Timeline view coming soon...</p>
-    </div>
-  </div>
-);
 
 // ============================================
 // REDIRECT COMPONENT - Now redirects to login or user dashboard
