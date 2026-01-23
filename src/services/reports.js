@@ -41,6 +41,7 @@ export const reportsService = {
 
   /**
    * Get email performance time-series data
+   * Queries directly from email_logs table and aggregates by date
    * @param {string|string[]} ownerIds - Owner ID(s) for filtering
    * @param {Object} options - { days, aggregation: 'daily'|'weekly' }
    */
@@ -50,12 +51,12 @@ export const reportsService = {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
+    // Query email_logs directly instead of pre-aggregated stats table
     let query = supabase
-      .from('email_stats_daily')
-      .select('*')
-      .is('automation_id', null)
-      .gte('stat_date', startDate.toISOString().split('T')[0])
-      .order('stat_date', { ascending: true });
+      .from('email_logs')
+      .select('sent_at, delivered_at, first_opened_at, first_clicked_at, bounced_at, replied_at')
+      .gte('sent_at', startDate.toISOString())
+      .not('sent_at', 'is', null);
 
     query = applyOwnerFilter(query, ownerIds);
 
@@ -63,17 +64,41 @@ export const reportsService = {
 
     if (error) throw error;
 
-    const timeSeries = (data || []).map(d => ({
-      date: d.stat_date,
-      sent: d.total_sent || 0,
-      delivered: d.total_delivered || 0,
-      opens: d.unique_opens || 0,
-      clicks: d.unique_clicks || 0,
-      bounces: d.total_bounced || 0,
-      replies: d.total_replied || 0,
-      open_rate: d.open_rate || 0,
-      click_rate: d.click_rate || 0
-    }));
+    // Aggregate by date
+    const dailyStats = {};
+
+    (data || []).forEach(log => {
+      const date = log.sent_at?.split('T')[0];
+      if (!date) return;
+
+      if (!dailyStats[date]) {
+        dailyStats[date] = {
+          date,
+          sent: 0,
+          delivered: 0,
+          opens: 0,
+          clicks: 0,
+          bounces: 0,
+          replies: 0
+        };
+      }
+
+      dailyStats[date].sent++;
+      if (log.delivered_at) dailyStats[date].delivered++;
+      if (log.first_opened_at) dailyStats[date].opens++;
+      if (log.first_clicked_at) dailyStats[date].clicks++;
+      if (log.bounced_at) dailyStats[date].bounces++;
+      if (log.replied_at) dailyStats[date].replies++;
+    });
+
+    // Convert to sorted array
+    const timeSeries = Object.values(dailyStats)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(d => ({
+        ...d,
+        open_rate: d.delivered > 0 ? Math.round((d.opens / d.delivered) * 10000) / 100 : 0,
+        click_rate: d.delivered > 0 ? Math.round((d.clicks / d.delivered) * 10000) / 100 : 0
+      }));
 
     // If weekly aggregation requested, group by week
     if (aggregation === 'weekly') {
