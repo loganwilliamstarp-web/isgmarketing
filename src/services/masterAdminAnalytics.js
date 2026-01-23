@@ -35,10 +35,11 @@ export const masterAdminAnalyticsService = {
       weekEmails,
       previousWeekEmails,
       monthEmails,
-      scheduledToday,
+      sentToday,
       scheduledWeek,
       failedEmails24h,
-      bouncesYesterday
+      bouncesYesterday,
+      todayEmails
     ] = await Promise.all([
       // Total users
       supabase
@@ -74,13 +75,11 @@ export const masterAdminAnalyticsService = {
       // This month's emails
       this.getEmailStats(monthAgo.toISOString(), now.toISOString()),
 
-      // Scheduled for today
+      // Sent today
       supabase
-        .from('scheduled_emails')
+        .from('email_logs')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'Pending')
-        .gte('scheduled_for', todayStart.toISOString())
-        .lt('scheduled_for', new Date(todayStart.getTime() + 24 * 60 * 60 * 1000).toISOString()),
+        .gte('sent_at', todayStart.toISOString()),
 
       // Scheduled for week
       supabase
@@ -89,6 +88,9 @@ export const masterAdminAnalyticsService = {
         .eq('status', 'Pending')
         .gte('scheduled_for', todayStart.toISOString())
         .lt('scheduled_for', new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()),
+
+      // Today's email stats
+      this.getEmailStats(todayStart.toISOString(), now.toISOString()),
 
       // Failed emails in last 24h
       supabase
@@ -150,9 +152,15 @@ export const masterAdminAnalyticsService = {
       openRateChange: Math.round(openRateChange * 10) / 10,
       clickRateChange: Math.round(clickRateChange * 10) / 10,
 
-      // Scheduled
-      scheduledToday: scheduledToday.count || 0,
+      // Today's stats
+      sentToday: sentToday.count || 0,
       scheduledWeek: scheduledWeek.count || 0,
+
+      // Today's detailed metrics
+      emailsSentToday: todayEmails.sent,
+      opensToday: todayEmails.opened,
+      clicksToday: todayEmails.clicked,
+      repliesToday: todayEmails.replied,
 
       // System health
       failedEmails24h: failedEmails24h.count || 0
@@ -240,41 +248,63 @@ export const masterAdminAnalyticsService = {
   },
 
   /**
-   * Get top automations by performance
+   * Get top automations by performance (from email_logs)
    */
   async getTopAutomations(limit = 10) {
-    const { data: automations, error } = await supabase
-      .from('automations')
-      .select(`
-        id,
-        name,
-        stats,
-        status,
-        owner:users!inner(first_name, last_name, profile_name)
-      `)
-      .in('status', ['Active', 'active'])
-      .not('stats', 'is', null);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 30); // Look at last 30 days for better data
 
-    if (error || !automations) {
-      console.error('Error fetching automation stats:', error);
+    // Get emails with automation info
+    const { data: emails, error } = await supabase
+      .from('email_logs')
+      .select(`
+        automation_id,
+        delivered_at,
+        first_opened_at,
+        first_clicked_at,
+        automation:automations!inner(id, name, status, owner_id),
+        owner:users(first_name, last_name, profile_name)
+      `)
+      .not('automation_id', 'is', null)
+      .gte('sent_at', weekAgo.toISOString());
+
+    if (error || !emails) {
+      console.error('Error fetching automation stats from email_logs:', error);
       return [];
     }
 
-    return automations
-      .filter(a => a.stats?.sent > 0)
+    // Group by automation
+    const automationStats = {};
+    emails.forEach(email => {
+      const autoId = email.automation_id;
+      if (!autoId || !email.automation) return;
+
+      if (!automationStats[autoId]) {
+        automationStats[autoId] = {
+          id: autoId,
+          name: email.automation?.name || 'Unknown',
+          status: email.automation?.status,
+          ownerName: email.owner?.profile_name ||
+                     `${email.owner?.first_name || ''} ${email.owner?.last_name || ''}`.trim() ||
+                     'Unknown',
+          sent: 0,
+          delivered: 0,
+          opened: 0,
+          clicked: 0
+        };
+      }
+      automationStats[autoId].sent++;
+      if (email.delivered_at) automationStats[autoId].delivered++;
+      if (email.first_opened_at) automationStats[autoId].opened++;
+      if (email.first_clicked_at) automationStats[autoId].clicked++;
+    });
+
+    return Object.values(automationStats)
+      .filter(a => a.sent > 0)
       .map(a => ({
-        id: a.id,
-        name: a.name,
-        ownerName: a.owner?.profile_name || `${a.owner?.first_name || ''} ${a.owner?.last_name || ''}`.trim() || 'Unknown',
-        sent: a.stats?.sent || 0,
-        opened: a.stats?.opened || 0,
-        clicked: a.stats?.clicked || 0,
-        openRate: a.stats?.sent > 0
-          ? Math.round(((a.stats?.opened || 0) / a.stats.sent) * 1000) / 10
-          : 0,
-        clickRate: a.stats?.sent > 0
-          ? Math.round(((a.stats?.clicked || 0) / a.stats.sent) * 1000) / 10
-          : 0
+        ...a,
+        openRate: a.delivered > 0 ? Math.round((a.opened / a.delivered) * 1000) / 10 : 0,
+        clickRate: a.delivered > 0 ? Math.round((a.clicked / a.delivered) * 1000) / 10 : 0
       }))
       .sort((a, b) => b.sent - a.sent)
       .slice(0, limit);
@@ -369,21 +399,23 @@ export const masterAdminAnalyticsService = {
   },
 
   /**
-   * Get accounts with recent replies
+   * Get accounts with recent replies (last 7 days)
    */
   async getAccountsWithReplies(limit = 10) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
 
     const { data, error } = await supabase
       .from('email_logs')
       .select(`
         first_replied_at,
+        to_email,
+        account_id,
         account:accounts(id, name),
         owner:users(first_name, last_name, profile_name)
       `)
       .not('first_replied_at', 'is', null)
-      .gte('first_replied_at', yesterday.toISOString())
+      .gte('first_replied_at', weekAgo.toISOString())
       .order('first_replied_at', { ascending: false });
 
     if (error || !data) {
@@ -391,19 +423,20 @@ export const masterAdminAnalyticsService = {
       return [];
     }
 
-    // Group by account
+    // Group by account (or email if no account)
     const replyCounts = {};
     data.forEach(r => {
-      const accountId = r.account?.id;
-      if (accountId) {
-        if (!replyCounts[accountId]) {
-          replyCounts[accountId] = {
-            name: r.account?.name || 'Unknown',
+      const key = r.account?.id || r.to_email;
+      if (key) {
+        if (!replyCounts[key]) {
+          replyCounts[key] = {
+            name: r.account?.name || r.to_email || 'Unknown',
             agency: r.owner?.profile_name,
-            count: 0
+            count: 0,
+            lastReply: r.first_replied_at
           };
         }
-        replyCounts[accountId].count++;
+        replyCounts[key].count++;
       }
     });
 
@@ -582,10 +615,11 @@ export const masterAdminAnalyticsService = {
   },
 
   /**
-   * Get recent activity feed
+   * Get recent activity feed - shows most recent email events
    */
   async getRecentActivity(limit = 20) {
-    const { data, error } = await supabase
+    // Get recent sent emails
+    const { data: recentSent, error: sentError } = await supabase
       .from('email_logs')
       .select(`
         id,
@@ -600,28 +634,92 @@ export const masterAdminAnalyticsService = {
         owner:users(first_name, last_name, profile_name)
       `)
       .order('sent_at', { ascending: false })
-      .limit(limit);
+      .limit(limit * 2);
 
-    if (error || !data) {
-      console.error('Error fetching activity:', error);
+    if (sentError) {
+      console.error('Error fetching activity:', sentError);
       return [];
     }
 
-    return data.map(email => ({
-      id: email.id,
-      type: email.first_replied_at ? 'replied' :
-            email.first_clicked_at ? 'clicked' :
-            email.first_opened_at ? 'opened' :
-            email.status === 'Bounced' ? 'bounced' :
-            email.status === 'Failed' ? 'failed' : 'sent',
-      email: email.to_email,
-      subject: email.subject,
-      accountName: email.account?.name,
-      ownerName: `${email.owner?.first_name || ''} ${email.owner?.last_name || ''}`.trim(),
-      agency: email.owner?.profile_name,
-      sentAt: email.sent_at
-    }));
+    // Build activity list with individual events
+    const activities = [];
+
+    (recentSent || []).forEach(email => {
+      const baseActivity = {
+        id: email.id,
+        email: email.to_email,
+        subject: email.subject,
+        accountName: email.account?.name,
+        ownerName: `${email.owner?.first_name || ''} ${email.owner?.last_name || ''}`.trim(),
+        agency: email.owner?.profile_name
+      };
+
+      // Add sent event
+      if (email.sent_at) {
+        activities.push({
+          ...baseActivity,
+          type: email.status === 'Bounced' ? 'bounced' : email.status === 'Failed' ? 'failed' : 'sent',
+          timestamp: email.sent_at
+        });
+      }
+
+      // Add opened event if exists
+      if (email.first_opened_at) {
+        activities.push({
+          ...baseActivity,
+          type: 'opened',
+          timestamp: email.first_opened_at
+        });
+      }
+
+      // Add clicked event if exists
+      if (email.first_clicked_at) {
+        activities.push({
+          ...baseActivity,
+          type: 'clicked',
+          timestamp: email.first_clicked_at
+        });
+      }
+
+      // Add replied event if exists
+      if (email.first_replied_at) {
+        activities.push({
+          ...baseActivity,
+          type: 'replied',
+          timestamp: email.first_replied_at
+        });
+      }
+    });
+
+    // Sort by timestamp descending and take the limit
+    return activities
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, limit)
+      .map(a => ({ ...a, sentAt: a.timestamp }));
+  },
+
+  /**
+   * Generate PDF report data
+   */
+  async generateReportData() {
+    const [overview, topAgencies, topAutomations, topUsers, systemHealth] = await Promise.all([
+      this.getPlatformOverview(),
+      this.getTopAgencies(10),
+      this.getTopAutomations(10),
+      this.getTopUsers(10),
+      this.getSystemHealth()
+    ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      overview,
+      topAgencies,
+      topAutomations,
+      topUsers,
+      systemHealth
+    };
   }
+
 };
 
 export default masterAdminAnalyticsService;

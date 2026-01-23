@@ -1,9 +1,10 @@
 // src/pages/MasterAdminDashboardPage.jsx
 // Comprehensive Master Admin Analytics Dashboard
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { masterAdminAnalyticsService } from '../services/masterAdminAnalytics';
 import {
   usePlatformOverview,
   useTopAgencies,
@@ -158,7 +159,7 @@ const HealthIndicator = ({ score, status, theme: t }) => {
 // ============================================
 // LEADERBOARD TABLE
 // ============================================
-const LeaderboardTable = ({ title, data, columns, isLoading, emptyMessage, theme: t }) => (
+const LeaderboardTable = ({ title, data, columns, isLoading, emptyMessage, timeLabel = 'This Week', theme: t }) => (
   <div style={{
     backgroundColor: t.bgCard,
     borderRadius: '16px',
@@ -173,7 +174,7 @@ const LeaderboardTable = ({ title, data, columns, isLoading, emptyMessage, theme
       justifyContent: 'space-between'
     }}>
       <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>{title}</h3>
-      <span style={{ fontSize: '12px', color: t.textMuted }}>This Week</span>
+      <span style={{ fontSize: '12px', color: t.textMuted }}>{timeLabel}</span>
     </div>
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -456,7 +457,7 @@ const RepliesCard = ({ data, isLoading, theme: t }) => (
           color: t.textMuted
         }}>
           <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>📭</span>
-          <span style={{ fontSize: '13px' }}>No replies in the last 24 hours</span>
+          <span style={{ fontSize: '13px' }}>No replies in the last 7 days</span>
         </div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -481,9 +482,295 @@ const RepliesCard = ({ data, isLoading, theme: t }) => (
 // ============================================
 // MAIN COMPONENT
 // ============================================
+// ============================================
+// PDF GENERATION HELPER
+// ============================================
+const generatePDFContent = (data) => {
+  const { overview, topAgencies, topAutomations, topUsers, systemHealth, generatedAt } = data;
+  const date = new Date(generatedAt).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const formatNumber = (num) => {
+    if (num === undefined || num === null) return '0';
+    return num.toLocaleString();
+  };
+
+  const formatPercent = (num) => `${num || 0}%`;
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Master Admin Analytics Report</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; line-height: 1.5; padding: 40px; background: #fff; }
+    .header { text-align: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 3px solid #3b82f6; }
+    .header h1 { font-size: 32px; color: #1e293b; margin-bottom: 8px; }
+    .header .subtitle { color: #64748b; font-size: 14px; }
+    .section { margin-bottom: 32px; }
+    .section-title { font-size: 18px; font-weight: 600; color: #1e293b; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+    .section-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #3b82f6; border-radius: 2px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #3b82f6; }
+    .stat-value.green { color: #22c55e; }
+    .stat-value.purple { color: #8b5cf6; }
+    .stat-value.orange { color: #f59e0b; }
+    .stat-value.red { color: #ef4444; }
+    .stat-label { font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-change { font-size: 11px; margin-top: 4px; }
+    .stat-change.positive { color: #22c55e; }
+    .stat-change.negative { color: #ef4444; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
+    th.right { text-align: right; }
+    td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    td.right { text-align: right; }
+    .rank { display: inline-block; width: 24px; height: 24px; background: #3b82f6; color: white; border-radius: 6px; text-align: center; line-height: 24px; font-size: 12px; font-weight: 600; }
+    .rank.gold { background: #f59e0b; }
+    .rank.silver { background: #94a3b8; }
+    .rank.bronze { background: #c2410c; }
+    .health-badge { display: inline-block; padding: 8px 16px; border-radius: 8px; font-weight: 600; }
+    .health-badge.healthy { background: #dcfce7; color: #166534; }
+    .health-badge.warning { background: #fef3c7; color: #92400e; }
+    .health-badge.critical { background: #fee2e2; color: #991b1b; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px; }
+    @media print {
+      body { padding: 20px; }
+      .stat-card { break-inside: avoid; }
+      table { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Master Admin Analytics Report</h1>
+    <p class="subtitle">Generated on ${date}</p>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Platform Overview</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(overview?.totalUsers)}</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(overview?.totalAgencies)}</div>
+        <div class="stat-label">Agencies</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value green">${formatNumber(overview?.activeAutomations)}</div>
+        <div class="stat-label">Active Automations</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(overview?.totalTemplates)}</div>
+        <div class="stat-label">Templates</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Weekly Performance</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(overview?.emailsSentWeek)}</div>
+        <div class="stat-label">Emails Sent</div>
+        <div class="stat-change ${overview?.sentChange > 0 ? 'positive' : 'negative'}">${overview?.sentChange > 0 ? '+' : ''}${overview?.sentChange || 0}% vs last week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value green">${formatPercent(overview?.openRateWeek)}</div>
+        <div class="stat-label">Open Rate</div>
+        <div class="stat-change ${overview?.openRateChange > 0 ? 'positive' : 'negative'}">${overview?.openRateChange > 0 ? '+' : ''}${overview?.openRateChange || 0}% vs last week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value purple">${formatPercent(overview?.clickRateWeek)}</div>
+        <div class="stat-label">Click Rate</div>
+        <div class="stat-change ${overview?.clickRateChange > 0 ? 'positive' : 'negative'}">${overview?.clickRateChange > 0 ? '+' : ''}${overview?.clickRateChange || 0}% vs last week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value orange">${formatPercent(overview?.responseRateWeek)}</div>
+        <div class="stat-label">Response Rate</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Today's Performance</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(overview?.sentToday)}</div>
+        <div class="stat-label">Sent Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value green">${formatNumber(overview?.opensToday)}</div>
+        <div class="stat-label">Opens Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value purple">${formatNumber(overview?.clicksToday)}</div>
+        <div class="stat-label">Clicks Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value orange">${formatNumber(overview?.repliesToday)}</div>
+        <div class="stat-label">Replies Today</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">System Health</h2>
+    <p style="margin-bottom: 12px;">
+      <span class="health-badge ${systemHealth?.status || 'healthy'}">
+        System Status: ${(systemHealth?.status || 'healthy').charAt(0).toUpperCase() + (systemHealth?.status || 'healthy').slice(1)} (Score: ${systemHealth?.healthScore || 100})
+      </span>
+    </p>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(systemHealth?.pendingEmails)}</div>
+        <div class="stat-label">Pending Emails</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${formatNumber(systemHealth?.sentLastHour)}</div>
+        <div class="stat-label">Sent Last Hour</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value ${systemHealth?.failedLast24h > 10 ? 'red' : ''}">${formatNumber(systemHealth?.failedLast24h)}</div>
+        <div class="stat-label">Failed (24h)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value ${systemHealth?.bouncedLast24h > 20 ? 'red' : ''}">${formatNumber(systemHealth?.bouncedLast24h)}</div>
+        <div class="stat-label">Bounced (24h)</div>
+      </div>
+    </div>
+  </div>
+
+  ${topAgencies && topAgencies.length > 0 ? `
+  <div class="section">
+    <h2 class="section-title">Top Agencies by Volume</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Agency</th>
+          <th class="right">Sent</th>
+          <th class="right">Open Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topAgencies.map((agency, i) => `
+          <tr>
+            <td><span class="rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td><strong>${agency.name}</strong></td>
+            <td class="right">${formatNumber(agency.sent)}</td>
+            <td class="right" style="color: #22c55e; font-weight: 600;">${formatPercent(agency.openRate)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  ` : ''}
+
+  ${topAutomations && topAutomations.length > 0 ? `
+  <div class="section">
+    <h2 class="section-title">Top Performing Automations</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Automation</th>
+          <th>Owner</th>
+          <th class="right">Sent</th>
+          <th class="right">Open Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topAutomations.map((auto, i) => `
+          <tr>
+            <td><span class="rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td><strong>${auto.name}</strong></td>
+            <td style="color: #64748b;">${auto.ownerName}</td>
+            <td class="right">${formatNumber(auto.sent)}</td>
+            <td class="right" style="color: #22c55e; font-weight: 600;">${formatPercent(auto.openRate)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  ` : ''}
+
+  ${topUsers && topUsers.length > 0 ? `
+  <div class="section">
+    <h2 class="section-title">Top Users by Volume</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>User</th>
+          <th>Agency</th>
+          <th class="right">Sent</th>
+          <th class="right">Open Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topUsers.map((user, i) => `
+          <tr>
+            <td><span class="rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td><strong>${user.name}</strong></td>
+            <td style="color: #64748b;">${user.agency || '-'}</td>
+            <td class="right">${formatNumber(user.sent)}</td>
+            <td class="right" style="color: #22c55e; font-weight: 600;">${formatPercent(user.openRate)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  ` : ''}
+
+  <div class="footer">
+    <p>ISG Marketing Platform - Master Admin Analytics Report</p>
+    <p>This report was automatically generated and contains confidential information.</p>
+  </div>
+</body>
+</html>
+  `;
+};
+
 const MasterAdminDashboardPage = ({ t }) => {
   const { isAdmin, user } = useAuth();
   const [timeRange, setTimeRange] = useState(30);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  // PDF Download handler
+  const handleDownloadPDF = useCallback(async () => {
+    setIsGeneratingPDF(true);
+    try {
+      const reportData = await masterAdminAnalyticsService.generateReportData();
+      const htmlContent = generatePDFContent(reportData);
+
+      // Open in new window for printing/saving as PDF
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+
+      // Trigger print dialog after content loads
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate report. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  }, []);
 
   // Fetch all data
   const { data: overview, isLoading: overviewLoading } = usePlatformOverview();
@@ -619,6 +906,10 @@ const MasterAdminDashboardPage = ({ t }) => {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
 
       {/* Header */}
@@ -651,6 +942,45 @@ const MasterAdminDashboardPage = ({ t }) => {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Download PDF Button */}
+          <button
+            onClick={handleDownloadPDF}
+            disabled={isGeneratingPDF}
+            style={{
+              padding: '10px 16px',
+              fontSize: '13px',
+              fontWeight: '600',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: '#3b82f6',
+              color: '#fff',
+              cursor: isGeneratingPDF ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              opacity: isGeneratingPDF ? 0.7 : 1,
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => !isGeneratingPDF && (e.target.style.backgroundColor = '#2563eb')}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#3b82f6'}
+          >
+            {isGeneratingPDF ? (
+              <>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download PDF
+              </>
+            )}
+          </button>
+
           {/* Time Range Selector */}
           <select
             value={timeRange}
@@ -840,8 +1170,8 @@ const MasterAdminDashboardPage = ({ t }) => {
           theme={t}
         />
         <StatCard
-          label="Scheduled Today"
-          value={formatNumber(overview?.scheduledToday)}
+          label="Sent Today"
+          value={formatNumber(overview?.sentToday)}
           subValue={`${formatNumber(overview?.scheduledWeek)} this week`}
           icon="📅"
           color="#3b82f6"
@@ -955,6 +1285,7 @@ const MasterAdminDashboardPage = ({ t }) => {
           columns={automationColumns}
           isLoading={automationsLoading}
           emptyMessage="No automation data available"
+          timeLabel="Last 30 Days"
           theme={t}
         />
 
