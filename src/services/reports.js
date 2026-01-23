@@ -92,7 +92,7 @@ export const reportsService = {
       if (log.first_opened_at) dailyStats[date].opens++;
       if (log.first_clicked_at) dailyStats[date].clicks++;
       if (log.bounced_at) dailyStats[date].bounces++;
-      if (log.replied_at) dailyStats[date].replies++;
+      // Note: replied_at doesn't exist in email_logs table, replies tracked elsewhere
     });
 
     // Convert to sorted array
