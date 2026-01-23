@@ -231,6 +231,19 @@ export const AuthProvider = ({ children }) => {
       };
       setScopeFilter(allAgenciesFilter);
       localStorage.setItem('isg_scope_filter', JSON.stringify(allAgenciesFilter));
+    } else if (agencyAdminStatus && userData.profile_name) {
+      // Agency Admin with no saved filter - initialize "All Agents" with all user IDs from their agency
+      const agencyUserIds = await adminService.getUserIdsByAgency(userData.profile_name);
+      const allAgentsFilter = {
+        active: true,
+        filterType: 'all_agents',
+        filterValue: userData.profile_name,
+        filterLabel: 'All Agents',
+        ownerIds: agencyUserIds,
+        originalUserId: userData.user_unique_id,
+      };
+      setScopeFilter(allAgentsFilter);
+      localStorage.setItem('isg_scope_filter', JSON.stringify(allAgentsFilter));
     }
   };
 
