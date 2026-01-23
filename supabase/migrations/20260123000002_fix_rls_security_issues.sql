@@ -1,12 +1,8 @@
--- Fix security advisor warnings for RLS and SECURITY DEFINER view
+-- Fix security advisor warning for SECURITY DEFINER view
+-- Note: master_automations and master_templates intentionally have RLS disabled
+-- (see migration 20260113000004) - these are admin-only tables accessed via service role
 
--- 1. Enable RLS on master_automations table
-ALTER TABLE public.master_automations ENABLE ROW LEVEL SECURITY;
-
--- 2. Enable RLS on master_templates table
-ALTER TABLE public.master_templates ENABLE ROW LEVEL SECURITY;
-
--- 3. Fix the accounts_needing_validation view - recreate without SECURITY DEFINER
+-- Fix the accounts_needing_validation view - recreate without SECURITY DEFINER
 -- First drop the existing view
 DROP VIEW IF EXISTS public.accounts_needing_validation;
 
