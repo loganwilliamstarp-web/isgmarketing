@@ -61,9 +61,12 @@ export const reportsService = {
       p_start_date: startDate.toISOString()
     });
 
-    console.log('[Reports] email_logs query result:', { rowCount: data?.length, error });
+    console.log('[Reports] email_logs query result:', { rowCount: data?.length, error: error ? JSON.stringify(error) : null });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[Reports] Full error:', error);
+      throw error;
+    }
 
     // Aggregate by date
     const dailyStats = {};
