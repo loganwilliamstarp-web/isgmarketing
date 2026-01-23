@@ -54,11 +54,11 @@ export const reportsService = {
     console.log('[Reports] getEmailPerformanceReport called with:', { ownerIds, days, startDate: startDate.toISOString() });
 
     // Query email_logs directly instead of pre-aggregated stats table
+    // Note: gte filter implicitly excludes nulls, so no need for separate null check
     let query = supabase
       .from('email_logs')
       .select('sent_at, delivered_at, first_opened_at, first_clicked_at, bounced_at, replied_at')
-      .gte('sent_at', startDate.toISOString())
-      .not('sent_at', 'is', null);
+      .gte('sent_at', startDate.toISOString());
 
     query = applyOwnerFilter(query, ownerIds);
 
