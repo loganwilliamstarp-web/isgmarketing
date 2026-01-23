@@ -785,6 +785,98 @@ const ClientProfilePage = ({ t }) => {
               </div>
             </div>
 
+            {/* Customer Feedback */}
+            {(client.survey_stars || client.survey_feedback_text) && (
+              <div style={{
+                padding: '20px',
+                backgroundColor: t.bgCard,
+                borderRadius: '12px',
+                border: `1px solid ${t.border}`
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
+                  Customer Feedback
+                </h3>
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: t.bg,
+                  borderRadius: '10px'
+                }}>
+                  {/* Star Rating */}
+                  {client.survey_stars && (
+                    <div style={{ marginBottom: client.survey_feedback_text ? '16px' : 0 }}>
+                      <div style={{
+                        fontSize: '28px',
+                        color: '#fbbf24',
+                        letterSpacing: '2px',
+                        marginBottom: '8px'
+                      }}>
+                        {'★'.repeat(client.survey_stars)}
+                        {'☆'.repeat(5 - client.survey_stars)}
+                      </div>
+                      <div style={{
+                        display: 'inline-block',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        backgroundColor: client.survey_stars >= 4
+                          ? `${t.success}20`
+                          : client.survey_stars === 3
+                            ? `${t.warning}20`
+                            : `${t.danger}20`,
+                        color: client.survey_stars >= 4
+                          ? t.success
+                          : client.survey_stars === 3
+                            ? t.warning
+                            : t.danger
+                      }}>
+                        {client.survey_stars >= 4 ? 'Promoter' : client.survey_stars === 3 ? 'Passive' : 'Detractor'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Feedback Text */}
+                  {client.survey_feedback_text && (
+                    <div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: t.textMuted,
+                        marginBottom: '6px',
+                        textTransform: 'uppercase',
+                        fontWeight: '600'
+                      }}>
+                        Feedback
+                      </div>
+                      <div style={{
+                        fontSize: '14px',
+                        color: t.text,
+                        lineHeight: '1.5',
+                        fontStyle: 'italic',
+                        padding: '12px',
+                        backgroundColor: t.bgCard,
+                        borderRadius: '8px',
+                        borderLeft: `3px solid ${t.primary}`
+                      }}>
+                        "{client.survey_feedback_text}"
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Timestamp */}
+                  {client.survey_completed_at && (
+                    <div style={{
+                      fontSize: '11px',
+                      color: t.textMuted,
+                      marginTop: '12px'
+                    }}>
+                      Submitted {new Date(client.survey_completed_at).toLocaleDateString()} at{' '}
+                      {new Date(client.survey_completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Active Enrollments */}
             <div style={{
               padding: '20px',

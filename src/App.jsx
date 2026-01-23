@@ -26,6 +26,7 @@ const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
+const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 
 // ============================================
@@ -823,6 +824,13 @@ const App = () => {
             <Route path="/feedback" element={
               <Suspense fallback={<div>Loading...</div>}>
                 <FeedbackPage />
+              </Suspense>
+            } />
+
+            {/* Public unsubscribe page - accessed from email footer links */}
+            <Route path="/unsubscribe" element={
+              <Suspense fallback={<div>Loading...</div>}>
+                <UnsubscribePage />
               </Suspense>
             } />
 
