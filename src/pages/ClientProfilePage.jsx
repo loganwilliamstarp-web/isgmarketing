@@ -786,16 +786,16 @@ const ClientProfilePage = ({ t }) => {
             </div>
 
             {/* Customer Feedback */}
-            {(client.survey_stars || client.survey_feedback_text) && (
-              <div style={{
-                padding: '20px',
-                backgroundColor: t.bgCard,
-                borderRadius: '12px',
-                border: `1px solid ${t.border}`
-              }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
-                  Customer Feedback
-                </h3>
+            <div style={{
+              padding: '20px',
+              backgroundColor: t.bgCard,
+              borderRadius: '12px',
+              border: `1px solid ${t.border}`
+            }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
+                Customer Feedback
+              </h3>
+              {(client.survey_stars || client.survey_feedback_text) ? (
                 <div style={{
                   padding: '16px',
                   backgroundColor: t.bg,
@@ -874,8 +874,12 @@ const ClientProfilePage = ({ t }) => {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center', color: t.textMuted, fontSize: '13px' }}>
+                  No feedback received yet
+                </div>
+              )}
+            </div>
 
             {/* Active Enrollments */}
             <div style={{
