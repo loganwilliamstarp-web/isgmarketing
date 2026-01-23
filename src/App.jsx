@@ -394,8 +394,17 @@ const AppLayout = () => {
   const { userId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    // Initialize from localStorage, default to false (light mode)
+    const saved = localStorage.getItem('isg_theme_dark');
+    return saved === 'true';
+  });
   const { user, isAdmin, impersonating, logout, isTrialUser, isTrialExpired } = useAuth();
+
+  // Persist theme preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('isg_theme_dark', isDark.toString());
+  }, [isDark]);
 
   // Fetch user data from Supabase based on userId (the viewed user, not necessarily the logged-in user)
   const { data: userData } = useQuery({
