@@ -1,5 +1,5 @@
 // src/pages/TimelinePage.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLifecycleStages } from '../hooks/useTimeline';
 
 // Loading skeleton component
@@ -16,66 +16,30 @@ const Skeleton = ({ width = '100%', height = '20px', style = {} }) => (
   />
 );
 
-// Node type configurations
-const nodeTypes = {
-  entry_criteria: { icon: '🎯', color: '#8b5cf6', label: 'Entry Criteria' },
-  trigger: { icon: '⚡', color: '#3b82f6', label: 'Trigger' },
-  send_email: { icon: '📧', color: '#22c55e', label: 'Send Email' },
-  delay: { icon: '⏱', color: '#f59e0b', label: 'Wait' },
-  condition: { icon: '🔀', color: '#a78bfa', label: 'Condition' },
-  field_condition: { icon: '📋', color: '#ec4899', label: 'Field Check' },
-  update_field: { icon: '✏️', color: '#06b6d4', label: 'Update Field' },
-  end: { icon: '🏁', color: '#71717a', label: 'End' }
-};
-
-// Category colors
-const categoryColors = {
-  'Onboarding': '#8b5cf6',
-  'Retention': '#3b82f6',
-  'Cross-Sell': '#22c55e',
-  'Win-Back': '#f59e0b',
-  'Engagement': '#ec4899'
-};
-
 const TimelinePage = ({ t }) => {
-  // View mode: 'single' for individual automation, 'lifecycle' for connected view
-  const [viewMode, setViewMode] = useState('single');
-  // Detail level: 'full' shows all nodes, 'simple' shows emails only
-  const [detailLevel, setDetailLevel] = useState('full');
-  // Selected automation for single view
-  const [selectedAutomation, setSelectedAutomation] = useState(null);
   // Line of business filter
-  const [lobFilter, setLobFilter] = useState('all');
+  const [lobFilter, setLobFilter] = useState('Personal');
+  // Selected node for details panel
+  const [selectedNode, setSelectedNode] = useState(null);
 
   // Fetch lifecycle stages with automations
   const { data, isLoading, error } = useLifecycleStages();
 
-  // Filter automations by line of business
-  const filteredStages = useMemo(() => {
-    if (!data?.stages) return [];
+  // Build the flowchart data based on filter
+  const flowchartData = useMemo(() => {
+    if (!data?.stages) return null;
 
-    return data.stages.map(stage => {
-      let automations = stage.automations;
-      if (lobFilter !== 'all') {
-        automations = automations.filter(a =>
-          a.lineOfBusiness === lobFilter || a.lineOfBusiness === 'All'
-        );
-      }
-      return { ...stage, automations };
-    }).filter(stage => stage.automations.length > 0);
+    // Get all automations filtered by line of business
+    const allAutomations = data.stages.flatMap(stage =>
+      stage.automations.filter(a =>
+        lobFilter === 'all' || a.lineOfBusiness === lobFilter || a.lineOfBusiness === 'All'
+      )
+    );
+
+    // Build the flowchart structure
+    // This defines the logical flow of the customer journey
+    return buildFlowchartStructure(allAutomations, lobFilter);
   }, [data?.stages, lobFilter]);
-
-  // All automations flat list for dropdown
-  const allAutomations = useMemo(() => {
-    return filteredStages.flatMap(stage => stage.automations);
-  }, [filteredStages]);
-
-  // Auto-select first automation if none selected
-  React.useEffect(() => {
-    if (!selectedAutomation && allAutomations.length > 0) {
-      setSelectedAutomation(allAutomations[0]);
-    }
-  }, [allAutomations, selectedAutomation]);
 
   // Loading state
   if (isLoading) {
@@ -85,7 +49,7 @@ const TimelinePage = ({ t }) => {
           <Skeleton width="300px" height="32px" style={{ marginBottom: '8px' }} />
           <Skeleton width="400px" height="16px" />
         </div>
-        <Skeleton height="400px" />
+        <Skeleton height="500px" />
       </div>
     );
   }
@@ -136,907 +100,812 @@ const TimelinePage = ({ t }) => {
         border: `1px solid ${t.border}`,
         alignItems: 'center'
       }}>
-        {/* View Mode Toggle */}
-        <div style={{
-          display: 'flex',
-          backgroundColor: t.bgHover,
-          borderRadius: '8px',
-          padding: '4px'
-        }}>
-          <button
-            onClick={() => setViewMode('single')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: viewMode === 'single' ? t.primary : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: viewMode === 'single' ? '#fff' : t.textSecondary,
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            Single Automation
-          </button>
-          <button
-            onClick={() => setViewMode('lifecycle')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: viewMode === 'lifecycle' ? t.primary : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: viewMode === 'lifecycle' ? '#fff' : t.textSecondary,
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            Full Lifecycle
-          </button>
-        </div>
-
-        {/* Automation Selector (for single view) */}
-        {viewMode === 'single' && (
-          <select
-            value={selectedAutomation?.id || ''}
-            onChange={(e) => {
-              const automation = allAutomations.find(a => a.id === parseInt(e.target.value));
-              setSelectedAutomation(automation);
-            }}
-            style={{
-              padding: '10px 12px',
-              backgroundColor: t.bgInput,
-              border: `1px solid ${t.border}`,
-              borderRadius: '8px',
-              color: t.text,
-              fontSize: '14px',
-              cursor: 'pointer',
-              minWidth: '250px'
-            }}
-          >
-            {filteredStages.map(stage => (
-              <optgroup key={stage.name} label={stage.name}>
-                {stage.automations.map(automation => (
-                  <option key={automation.id} value={automation.id}>
-                    {automation.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        )}
-
-        {/* Line of Business Filter */}
-        <select
-          value={lobFilter}
-          onChange={(e) => setLobFilter(e.target.value)}
-          style={{
-            padding: '10px 12px',
-            backgroundColor: t.bgInput,
-            border: `1px solid ${t.border}`,
-            borderRadius: '8px',
-            color: t.text,
-            fontSize: '14px',
-            cursor: 'pointer'
-          }}
-        >
-          <option value="all">All Lines</option>
-          <option value="Personal">Personal Lines</option>
-          <option value="Commercial">Commercial Lines</option>
-        </select>
-
-        {/* Detail Level Toggle */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginLeft: 'auto'
-        }}>
-          <span style={{ fontSize: '13px', color: t.textSecondary }}>Detail:</span>
+        {/* Line of Business Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', color: t.textSecondary }}>Line of Business:</span>
           <div style={{
             display: 'flex',
             backgroundColor: t.bgHover,
-            borderRadius: '6px',
-            padding: '2px'
+            borderRadius: '8px',
+            padding: '4px'
           }}>
             <button
-              onClick={() => setDetailLevel('simple')}
+              onClick={() => setLobFilter('Personal')}
               style={{
-                padding: '6px 12px',
-                backgroundColor: detailLevel === 'simple' ? t.bgCard : 'transparent',
+                padding: '8px 16px',
+                backgroundColor: lobFilter === 'Personal' ? t.primary : 'transparent',
                 border: 'none',
-                borderRadius: '4px',
-                color: detailLevel === 'simple' ? t.text : t.textMuted,
-                fontSize: '12px',
-                cursor: 'pointer'
+                borderRadius: '6px',
+                color: lobFilter === 'Personal' ? '#fff' : t.textSecondary,
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
               }}
             >
-              Simple
+              Personal
             </button>
             <button
-              onClick={() => setDetailLevel('full')}
+              onClick={() => setLobFilter('Commercial')}
               style={{
-                padding: '6px 12px',
-                backgroundColor: detailLevel === 'full' ? t.bgCard : 'transparent',
+                padding: '8px 16px',
+                backgroundColor: lobFilter === 'Commercial' ? t.primary : 'transparent',
                 border: 'none',
-                borderRadius: '4px',
-                color: detailLevel === 'full' ? t.text : t.textMuted,
-                fontSize: '12px',
-                cursor: 'pointer'
+                borderRadius: '6px',
+                color: lobFilter === 'Commercial' ? '#fff' : t.textSecondary,
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
               }}
             >
-              Full
+              Commercial
             </button>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              backgroundColor: t.bgCard,
+              border: `2px solid ${t.border}`,
+              borderRadius: '4px'
+            }} />
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Automation</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="24" height="20" viewBox="0 0 24 20">
+              <polygon
+                points="12,0 24,10 12,20 0,10"
+                fill="none"
+                stroke={t.border}
+                strokeWidth="2"
+              />
+            </svg>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Decision</span>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      {viewMode === 'single' ? (
-        <SingleAutomationView
-          automation={selectedAutomation}
-          templateMap={data?.templateMap}
-          detailLevel={detailLevel}
-          t={t}
-        />
-      ) : (
-        <LifecycleView
-          stages={filteredStages}
-          templateMap={data?.templateMap}
-          detailLevel={detailLevel}
-          t={t}
-        />
-      )}
-    </div>
-  );
-};
-
-// ============================================
-// SINGLE AUTOMATION VIEW
-// ============================================
-const SingleAutomationView = ({ automation, templateMap, detailLevel, t }) => {
-  if (!automation) {
-    return (
+      {/* Flowchart Canvas */}
       <div style={{
-        padding: '60px',
-        textAlign: 'center',
         backgroundColor: t.bgCard,
         borderRadius: '12px',
-        border: `1px solid ${t.border}`
+        border: `1px solid ${t.border}`,
+        padding: '40px',
+        minHeight: '600px',
+        overflow: 'auto'
       }}>
-        <p style={{ color: t.textMuted }}>Select an automation to view its workflow</p>
-      </div>
-    );
-  }
-
-  const nodes = automation.nodes || [];
-  const categoryColor = categoryColors[automation.category] || '#71717a';
-
-  // Filter nodes based on detail level
-  const displayNodes = detailLevel === 'simple'
-    ? nodes.filter(n => n.type === 'send_email' || n.type === 'condition' || n.type === 'trigger')
-    : nodes.filter(n => n.type !== 'entry_criteria');
-
-  return (
-    <div style={{
-      backgroundColor: t.bgCard,
-      borderRadius: '12px',
-      border: `1px solid ${t.border}`,
-      overflow: 'hidden'
-    }}>
-      {/* Automation Header */}
-      <div style={{
-        padding: '20px 24px',
-        borderBottom: `1px solid ${t.border}`,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '16px'
-      }}>
-        <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '12px',
-          backgroundColor: `${categoryColor}20`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '24px'
-        }}>
-          {automation.category === 'Onboarding' ? '👋' :
-           automation.category === 'Retention' ? '🔄' :
-           automation.category === 'Cross-Sell' ? '📈' :
-           automation.category === 'Win-Back' ? '🎯' : '💬'}
-        </div>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ margin: 0, fontSize: '18px', color: t.text, fontWeight: '600' }}>
-            {automation.name}
-          </h2>
-          {automation.description && (
-            <p style={{ margin: '4px 0 0', fontSize: '13px', color: t.textSecondary }}>
-              {automation.description}
-            </p>
-          )}
-        </div>
-        <div style={{
-          padding: '6px 12px',
-          backgroundColor: `${categoryColor}20`,
-          color: categoryColor,
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: '600'
-        }}>
-          {automation.category}
-        </div>
-      </div>
-
-      {/* Entry Criteria */}
-      {detailLevel === 'full' && (
-        <EntryCriteriaBox automation={automation} t={t} />
-      )}
-
-      {/* Flowchart */}
-      <div style={{
-        padding: '32px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minHeight: '300px'
-      }}>
-        <FlowchartNodes
-          nodes={displayNodes}
-          templateMap={templateMap}
-          detailLevel={detailLevel}
+        <FlowchartCanvas
+          flowchartData={flowchartData}
+          templateMap={data?.templateMap}
+          selectedNode={selectedNode}
+          onSelectNode={setSelectedNode}
           t={t}
         />
       </div>
+
+      {/* Node Details Panel */}
+      {selectedNode && (
+        <NodeDetailsPanel
+          node={selectedNode}
+          templateMap={data?.templateMap}
+          onClose={() => setSelectedNode(null)}
+          t={t}
+        />
+      )}
     </div>
   );
 };
 
 // ============================================
-// ENTRY CRITERIA BOX
+// BUILD FLOWCHART STRUCTURE
 // ============================================
-const EntryCriteriaBox = ({ automation, t }) => {
-  const filterConfig = automation.filter_config;
-  if (!filterConfig?.groups?.length) return null;
-
-  const formatCondition = (rule) => {
-    const fieldLabels = {
-      'account_type': 'Account Type',
-      'policy_class': 'Policy Class',
-      'policy_status': 'Policy Status',
-      'policy_expiration_date': 'Expiration Date',
-      'policy_effective_date': 'Effective Date',
-      'customer_since': 'Customer Since',
-      'policy_term': 'Policy Term',
-      'account_status': 'Account Status',
-      'has_policy_type': 'Has Policy Type',
-      'active_policy_type': 'Active Policy Type',
-      'has_only_one_of': 'Has Only One Of'
-    };
-
-    const operatorLabels = {
-      'equals': 'is',
-      'equals_days_ago': 'is X days ago',
-      'equals_days_from_now': 'is X days from now',
-      'is': 'is',
-      'is_not': 'is not',
-      'in': 'is one of',
-      'is_blank': 'is blank',
-      'more_than_days_future': '> X days from now',
-      'less_than_days_future': '< X days from now'
-    };
-
-    const field = fieldLabels[rule.field] || rule.field;
-    const op = operatorLabels[rule.operator] || rule.operator;
-    const value = Array.isArray(rule.value) ? rule.value.join(', ') : rule.value;
-
-    return { field, operator: op, value };
+function buildFlowchartStructure(automations, lobFilter) {
+  // Find automations by category/type
+  const findAutomation = (namePattern) => {
+    return automations.find(a =>
+      a.name?.toLowerCase().includes(namePattern.toLowerCase()) ||
+      a.default_key?.toLowerCase().includes(namePattern.toLowerCase())
+    );
   };
 
-  return (
-    <div style={{
-      margin: '0 24px',
-      padding: '16px',
-      backgroundColor: `${nodeTypes.entry_criteria.color}10`,
-      borderRadius: '8px',
-      border: `1px solid ${nodeTypes.entry_criteria.color}30`
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        marginBottom: '12px'
-      }}>
-        <span style={{ fontSize: '16px' }}>{nodeTypes.entry_criteria.icon}</span>
-        <span style={{
-          fontSize: '13px',
-          fontWeight: '600',
-          color: nodeTypes.entry_criteria.color
-        }}>
-          Entry Criteria
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {filterConfig.groups.map((group, gi) => (
-          <React.Fragment key={gi}>
-            {(group.rules || group.conditions || []).map((rule, ri) => {
-              if (!rule.field) return null;
-              const { field, operator, value } = formatCondition(rule);
-              return (
-                <div key={ri} style={{
-                  padding: '6px 10px',
-                  backgroundColor: t.bgCard,
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  color: t.text,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span style={{ fontWeight: '500' }}>{field}</span>
-                  <span style={{ color: t.textMuted }}>{operator}</span>
-                  <span style={{ color: nodeTypes.entry_criteria.color, fontWeight: '500' }}>{value}</span>
-                </div>
-              );
-            })}
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-};
+  // Build the flowchart nodes and connections
+  const nodes = [];
+  const connections = [];
+
+  // ROW 1: Welcome -> Is Cross Sale? -> Midterm Cross Sale
+  //                                  -> No Email
+  const welcomeAuto = findAutomation('welcome');
+  const midtermCrossAuto = findAutomation('midterm') || findAutomation('cross');
+  const renewalAuto = findAutomation('renewal');
+  const renewedAuto = findAutomation('renewed') || findAutomation('policy renewed');
+
+  // Welcome node
+  if (welcomeAuto) {
+    nodes.push({
+      id: 'welcome',
+      type: 'automation',
+      label: 'Welcome',
+      automation: welcomeAuto,
+      x: 0,
+      y: 0
+    });
+  }
+
+  // Cross Sale Decision
+  nodes.push({
+    id: 'is-cross-sale',
+    type: 'decision',
+    label: 'Is Cross\nSale?',
+    x: 1,
+    y: 0
+  });
+
+  if (welcomeAuto) {
+    connections.push({ from: 'welcome', to: 'is-cross-sale' });
+  }
+
+  // Midterm Cross Sale (Yes path)
+  if (midtermCrossAuto) {
+    nodes.push({
+      id: 'midterm-cross',
+      type: 'automation',
+      label: 'Midterm\nCrosssale',
+      automation: midtermCrossAuto,
+      x: 2,
+      y: 0
+    });
+    connections.push({ from: 'is-cross-sale', to: 'midterm-cross', label: 'Yes' });
+  }
+
+  // No Email (No path)
+  nodes.push({
+    id: 'no-email',
+    type: 'automation',
+    label: 'No Email',
+    isPlaceholder: true,
+    x: 2,
+    y: 1
+  });
+  connections.push({ from: 'is-cross-sale', to: 'no-email', label: 'No' });
+
+  // ROW 2: Renewal flow
+  // Is Renewal? -> Renewal Email -> Is Renewed? -> Renewed Email
+  //                                            -> Lost Customer
+
+  nodes.push({
+    id: 'is-renewal',
+    type: 'decision',
+    label: 'Is\nRenewal?',
+    x: 0,
+    y: 2
+  });
+
+  if (renewalAuto) {
+    nodes.push({
+      id: 'renewal',
+      type: 'automation',
+      label: 'Renewal\nEmail',
+      automation: renewalAuto,
+      x: 1,
+      y: 2
+    });
+    connections.push({ from: 'is-renewal', to: 'renewal', label: 'Yes' });
+  }
+
+  nodes.push({
+    id: 'is-renewed',
+    type: 'decision',
+    label: 'Is\nRenewed?',
+    x: 2,
+    y: 2
+  });
+
+  if (renewalAuto) {
+    connections.push({ from: 'renewal', to: 'is-renewed' });
+  }
+
+  if (renewedAuto) {
+    nodes.push({
+      id: 'renewed',
+      type: 'automation',
+      label: 'Renewed\nEmail',
+      automation: renewedAuto,
+      x: 3,
+      y: 2
+    });
+    connections.push({ from: 'is-renewed', to: 'renewed', label: 'Yes' });
+  }
+
+  nodes.push({
+    id: 'lost-customer',
+    type: 'automation',
+    label: 'Lost\nCustomer',
+    isPlaceholder: true,
+    x: 3,
+    y: 3
+  });
+  connections.push({ from: 'is-renewed', to: 'lost-customer', label: 'No' });
+
+  // ROW 3: Win-back / Prospect flows
+  const prospectAuto = findAutomation('prospect');
+  const priorCustomerAuto = findAutomation('prior');
+  const periodicAuto = findAutomation('periodic');
+
+  // Quoted not sold / Prospect
+  if (prospectAuto) {
+    nodes.push({
+      id: 'prospect',
+      type: 'automation',
+      label: 'Quoted not\nsold',
+      automation: prospectAuto,
+      x: 0,
+      y: 4
+    });
+  }
+
+  // Prior customer
+  if (priorCustomerAuto) {
+    nodes.push({
+      id: 'prior-customer',
+      type: 'automation',
+      label: 'Prior\nCustomer',
+      automation: priorCustomerAuto,
+      x: 1,
+      y: 4
+    });
+  }
+
+  // Periodic review
+  if (periodicAuto) {
+    nodes.push({
+      id: 'periodic',
+      type: 'automation',
+      label: 'Periodic\nReview',
+      automation: periodicAuto,
+      x: 2,
+      y: 4
+    });
+  }
+
+  return { nodes, connections };
+}
 
 // ============================================
-// FLOWCHART NODES RENDERER
+// FLOWCHART CANVAS
 // ============================================
-const FlowchartNodes = ({ nodes, templateMap, detailLevel, t, depth = 0 }) => {
-  if (!nodes || nodes.length === 0) {
+const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNode, t }) => {
+  if (!flowchartData) {
     return (
-      <div style={{ color: t.textMuted, fontSize: '13px' }}>
-        No workflow steps defined
+      <div style={{ textAlign: 'center', color: t.textMuted, padding: '60px' }}>
+        No flowchart data available
       </div>
     );
   }
 
+  const { nodes, connections } = flowchartData;
+
+  // Grid settings
+  const nodeWidth = 130;
+  const nodeHeight = 70;
+  const horizontalGap = 180;
+  const verticalGap = 120;
+  const startX = 60;
+  const startY = 40;
+
+  // Calculate node position
+  const getNodePosition = (node) => ({
+    x: startX + node.x * horizontalGap,
+    y: startY + node.y * verticalGap
+  });
+
+  // Calculate canvas size
+  const maxX = Math.max(...nodes.map(n => n.x)) + 1;
+  const maxY = Math.max(...nodes.map(n => n.y)) + 1;
+  const canvasWidth = startX * 2 + maxX * horizontalGap;
+  const canvasHeight = startY * 2 + maxY * verticalGap;
+
   return (
-    <>
-      {nodes.map((node, index) => (
-        <React.Fragment key={node.id}>
-          <FlowchartNode
-            node={node}
-            templateMap={templateMap}
-            detailLevel={detailLevel}
-            t={t}
-          />
+    <div style={{ position: 'relative', width: canvasWidth, height: canvasHeight, minWidth: '100%' }}>
+      {/* SVG for connections */}
+      <svg
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+        viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+      >
+        <defs>
+          <marker
+            id="arrowhead"
+            markerWidth="10"
+            markerHeight="7"
+            refX="9"
+            refY="3.5"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3.5, 0 7" fill={t.textMuted} />
+          </marker>
+        </defs>
 
-          {/* Connector to next node */}
-          {index < nodes.length - 1 && !node.branches && (
-            <Connector t={t} />
-          )}
+        {connections.map((conn, idx) => {
+          const fromNode = nodes.find(n => n.id === conn.from);
+          const toNode = nodes.find(n => n.id === conn.to);
+          if (!fromNode || !toNode) return null;
 
-          {/* Branches */}
-          {node.branches && (
-            <BranchView
-              branches={node.branches}
-              templateMap={templateMap}
-              detailLevel={detailLevel}
+          const fromPos = getNodePosition(fromNode);
+          const toPos = getNodePosition(toNode);
+
+          // Calculate connection points
+          let x1, y1, x2, y2;
+
+          if (fromNode.type === 'decision') {
+            // From decision - exit from right or bottom
+            if (toNode.y === fromNode.y) {
+              // Same row - go right
+              x1 = fromPos.x + nodeWidth;
+              y1 = fromPos.y + nodeHeight / 2;
+            } else {
+              // Different row - go down
+              x1 = fromPos.x + nodeWidth / 2;
+              y1 = fromPos.y + nodeHeight;
+            }
+          } else {
+            // From automation - exit from right
+            x1 = fromPos.x + nodeWidth;
+            y1 = fromPos.y + nodeHeight / 2;
+          }
+
+          // Entry point - left side or top
+          if (toNode.x > fromNode.x) {
+            x2 = toPos.x;
+            y2 = toPos.y + nodeHeight / 2;
+          } else {
+            x2 = toPos.x + nodeWidth / 2;
+            y2 = toPos.y;
+          }
+
+          // Create path
+          let path;
+          if (x1 === x2 || y1 === y2) {
+            // Straight line
+            path = `M ${x1} ${y1} L ${x2} ${y2}`;
+          } else {
+            // L-shaped path
+            const midX = x1 + (x2 - x1) / 2;
+            path = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+          }
+
+          return (
+            <g key={idx}>
+              <path
+                d={path}
+                fill="none"
+                stroke={t.textMuted}
+                strokeWidth="2"
+                markerEnd="url(#arrowhead)"
+              />
+              {conn.label && (
+                <text
+                  x={x1 + 15}
+                  y={y1 + (toNode.y > fromNode.y ? 20 : -8)}
+                  fill={conn.label === 'Yes' ? '#22c55e' : '#ef4444'}
+                  fontSize="11"
+                  fontWeight="600"
+                >
+                  {conn.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Nodes */}
+      {nodes.map(node => {
+        const pos = getNodePosition(node);
+        const isSelected = selectedNode?.id === node.id;
+
+        if (node.type === 'decision') {
+          return (
+            <DecisionNode
+              key={node.id}
+              node={node}
+              x={pos.x}
+              y={pos.y}
+              width={nodeWidth}
+              height={nodeHeight}
+              isSelected={isSelected}
+              onClick={() => onSelectNode(node)}
               t={t}
             />
-          )}
-        </React.Fragment>
-      ))}
-    </>
+          );
+        }
+
+        return (
+          <AutomationNode
+            key={node.id}
+            node={node}
+            x={pos.x}
+            y={pos.y}
+            width={nodeWidth}
+            height={nodeHeight}
+            isSelected={isSelected}
+            onClick={() => node.automation && onSelectNode(node)}
+            t={t}
+          />
+        );
+      })}
+    </div>
   );
 };
 
 // ============================================
-// SINGLE FLOWCHART NODE
+// AUTOMATION NODE (Rectangle)
 // ============================================
-const FlowchartNode = ({ node, templateMap, detailLevel, t }) => {
-  const type = nodeTypes[node.type] || { icon: '?', color: '#71717a', label: node.type };
-
-  // Get node content based on type
-  let title = type.label;
-  let subtitle = '';
-  let extraInfo = null;
-
-  if (node.type === 'send_email') {
-    const templateKey = node.config?.templateKey || node.config?.template;
-    const template = templateKey && templateMap?.[templateKey];
-    title = template?.name || 'Send Email';
-    subtitle = template?.subject || templateKey || '';
-  } else if (node.type === 'delay') {
-    const days = node.config?.days || 0;
-    const hours = node.config?.hours || 0;
-    title = 'Wait';
-    if (days > 0) {
-      subtitle = `${days} day${days > 1 ? 's' : ''}`;
-    } else if (hours > 0) {
-      subtitle = `${hours} hour${hours > 1 ? 's' : ''}`;
-    }
-  } else if (node.type === 'condition') {
-    title = node.config?.type === 'email_opened' ? 'Email Opened?' : 'Email Clicked?';
-    subtitle = 'Check engagement';
-  } else if (node.type === 'trigger') {
-    const time = node.config?.time || '09:00';
-    const frequency = node.config?.frequency || 'Daily';
-    title = 'Trigger';
-    subtitle = `${frequency} at ${time}`;
-  } else if (node.type === 'field_condition') {
-    title = 'Check Field';
-    subtitle = node.config?.field || '';
-  } else if (node.type === 'update_field') {
-    title = 'Update Field';
-    subtitle = node.config?.field || '';
-  } else if (node.type === 'end') {
-    title = 'End';
-    subtitle = 'Automation complete';
-  }
-
-  // Simplified view for emails - just show the email
-  const isSimple = detailLevel === 'simple';
-  const nodeWidth = isSimple ? '200px' : '280px';
+const AutomationNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
+  const hasAutomation = !!node.automation;
+  const bgColor = node.isPlaceholder ? t.bgHover : t.bgCard;
+  const borderColor = isSelected ? t.primary : (node.isPlaceholder ? t.border : '#3b82f6');
 
   return (
-    <div style={{
-      width: nodeWidth,
-      padding: isSimple ? '12px 16px' : '16px 20px',
-      backgroundColor: t.bgCard,
-      border: `2px solid ${type.color}`,
-      borderRadius: '12px',
-      boxShadow: `0 4px 12px ${type.color}20`,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px'
-    }}>
-      {/* Icon */}
-      <div style={{
-        width: isSimple ? '36px' : '44px',
-        height: isSimple ? '36px' : '44px',
-        borderRadius: '10px',
-        backgroundColor: `${type.color}20`,
+    <div
+      onClick={onClick}
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width,
+        height,
+        backgroundColor: bgColor,
+        border: `2px solid ${borderColor}`,
+        borderRadius: '8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: isSimple ? '18px' : '22px',
-        flexShrink: 0
+        cursor: hasAutomation ? 'pointer' : 'default',
+        transition: 'all 0.2s',
+        boxShadow: isSelected ? `0 0 0 3px ${t.primary}30` : 'none'
+      }}
+    >
+      <span style={{
+        fontSize: '13px',
+        fontWeight: '600',
+        color: node.isPlaceholder ? t.textMuted : t.text,
+        textAlign: 'center',
+        whiteSpace: 'pre-line',
+        lineHeight: '1.3'
       }}>
-        {type.icon}
+        {node.label}
+      </span>
+    </div>
+  );
+};
+
+// ============================================
+// DECISION NODE (Hexagon/Diamond)
+// ============================================
+const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
+  const borderColor = isSelected ? t.primary : '#f59e0b';
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width,
+        height,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer'
+      }}
+    >
+      {/* Hexagon shape using SVG */}
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ position: 'absolute' }}
+      >
+        <polygon
+          points={`
+            ${width * 0.15},${height / 2}
+            ${width * 0.35},${height * 0.1}
+            ${width * 0.65},${height * 0.1}
+            ${width * 0.85},${height / 2}
+            ${width * 0.65},${height * 0.9}
+            ${width * 0.35},${height * 0.9}
+          `}
+          fill={t.bgCard}
+          stroke={borderColor}
+          strokeWidth="2"
+        />
+      </svg>
+      <span style={{
+        position: 'relative',
+        fontSize: '12px',
+        fontWeight: '600',
+        color: t.text,
+        textAlign: 'center',
+        whiteSpace: 'pre-line',
+        lineHeight: '1.2',
+        zIndex: 1
+      }}>
+        {node.label}
+      </span>
+    </div>
+  );
+};
+
+// ============================================
+// NODE DETAILS PANEL
+// ============================================
+const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
+  const automation = node.automation;
+
+  if (!automation) return null;
+
+  // Get templates used
+  const templateKeys = [];
+  const extractTemplates = (nodes) => {
+    nodes?.forEach(n => {
+      if (n.type === 'send_email') {
+        const key = n.config?.templateKey || n.config?.template;
+        if (key && !templateKeys.includes(key)) templateKeys.push(key);
+      }
+      if (n.branches) {
+        extractTemplates(n.branches.yes);
+        extractTemplates(n.branches.no);
+      }
+    });
+  };
+  extractTemplates(automation.nodes);
+
+  const templates = templateKeys.map(key => templateMap?.[key]).filter(Boolean);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '400px',
+      backgroundColor: t.bgCard,
+      borderLeft: `1px solid ${t.border}`,
+      boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
+      zIndex: 100,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '20px',
+        borderBottom: `1px solid ${t.border}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <h3 style={{ margin: 0, fontSize: '16px', color: t.text }}>
+          {automation.name}
+        </h3>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: t.textMuted,
+            fontSize: '24px',
+            cursor: 'pointer',
+            padding: '4px'
+          }}
+        >
+          ×
+        </button>
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: isSimple ? '13px' : '14px',
-          fontWeight: '600',
-          color: t.text,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }}>
-          {title}
-        </div>
-        {subtitle && (
-          <div style={{
-            fontSize: '12px',
-            color: t.textSecondary,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            marginTop: '2px'
-          }}>
-            {subtitle}
+      <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+        {/* Description */}
+        {automation.description && (
+          <div style={{ marginBottom: '20px' }}>
+            <h4 style={{
+              margin: '0 0 8px 0',
+              fontSize: '12px',
+              color: t.textMuted,
+              textTransform: 'uppercase'
+            }}>
+              Description
+            </h4>
+            <p style={{ margin: 0, fontSize: '14px', color: t.textSecondary, lineHeight: '1.5' }}>
+              {automation.description}
+            </p>
           </div>
         )}
-      </div>
-    </div>
-  );
-};
 
-// ============================================
-// CONNECTOR LINE
-// ============================================
-const Connector = ({ t, label }) => (
-  <div style={{
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '4px 0'
-  }}>
-    <div style={{
-      width: '2px',
-      height: label ? '12px' : '24px',
-      backgroundColor: t.border
-    }} />
-    {label && (
-      <>
-        <div style={{
-          fontSize: '11px',
-          fontWeight: '600',
-          color: label === 'YES' ? '#22c55e' : '#ef4444',
-          padding: '2px 8px',
-          backgroundColor: label === 'YES' ? '#22c55e20' : '#ef444420',
-          borderRadius: '4px'
-        }}>
-          {label}
-        </div>
-        <div style={{
-          width: '2px',
-          height: '12px',
-          backgroundColor: t.border
-        }} />
-      </>
-    )}
-    <div style={{
-      width: 0,
-      height: 0,
-      borderLeft: '6px solid transparent',
-      borderRight: '6px solid transparent',
-      borderTop: `8px solid ${t.border}`
-    }} />
-  </div>
-);
-
-// ============================================
-// BRANCH VIEW
-// ============================================
-const BranchView = ({ branches, templateMap, detailLevel, t }) => {
-  const yesNodes = branches.yes || [];
-  const noNodes = branches.no || [];
-
-  if (yesNodes.length === 0 && noNodes.length === 0) {
-    return <Connector t={t} />;
-  }
-
-  return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* Split connector */}
-      <div style={{
-        width: '2px',
-        height: '16px',
-        backgroundColor: t.border
-      }} />
-
-      {/* Horizontal connector line */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        width: '100%',
-        maxWidth: '600px',
-        position: 'relative'
-      }}>
-        {/* Horizontal line */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: '25%',
-          right: '25%',
-          height: '2px',
-          backgroundColor: t.border
-        }} />
-
-        {/* YES Branch */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
+        {/* Category & Line of Business */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
           <div style={{
-            width: '2px',
-            height: '16px',
-            backgroundColor: t.border
-          }} />
-          <div style={{
-            fontSize: '11px',
-            fontWeight: '600',
-            color: '#22c55e',
-            padding: '4px 12px',
-            backgroundColor: '#22c55e20',
-            borderRadius: '12px',
-            marginBottom: '8px'
+            padding: '6px 12px',
+            backgroundColor: `${getCategoryColor(automation.category)}20`,
+            color: getCategoryColor(automation.category),
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: '600'
           }}>
-            YES
+            {automation.category}
           </div>
-          {yesNodes.length > 0 ? (
-            <FlowchartNodes
-              nodes={yesNodes}
-              templateMap={templateMap}
-              detailLevel={detailLevel}
-              t={t}
-              depth={1}
-            />
-          ) : (
-            <div style={{
-              padding: '8px 16px',
-              backgroundColor: t.bgHover,
-              borderRadius: '8px',
-              fontSize: '12px',
-              color: t.textMuted
-            }}>
-              Continue...
-            </div>
-          )}
-        </div>
-
-        {/* NO Branch */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
           <div style={{
-            width: '2px',
-            height: '16px',
-            backgroundColor: t.border
-          }} />
-          <div style={{
-            fontSize: '11px',
-            fontWeight: '600',
-            color: '#ef4444',
-            padding: '4px 12px',
-            backgroundColor: '#ef444420',
-            borderRadius: '12px',
-            marginBottom: '8px'
+            padding: '6px 12px',
+            backgroundColor: t.bgHover,
+            color: t.textSecondary,
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: '500'
           }}>
-            NO
+            {automation.lineOfBusiness} Lines
           </div>
-          {noNodes.length > 0 ? (
-            <FlowchartNodes
-              nodes={noNodes}
-              templateMap={templateMap}
-              detailLevel={detailLevel}
-              t={t}
-              depth={1}
-            />
-          ) : (
-            <div style={{
-              padding: '8px 16px',
-              backgroundColor: t.bgHover,
-              borderRadius: '8px',
-              fontSize: '12px',
-              color: t.textMuted
-            }}>
-              Continue...
-            </div>
-          )}
         </div>
-      </div>
-    </div>
-  );
-};
 
-// ============================================
-// LIFECYCLE VIEW - Shows all automations connected
-// ============================================
-const LifecycleView = ({ stages, templateMap, detailLevel, t }) => {
-  if (stages.length === 0) {
-    return (
-      <div style={{
-        padding: '60px',
-        textAlign: 'center',
-        backgroundColor: t.bgCard,
-        borderRadius: '12px',
-        border: `1px solid ${t.border}`
-      }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
-        <p style={{ color: t.textMuted }}>No automations found</p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      backgroundColor: t.bgCard,
-      borderRadius: '12px',
-      border: `1px solid ${t.border}`,
-      padding: '32px',
-      overflowX: 'auto'
-    }}>
-      {/* Lifecycle Flow */}
-      <div style={{
-        display: 'flex',
-        gap: '24px',
-        minWidth: 'min-content'
-      }}>
-        {stages.map((stage, stageIndex) => (
-          <React.Fragment key={stage.name}>
-            {/* Stage Column */}
-            <div style={{
-              minWidth: '300px',
-              display: 'flex',
-              flexDirection: 'column'
+        {/* Templates */}
+        {templates.length > 0 && (
+          <div>
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '12px',
+              color: t.textMuted,
+              textTransform: 'uppercase'
             }}>
-              {/* Stage Header */}
-              <div style={{
-                padding: '12px 16px',
-                backgroundColor: `${stage.color}15`,
-                borderRadius: '12px 12px 0 0',
-                borderBottom: `3px solid ${stage.color}`,
-                textAlign: 'center'
-              }}>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: '700',
-                  color: stage.color,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  {stage.name}
-                </div>
-                <div style={{
-                  fontSize: '11px',
-                  color: t.textMuted,
-                  marginTop: '4px'
-                }}>
-                  {stage.automations.length} automation{stage.automations.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-
-              {/* Stage Automations */}
-              <div style={{
-                flex: 1,
-                padding: '16px',
-                backgroundColor: `${stage.color}05`,
-                borderRadius: '0 0 12px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px'
-              }}>
-                {stage.automations.map((automation, autoIndex) => (
-                  <LifecycleAutomationCard
-                    key={automation.id}
-                    automation={automation}
-                    templateMap={templateMap}
-                    detailLevel={detailLevel}
-                    stageColor={stage.color}
-                    t={t}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Stage Connector Arrow */}
-            {stageIndex < stages.length - 1 && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0 8px'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
+              Email Templates ({templates.length})
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {templates.map(template => (
+                <div
+                  key={template.default_key}
+                  style={{
+                    padding: '12px',
+                    backgroundColor: t.bgHover,
+                    borderRadius: '8px'
+                  }}
+                >
                   <div style={{
-                    width: '40px',
-                    height: '2px',
-                    backgroundColor: t.border
-                  }} />
-                  <div style={{
-                    fontSize: '10px',
-                    color: t.textMuted,
-                    whiteSpace: 'nowrap'
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: t.text,
+                    marginBottom: '4px'
                   }}>
-                    then
+                    {template.name}
                   </div>
                   <div style={{
-                    width: 0,
-                    height: 0,
-                    borderTop: '8px solid transparent',
-                    borderBottom: '8px solid transparent',
-                    borderLeft: `12px solid ${t.border}`
-                  }} />
+                    fontSize: '12px',
+                    color: t.textSecondary
+                  }}>
+                    Subject: {template.subject}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Workflow Preview */}
+        <div style={{ marginTop: '20px' }}>
+          <h4 style={{
+            margin: '0 0 12px 0',
+            fontSize: '12px',
+            color: t.textMuted,
+            textTransform: 'uppercase'
+          }}>
+            Workflow Steps
+          </h4>
+          <WorkflowPreview nodes={automation.nodes} templateMap={templateMap} t={t} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// WORKFLOW PREVIEW (Mini flowchart)
+// ============================================
+const WorkflowPreview = ({ nodes, templateMap, t }) => {
+  if (!nodes || nodes.length === 0) {
+    return <div style={{ color: t.textMuted, fontSize: '13px' }}>No steps defined</div>;
+  }
+
+  const displayNodes = nodes.filter(n => n.type !== 'entry_criteria');
+
+  const nodeTypes = {
+    trigger: { icon: '⚡', color: '#3b82f6' },
+    send_email: { icon: '📧', color: '#22c55e' },
+    delay: { icon: '⏱', color: '#f59e0b' },
+    condition: { icon: '🔀', color: '#a78bfa' },
+    end: { icon: '🏁', color: '#71717a' }
+  };
+
+  const getNodeLabel = (node) => {
+    if (node.type === 'send_email') {
+      const key = node.config?.templateKey || node.config?.template;
+      return templateMap?.[key]?.name || 'Send Email';
+    }
+    if (node.type === 'delay') {
+      const days = node.config?.days || 0;
+      return `Wait ${days} day${days !== 1 ? 's' : ''}`;
+    }
+    if (node.type === 'condition') {
+      return node.config?.type === 'email_opened' ? 'If Opened?' : 'If Clicked?';
+    }
+    if (node.type === 'trigger') {
+      return `Daily at ${node.config?.time || '09:00'}`;
+    }
+    return node.title || node.type;
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {displayNodes.map((node, idx) => {
+        const type = nodeTypes[node.type] || { icon: '?', color: '#71717a' };
+        return (
+          <React.Fragment key={node.id}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              backgroundColor: `${type.color}10`,
+              borderRadius: '8px',
+              borderLeft: `3px solid ${type.color}`
+            }}>
+              <span style={{ fontSize: '16px' }}>{type.icon}</span>
+              <span style={{ fontSize: '13px', color: t.text }}>
+                {getNodeLabel(node)}
+              </span>
+            </div>
+            {idx < displayNodes.length - 1 && !node.branches && (
+              <div style={{
+                width: '2px',
+                height: '12px',
+                backgroundColor: t.border,
+                marginLeft: '20px'
+              }} />
+            )}
+            {node.branches && (
+              <div style={{
+                marginLeft: '20px',
+                paddingLeft: '12px',
+                borderLeft: `2px dashed ${t.border}`,
+                fontSize: '11px',
+                color: t.textMuted
+              }}>
+                <div style={{ color: '#22c55e', marginBottom: '4px' }}>
+                  Yes: {node.branches.yes?.length || 0} step(s)
+                </div>
+                <div style={{ color: '#ef4444' }}>
+                  No: {node.branches.no?.length || 0} step(s)
                 </div>
               </div>
             )}
           </React.Fragment>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 };
 
-// ============================================
-// LIFECYCLE AUTOMATION CARD
-// ============================================
-const LifecycleAutomationCard = ({ automation, templateMap, detailLevel, stageColor, t }) => {
-  const [expanded, setExpanded] = useState(false);
-  const nodes = automation.nodes || [];
-
-  // Get simplified flow for preview
-  const emailNodes = nodes.filter(n => n.type === 'send_email');
-  const hasConditions = nodes.some(n => n.type === 'condition');
-
-  return (
-    <div style={{
-      backgroundColor: t.bgCard,
-      borderRadius: '10px',
-      border: `1px solid ${t.border}`,
-      overflow: 'hidden'
-    }}>
-      {/* Card Header */}
-      <div
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          padding: '12px 14px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}
-      >
-        <div style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '8px',
-          backgroundColor: `${stageColor}20`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '14px'
-        }}>
-          {automation.lineOfBusiness === 'Personal' ? '👤' : '🏢'}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: '13px',
-            fontWeight: '600',
-            color: t.text,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            {automation.name}
-          </div>
-          <div style={{
-            fontSize: '11px',
-            color: t.textMuted,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>{emailNodes.length} email{emailNodes.length !== 1 ? 's' : ''}</span>
-            {hasConditions && <span>• branches</span>}
-          </div>
-        </div>
-        <div style={{
-          color: t.textMuted,
-          fontSize: '12px',
-          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.2s'
-        }}>
-          ▼
-        </div>
-      </div>
-
-      {/* Expanded Flow */}
-      {expanded && (
-        <div style={{
-          padding: '16px',
-          borderTop: `1px solid ${t.border}`,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
-          <FlowchartNodes
-            nodes={detailLevel === 'simple'
-              ? nodes.filter(n => n.type === 'send_email' || n.type === 'condition' || n.type === 'trigger')
-              : nodes.filter(n => n.type !== 'entry_criteria')
-            }
-            templateMap={templateMap}
-            detailLevel={detailLevel}
-            t={t}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
+// Helper function
+function getCategoryColor(category) {
+  const colors = {
+    'Onboarding': '#8b5cf6',
+    'Retention': '#3b82f6',
+    'Cross-Sell': '#22c55e',
+    'Win-Back': '#f59e0b',
+    'Engagement': '#ec4899'
+  };
+  return colors[category] || '#71717a';
+}
 
 export default TimelinePage;
