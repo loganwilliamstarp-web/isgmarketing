@@ -78,19 +78,29 @@ serve(async (req) => {
 
     // Record the rating in the account
     const actualAccountId = accountId || emailLog.account_id
+    console.log('Attempting to record rating:', { actualAccountId, rating, emailLogId })
+
     if (actualAccountId) {
-      const { error: updateError } = await supabaseClient
+      // Use ilike for case-insensitive matching since account IDs might have different casing
+      const { data: updateData, error: updateError } = await supabaseClient
         .from('accounts')
         .update({
           survey_stars: rating,
           survey_completed_at: new Date().toISOString(),
           survey_email_log_id: parseInt(emailLogId, 10)
         })
-        .eq('account_unique_id', actualAccountId)
+        .ilike('account_unique_id', actualAccountId)
+        .select('account_unique_id')
 
       if (updateError) {
         console.error('Failed to update account with rating:', updateError)
+      } else if (!updateData || updateData.length === 0) {
+        console.warn('No account found with account_unique_id:', actualAccountId)
+      } else {
+        console.log('Successfully updated account:', updateData[0].account_unique_id)
       }
+    } else {
+      console.warn('No account ID available to record rating')
     }
 
     // Log the rating event
