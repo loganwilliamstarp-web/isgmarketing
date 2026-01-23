@@ -29,6 +29,7 @@ const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const TimelinePage = lazy(() => import('./pages/TimelinePage'));
+const MasterAdminDashboardPage = lazy(() => import('./pages/MasterAdminDashboardPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -575,6 +576,39 @@ const AppLayout = () => {
               <div style={{ fontSize: '10px', fontWeight: '600', color: t.textMuted, padding: '16px 12px 8px', textTransform: 'uppercase' }}>
                 Admin
               </div>
+              {isAdmin && (
+                <Link
+                  to={`/${userId}/admin-dashboard`}
+                  style={{
+                    display: 'flex',
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: currentPage === 'admin-dashboard' ? `${t.primary}15` : 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: currentPage === 'admin-dashboard' ? t.primary : t.textSecondary,
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: currentPage === 'admin-dashboard' ? '600' : '400',
+                    textAlign: 'left',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textDecoration: 'none',
+                    marginBottom: '2px'
+                  }}
+                >
+                  <span>📊</span> Master Dashboard
+                  <span style={{
+                    marginLeft: 'auto',
+                    padding: '2px 8px',
+                    backgroundColor: t.primary,
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    color: '#fff',
+                    fontWeight: '600'
+                  }}>Master</span>
+                </Link>
+              )}
               <Link
                 to={`/${userId}/timeline`}
                 style={{
@@ -747,6 +781,7 @@ const AppLayout = () => {
                   <Route path="settings" element={<SettingsPage t={t} />} />
                   <Route path="knowledge-center" element={<KnowledgeCenterPage t={t} />} />
                   <Route path="timeline" element={<TimelinePage t={t} />} />
+                  <Route path="admin-dashboard" element={<MasterAdminDashboardPage t={t} />} />
                   <Route path="*" element={<DashboardPage t={t} />} />
                 </Routes>
               </Suspense>
