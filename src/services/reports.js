@@ -51,6 +51,8 @@ export const reportsService = {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
+    console.log('[Reports] getEmailPerformanceReport called with:', { ownerIds, days, startDate: startDate.toISOString() });
+
     // Query email_logs directly instead of pre-aggregated stats table
     let query = supabase
       .from('email_logs')
@@ -61,6 +63,8 @@ export const reportsService = {
     query = applyOwnerFilter(query, ownerIds);
 
     const { data, error } = await query;
+
+    console.log('[Reports] email_logs query result:', { rowCount: data?.length, error });
 
     if (error) throw error;
 
