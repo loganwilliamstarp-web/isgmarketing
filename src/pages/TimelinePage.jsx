@@ -17,18 +17,18 @@ const Skeleton = ({ width = '100%', height = '20px', style = {} }) => (
   />
 );
 
-// Color palette for the flowchart
+// Clean, professional color palette
 const colors = {
-  prospect: { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: '#667eea', text: '#fff' },
-  welcome: { bg: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', border: '#11998e', text: '#fff' },
-  crossSale: { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', border: '#f093fb', text: '#fff' },
-  renewal: { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', border: '#4facfe', text: '#fff' },
-  renewed: { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', border: '#43e97b', text: '#fff' },
-  prior: { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', border: '#fa709a', text: '#fff' },
-  periodic: { bg: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', border: '#a8edea', text: '#374151' },
-  decision: { bg: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)', border: '#fcb69f', text: '#374151' },
-  cancelled: { bg: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', border: '#ff9a9e', text: '#374151' },
-  default: { bg: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', border: '#c7d2fe', text: '#374151' }
+  prospect: { bg: '#6366f1', border: '#6366f1', text: '#fff' },
+  welcome: { bg: '#10b981', border: '#10b981', text: '#fff' },
+  crossSale: { bg: '#ec4899', border: '#ec4899', text: '#fff' },
+  renewal: { bg: '#3b82f6', border: '#3b82f6', text: '#fff' },
+  renewed: { bg: '#10b981', border: '#10b981', text: '#fff' },
+  prior: { bg: '#f59e0b', border: '#f59e0b', text: '#fff' },
+  periodic: { bg: '#8b5cf6', border: '#8b5cf6', text: '#fff' },
+  decision: { bg: '#f8fafc', border: '#e2e8f0', text: '#334155' },
+  cancelled: { bg: '#fef3c7', border: '#fcd34d', text: '#92400e' },
+  default: { bg: '#64748b', border: '#64748b', text: '#fff' }
 };
 
 const TimelinePage = ({ t }) => {
@@ -64,13 +64,13 @@ const TimelinePage = ({ t }) => {
       <div style={{
         padding: '60px 20px',
         textAlign: 'center',
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-        borderRadius: '16px',
-        border: '1px solid rgba(255,255,255,0.1)'
+        background: t.cardBg,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`
       }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>😕</div>
-        <h3 style={{ color: '#fff', marginBottom: '8px' }}>Failed to load timeline</h3>
-        <p style={{ color: 'rgba(255,255,255,0.6)' }}>{error.message}</p>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+        <h3 style={{ color: t.text, marginBottom: '8px' }}>Failed to load timeline</h3>
+        <p style={{ color: t.textSecondary }}>{error.message}</p>
       </div>
     );
   }
@@ -80,13 +80,10 @@ const TimelinePage = ({ t }) => {
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{
-          fontSize: '28px',
-          fontWeight: '800',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          marginBottom: '8px'
+          fontSize: '24px',
+          fontWeight: '600',
+          color: t.text,
+          marginBottom: '4px'
         }}>
           Customer Lifecycle Timeline
         </h1>
@@ -101,11 +98,10 @@ const TimelinePage = ({ t }) => {
         flexWrap: 'wrap',
         gap: '16px',
         marginBottom: '24px',
-        padding: '20px',
-        background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
-        borderRadius: '16px',
-        border: '1px solid rgba(102,126,234,0.2)',
-        backdropFilter: 'blur(10px)',
+        padding: '16px 20px',
+        background: t.cardBg,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`,
         alignItems: 'center'
       }}>
         {/* Line of Business Toggle */}
@@ -113,27 +109,24 @@ const TimelinePage = ({ t }) => {
           <span style={{ fontSize: '13px', color: t.textSecondary, fontWeight: '500' }}>Line of Business:</span>
           <div style={{
             display: 'flex',
-            background: 'rgba(0,0,0,0.2)',
-            borderRadius: '12px',
-            padding: '4px'
+            background: t.inputBg || 'rgba(0,0,0,0.05)',
+            borderRadius: '8px',
+            padding: '3px'
           }}>
             {['Personal', 'Commercial'].map(lob => (
               <button
                 key={lob}
                 onClick={() => setLobFilter(lob)}
                 style={{
-                  padding: '10px 20px',
-                  background: lobFilter === lob
-                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                    : 'transparent',
+                  padding: '8px 16px',
+                  background: lobFilter === lob ? '#6366f1' : 'transparent',
                   border: 'none',
-                  borderRadius: '10px',
+                  borderRadius: '6px',
                   color: lobFilter === lob ? '#fff' : t.textSecondary,
                   fontSize: '13px',
-                  fontWeight: '600',
+                  fontWeight: '500',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: lobFilter === lob ? '0 4px 15px rgba(102,126,234,0.4)' : 'none'
+                  transition: 'all 0.15s ease'
                 }}
               >
                 {lob}
@@ -143,25 +136,24 @@ const TimelinePage = ({ t }) => {
         </div>
 
         {/* Legend */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div style={{
-              width: '24px',
-              height: '24px',
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-              borderRadius: '6px',
-              boxShadow: '0 2px 8px rgba(79,172,254,0.4)'
+              width: '16px',
+              height: '16px',
+              background: '#3b82f6',
+              borderRadius: '4px'
             }} />
             <span style={{ fontSize: '12px', color: t.textMuted }}>Automation</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div style={{
-              width: '24px',
-              height: '24px',
-              background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-              borderRadius: '6px',
-              transform: 'rotate(45deg)',
-              boxShadow: '0 2px 8px rgba(252,182,159,0.4)'
+              width: '16px',
+              height: '16px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '4px',
+              transform: 'rotate(45deg)'
             }} />
             <span style={{ fontSize: '12px', color: t.textMuted }}>Decision</span>
           </div>
@@ -170,28 +162,14 @@ const TimelinePage = ({ t }) => {
 
       {/* Flowchart Canvas */}
       <div style={{
-        background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.95) 100%)',
-        borderRadius: '20px',
-        border: '1px solid rgba(255,255,255,0.1)',
-        padding: '50px',
-        minHeight: '700px',
+        background: t.cardBg,
+        borderRadius: '12px',
+        border: `1px solid ${t.border}`,
+        padding: '40px',
+        minHeight: '600px',
         overflow: 'auto',
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
         position: 'relative'
       }}>
-        {/* Background pattern */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)`,
-          backgroundSize: '40px 40px',
-          borderRadius: '20px',
-          pointerEvents: 'none'
-        }} />
-
         <FlowchartCanvas
           flowchartData={flowchartData}
           templateMap={data?.templateMap}
@@ -392,7 +370,7 @@ function buildFlowchartStructure(automations, lobFilter) {
 const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNode, t }) => {
   if (!flowchartData) {
     return (
-      <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', padding: '60px' }}>
+      <div style={{ textAlign: 'center', color: t.textMuted, padding: '60px' }}>
         No flowchart data available
       </div>
     );
@@ -400,12 +378,12 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
 
   const { nodes, connections } = flowchartData;
 
-  const nodeWidth = 110;
-  const nodeHeight = 60;
-  const colWidth = 130;
-  const rowHeight = 95;
-  const startX = 50;
-  const startY = 40;
+  const nodeWidth = 100;
+  const nodeHeight = 56;
+  const colWidth = 120;
+  const rowHeight = 90;
+  const startX = 40;
+  const startY = 30;
 
   const getNodePosition = (node) => ({
     x: startX + node.col * colWidth,
@@ -457,13 +435,13 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
     let path;
     if (conn.curve === 'up' || conn.curve === 'down') {
       const midX = (x1 + x2) / 2;
-      const curveY = conn.curve === 'up' ? Math.min(y1, y2) - 30 : Math.max(y1, y2) + 30;
+      const curveY = conn.curve === 'up' ? Math.min(y1, y2) - 25 : Math.max(y1, y2) + 25;
       path = `M ${x1} ${y1} Q ${midX} ${curveY} ${x2} ${y2}`;
     } else if (Math.abs(x2 - x1) < 10 || Math.abs(y2 - y1) < 10) {
       path = `M ${x1} ${y1} L ${x2} ${y2}`;
     } else {
-      const midX = x1 + 20;
-      path = `M ${x1} ${y1} C ${midX} ${y1} ${x2 - 20} ${y2} ${x2} ${y2}`;
+      const midX = x1 + 15;
+      path = `M ${x1} ${y1} C ${midX} ${y1} ${x2 - 15} ${y2} ${x2} ${y2}`;
     }
 
     return { path, x1, y1, x2, y2 };
@@ -474,27 +452,16 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
       {/* SVG for connections */}
       <svg style={{ position: 'absolute', top: 0, left: 0, width: canvasWidth, height: canvasHeight, pointerEvents: 'none' }}>
         <defs>
-          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#667eea" />
-            <stop offset="100%" stopColor="#764ba2" />
-          </linearGradient>
           <marker
             id="arrowhead"
-            markerWidth="12"
-            markerHeight="8"
-            refX="10"
-            refY="4"
+            markerWidth="10"
+            markerHeight="7"
+            refX="9"
+            refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 12 4, 0 8" fill="url(#lineGradient)" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
           </marker>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
         </defs>
 
         {connections.map((conn, idx) => {
@@ -505,41 +472,31 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
 
           return (
             <g key={idx}>
-              {/* Glow effect */}
               <path
                 d={path}
                 fill="none"
-                stroke="rgba(102,126,234,0.3)"
-                strokeWidth="6"
+                stroke="#94a3b8"
+                strokeWidth="1.5"
                 markerEnd="url(#arrowhead)"
-              />
-              {/* Main line */}
-              <path
-                d={path}
-                fill="none"
-                stroke="url(#lineGradient)"
-                strokeWidth="2.5"
-                markerEnd="url(#arrowhead)"
-                style={{ filter: 'url(#glow)' }}
               />
               {conn.label && (
                 <g>
                   <rect
-                    x={x1 + 8}
-                    y={conn.direction === 'down' ? y1 + 8 : y1 - 22}
-                    width={conn.label.length * 7 + 12}
-                    height="18"
-                    rx="9"
-                    fill="rgba(30,41,59,0.9)"
-                    stroke="rgba(102,126,234,0.5)"
+                    x={x1 + 6}
+                    y={conn.direction === 'down' ? y1 + 6 : y1 - 18}
+                    width={conn.label.length * 6 + 8}
+                    height="16"
+                    rx="4"
+                    fill={t.cardBg}
+                    stroke={t.border}
                     strokeWidth="1"
                   />
                   <text
-                    x={x1 + 14}
-                    y={conn.direction === 'down' ? y1 + 20 : y1 - 10}
-                    fill="#a5b4fc"
+                    x={x1 + 10}
+                    y={conn.direction === 'down' ? y1 + 17 : y1 - 7}
+                    fill={t.textMuted}
                     fontSize="10"
-                    fontWeight="600"
+                    fontWeight="500"
                   >
                     {conn.label}
                   </text>
@@ -566,6 +523,7 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
               height={nodeHeight}
               isSelected={isSelected}
               onClick={() => onSelectNode(node)}
+              t={t}
             />
           );
         }
@@ -580,6 +538,7 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
             height={nodeHeight}
             isSelected={isSelected}
             onClick={() => node.automation && onSelectNode(node)}
+            t={t}
           />
         );
       })}
@@ -590,7 +549,7 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
 // ============================================
 // AUTOMATION NODE
 // ============================================
-const AutomationNode = ({ node, x, y, width, height, isSelected, onClick }) => {
+const AutomationNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
   const hasAutomation = !!node.automation;
   const scheme = colors[node.colorScheme] || colors.default;
 
@@ -604,40 +563,39 @@ const AutomationNode = ({ node, x, y, width, height, isSelected, onClick }) => {
         width,
         height,
         background: scheme.bg,
-        borderRadius: '12px',
+        borderRadius: '8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: hasAutomation ? 'pointer' : 'default',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'all 0.15s ease',
         boxShadow: isSelected
-          ? `0 0 0 3px #fff, 0 0 30px ${scheme.border}`
-          : `0 8px 25px -5px rgba(0,0,0,0.3), 0 0 15px ${scheme.border}40`,
-        transform: isSelected ? 'scale(1.05)' : 'scale(1)',
-        border: `2px solid ${isSelected ? '#fff' : 'rgba(255,255,255,0.2)'}`
+          ? `0 0 0 2px ${scheme.border}, 0 4px 12px rgba(0,0,0,0.15)`
+          : '0 2px 4px rgba(0,0,0,0.1)',
+        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+        opacity: hasAutomation ? 1 : 0.7
       }}
       onMouseEnter={(e) => {
         if (hasAutomation) {
-          e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)';
-          e.currentTarget.style.boxShadow = `0 12px 35px -5px rgba(0,0,0,0.4), 0 0 25px ${scheme.border}60`;
+          e.currentTarget.style.transform = 'scale(1.02)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
         }
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
           e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = `0 8px 25px -5px rgba(0,0,0,0.3), 0 0 15px ${scheme.border}40`;
+          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
         }
       }}
     >
       <span style={{
-        fontSize: '12px',
-        fontWeight: '700',
+        fontSize: '11px',
+        fontWeight: '600',
         color: scheme.text,
         textAlign: 'center',
         whiteSpace: 'pre-line',
         lineHeight: '1.3',
-        padding: '6px',
-        textShadow: scheme.text === '#fff' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none'
+        padding: '4px'
       }}>
         {node.label}
       </span>
@@ -646,74 +604,51 @@ const AutomationNode = ({ node, x, y, width, height, isSelected, onClick }) => {
 };
 
 // ============================================
-// DECISION NODE (Hexagon)
+// DECISION NODE (Diamond)
 // ============================================
-const DecisionNode = ({ node, x, y, width, height, isSelected, onClick }) => {
+const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
   const scheme = colors[node.colorScheme] || colors.decision;
+  const size = Math.min(width, height) - 8;
 
   return (
     <div
       onClick={onClick}
       style={{
         position: 'absolute',
-        left: x,
-        top: y,
-        width,
-        height,
+        left: x + (width - size) / 2,
+        top: y + (height - size) / 2,
+        width: size,
+        height: size,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        transform: isSelected ? 'scale(1.05)' : 'scale(1)',
-        filter: isSelected ? 'drop-shadow(0 0 20px rgba(252,182,159,0.6))' : 'drop-shadow(0 8px 15px rgba(0,0,0,0.3))'
+        transition: 'all 0.15s ease',
+        transform: `rotate(45deg) ${isSelected ? 'scale(1.05)' : 'scale(1)'}`,
+        background: scheme.bg,
+        border: `1.5px solid ${scheme.border}`,
+        borderRadius: '4px',
+        boxShadow: isSelected
+          ? `0 0 0 2px ${scheme.border}, 0 4px 8px rgba(0,0,0,0.1)`
+          : '0 2px 4px rgba(0,0,0,0.08)'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'scale(1.08)';
-        e.currentTarget.style.filter = 'drop-shadow(0 0 25px rgba(252,182,159,0.7))';
+        e.currentTarget.style.transform = 'rotate(45deg) scale(1.05)';
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.filter = 'drop-shadow(0 8px 15px rgba(0,0,0,0.3))';
+          e.currentTarget.style.transform = 'rotate(45deg) scale(1)';
         }
       }}
     >
-      <svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        style={{ position: 'absolute' }}
-      >
-        <defs>
-          <linearGradient id={`hexGrad-${node.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffecd2" />
-            <stop offset="100%" stopColor="#fcb69f" />
-          </linearGradient>
-        </defs>
-        <polygon
-          points={`
-            ${width * 0.10},${height / 2}
-            ${width * 0.28},${height * 0.05}
-            ${width * 0.72},${height * 0.05}
-            ${width * 0.90},${height / 2}
-            ${width * 0.72},${height * 0.95}
-            ${width * 0.28},${height * 0.95}
-          `}
-          fill={`url(#hexGrad-${node.id})`}
-          stroke={isSelected ? '#fff' : 'rgba(255,255,255,0.5)'}
-          strokeWidth={isSelected ? '3' : '2'}
-        />
-      </svg>
       <span style={{
-        position: 'relative',
-        fontSize: '11px',
-        fontWeight: '700',
-        color: '#374151',
+        transform: 'rotate(-45deg)',
+        fontSize: '10px',
+        fontWeight: '600',
+        color: scheme.text,
         textAlign: 'center',
         whiteSpace: 'pre-line',
-        lineHeight: '1.2',
-        zIndex: 1
+        lineHeight: '1.2'
       }}>
         {node.label}
       </span>
@@ -757,9 +692,8 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          zIndex: 99,
-          backdropFilter: 'blur(4px)'
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          zIndex: 99
         }}
       />
 
@@ -769,85 +703,92 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
         top: 0,
         right: 0,
         bottom: 0,
-        width: '420px',
-        background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
-        boxShadow: '-10px 0 40px rgba(0,0,0,0.5)',
+        width: '400px',
+        background: t.cardBg,
+        boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
         zIndex: 100,
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
-        animation: 'slideIn 0.3s ease-out'
+        overflow: 'hidden'
       }}>
         {/* Header */}
         <div style={{
-          padding: '24px',
-          background: scheme.bg,
-          position: 'relative'
+          padding: '20px 24px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '12px'
         }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '2px',
+            background: scheme.bg,
+            marginTop: '6px',
+            flexShrink: 0
+          }} />
+          <div style={{ flex: 1 }}>
+            <h3 style={{
+              margin: 0,
+              fontSize: '16px',
+              color: t.text,
+              fontWeight: '600'
+            }}>
+              {automation.name}
+            </h3>
+            {automation.description && (
+              <p style={{
+                margin: '4px 0 0',
+                fontSize: '13px',
+                color: t.textSecondary,
+                lineHeight: '1.4'
+              }}>
+                {automation.description}
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
             style={{
-              position: 'absolute',
-              top: '16px',
-              right: '16px',
-              background: 'rgba(255,255,255,0.2)',
+              background: 'none',
               border: 'none',
-              color: '#fff',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
+              color: t.textMuted,
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
               cursor: 'pointer',
               fontSize: '18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'all 0.2s'
+              transition: 'all 0.15s'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.background = t.inputBg || 'rgba(0,0,0,0.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
           >
             ×
           </button>
-          <h3 style={{
-            margin: 0,
-            fontSize: '20px',
-            color: scheme.text,
-            fontWeight: '700',
-            textShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}>
-            {automation.name}
-          </h3>
-          {automation.description && (
-            <p style={{
-              margin: '8px 0 0',
-              fontSize: '13px',
-              color: 'rgba(255,255,255,0.8)',
-              lineHeight: '1.5'
-            }}>
-              {automation.description}
-            </p>
-          )}
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
           {/* Badges */}
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <span style={{
-              padding: '6px 14px',
-              background: `linear-gradient(135deg, ${getCategoryColor(automation.category)}40, ${getCategoryColor(automation.category)}20)`,
-              border: `1px solid ${getCategoryColor(automation.category)}60`,
+              padding: '4px 10px',
+              background: getCategoryColor(automation.category) + '15',
               color: getCategoryColor(automation.category),
-              borderRadius: '20px',
+              borderRadius: '4px',
               fontSize: '12px',
-              fontWeight: '600'
+              fontWeight: '500'
             }}>
               {automation.category}
             </span>
             <span style={{
-              padding: '6px 14px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'rgba(255,255,255,0.7)',
-              borderRadius: '20px',
+              padding: '4px 10px',
+              background: t.inputBg || 'rgba(0,0,0,0.05)',
+              color: t.textSecondary,
+              borderRadius: '4px',
               fontSize: '12px',
               fontWeight: '500'
             }}>
@@ -857,42 +798,37 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
 
           {/* Templates */}
           {templates.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: '20px' }}>
               <h4 style={{
-                margin: '0 0 12px 0',
+                margin: '0 0 10px 0',
                 fontSize: '11px',
-                color: 'rgba(255,255,255,0.5)',
+                color: t.textMuted,
                 textTransform: 'uppercase',
-                letterSpacing: '1px',
+                letterSpacing: '0.5px',
                 fontWeight: '600'
               }}>
                 Email Templates
               </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {templates.map(template => (
                   <div
                     key={template.default_key}
                     style={{
-                      padding: '14px 16px',
-                      background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
-                      border: '1px solid rgba(102,126,234,0.2)',
-                      borderRadius: '12px',
-                      transition: 'all 0.2s'
+                      padding: '12px 14px',
+                      background: t.inputBg || 'rgba(0,0,0,0.03)',
+                      borderRadius: '8px',
+                      border: `1px solid ${t.border}`
                     }}
                   >
                     <div style={{
                       fontSize: '13px',
-                      fontWeight: '600',
-                      color: '#fff',
-                      marginBottom: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
+                      fontWeight: '500',
+                      color: t.text,
+                      marginBottom: '2px'
                     }}>
-                      <span style={{ fontSize: '16px' }}>📧</span>
                       {template.name}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>
+                    <div style={{ fontSize: '12px', color: t.textMuted }}>
                       {template.subject}
                     </div>
                   </div>
@@ -904,16 +840,16 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
           {/* Workflow Steps */}
           <div>
             <h4 style={{
-              margin: '0 0 12px 0',
+              margin: '0 0 10px 0',
               fontSize: '11px',
-              color: 'rgba(255,255,255,0.5)',
+              color: t.textMuted,
               textTransform: 'uppercase',
-              letterSpacing: '1px',
+              letterSpacing: '0.5px',
               fontWeight: '600'
             }}>
               Workflow Steps
             </h4>
-            <WorkflowSteps nodes={automation.nodes} templateMap={templateMap} />
+            <WorkflowSteps nodes={automation.nodes} templateMap={templateMap} t={t} />
           </div>
         </div>
       </div>
@@ -924,19 +860,19 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
 // ============================================
 // WORKFLOW STEPS
 // ============================================
-const WorkflowSteps = ({ nodes, templateMap }) => {
+const WorkflowSteps = ({ nodes, templateMap, t }) => {
   if (!nodes || nodes.length === 0) {
-    return <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>No steps defined</div>;
+    return <div style={{ color: t.textMuted, fontSize: '13px' }}>No steps defined</div>;
   }
 
   const displayNodes = nodes.filter(n => n.type !== 'entry_criteria');
 
   const nodeConfig = {
-    trigger: { icon: '⚡', color: '#60a5fa', label: 'Trigger' },
-    send_email: { icon: '📧', color: '#34d399', label: 'Email' },
-    delay: { icon: '⏱', color: '#fbbf24', label: 'Wait' },
-    condition: { icon: '🔀', color: '#a78bfa', label: 'Condition' },
-    end: { icon: '🏁', color: '#94a3b8', label: 'End' }
+    trigger: { color: '#3b82f6', label: 'Trigger' },
+    send_email: { color: '#10b981', label: 'Email' },
+    delay: { color: '#f59e0b', label: 'Wait' },
+    condition: { color: '#8b5cf6', label: 'Condition' },
+    end: { color: '#64748b', label: 'End' }
   };
 
   const getLabel = (node) => {
@@ -958,21 +894,26 @@ const WorkflowSteps = ({ nodes, templateMap }) => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {displayNodes.map((node, idx) => {
-        const config = nodeConfig[node.type] || { icon: '?', color: '#94a3b8' };
+        const config = nodeConfig[node.type] || { color: '#64748b' };
         return (
           <div key={node.id} style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
-            padding: '12px 14px',
-            background: `linear-gradient(90deg, ${config.color}15 0%, transparent 100%)`,
+            gap: '10px',
+            padding: '10px 12px',
+            background: t.inputBg || 'rgba(0,0,0,0.03)',
             borderLeft: `3px solid ${config.color}`,
-            borderRadius: '0 10px 10px 0'
+            borderRadius: '0 6px 6px 0'
           }}>
-            <span style={{ fontSize: '18px' }}>{config.icon}</span>
-            <span style={{ fontSize: '13px', color: '#fff', fontWeight: '500' }}>{getLabel(node)}</span>
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: config.color
+            }} />
+            <span style={{ fontSize: '13px', color: t.text, fontWeight: '500' }}>{getLabel(node)}</span>
           </div>
         );
       })}
@@ -988,7 +929,7 @@ function getCategoryColor(category) {
     'Win-Back': '#f59e0b',
     'Engagement': '#ec4899'
   };
-  return categoryColors[category] || '#94a3b8';
+  return categoryColors[category] || '#64748b';
 }
 
 export default TimelinePage;
