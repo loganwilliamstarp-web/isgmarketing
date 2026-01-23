@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { adminService } from '../services/admin';
+import { trialService } from '../services/trial';
 
 const AuthContext = createContext();
 
@@ -36,6 +37,10 @@ export const AuthProvider = ({ children }) => {
     targetUserName: null,
     targetProfileName: null,
   });
+
+  // Trial status - tracks user's trial state
+  const [accessType, setAccessType] = useState(null); // 'full' | 'trial' | 'trial_expired' | 'inactive'
+  const [trialInfo, setTrialInfo] = useState(null); // { startedAt, endsAt, daysLeft } | null
 
   // Scope filter state - for filtering data site-wide
   const [scopeFilter, setScopeFilter] = useState({
@@ -162,7 +167,16 @@ export const AuthProvider = ({ children }) => {
       email: userData.email,
       profileName: userData.profile_name || null,
     });
-    setIsAuthenticated(true);
+
+    // Set trial/access state
+    setAccessType(userData.accessType || 'full');
+    setTrialInfo(userData.trialInfo || null);
+
+    // Only set authenticated if user has access (full, trial, or trial_expired can view)
+    // Inactive users need to start trial first
+    if (userData.accessType !== 'inactive') {
+      setIsAuthenticated(true);
+    }
 
     // Check if user is admin (Master Admin)
     const adminStatus = await authService.isAdmin(userData.user_unique_id);
@@ -259,27 +273,50 @@ export const AuthProvider = ({ children }) => {
     const userData = await authService.getUserByEmail(email);
 
     if (!userData) {
-      // User verified email but doesn't have access
+      // User verified email but doesn't exist in users table at all
       await authService.signOut();
-      return { success: false, noAccess: true };
+      return { success: false, noAccess: true, notFound: true };
     }
 
+    // Set basic user state (needed for trial signup flow)
     const userName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User';
     setUser({
       id: userData.user_unique_id,
       name: userName,
       email: userData.email,
+      profileName: userData.profile_name || null,
     });
+
+    // Set trial/access state
+    setAccessType(userData.accessType);
+    setTrialInfo(userData.trialInfo);
+
+    // If user is inactive (no access, no trial), they need to start a trial
+    if (userData.accessType === 'inactive') {
+      return {
+        success: true,
+        needsTrial: true,
+        userId: userData.user_unique_id,
+        noAccess: false
+      };
+    }
+
+    // User has access (full, trial, or trial_expired) - complete authentication
     setIsAuthenticated(true);
 
     // Check admin status
     const adminStatus = await authService.isAdmin(userData.user_unique_id);
     setIsAdmin(adminStatus);
 
+    // Check agency admin status
+    const agencyAdminStatus = userData.marketing_cloud_agency_admin === true;
+    setIsAgencyAdmin(agencyAdminStatus);
+
     return {
       success: true,
       userId: userData.user_unique_id,
-      noAccess: false
+      noAccess: false,
+      accessType: userData.accessType
     };
   };
 
@@ -309,6 +346,30 @@ export const AuthProvider = ({ children }) => {
       filterLabel: null,
       ownerIds: null,
     });
+  };
+
+  /**
+   * Start a 30-day trial for the current user
+   * Used when an inactive user clicks "Start Trial" button
+   */
+  const startTrial = async () => {
+    if (!user?.id) return false;
+
+    try {
+      const trialData = await trialService.startTrial(user.id);
+      setAccessType('trial');
+      setTrialInfo(trialData);
+      setIsAuthenticated(true);
+
+      // Check admin status now that user is authenticated
+      const adminStatus = await authService.isAdmin(user.id);
+      setIsAdmin(adminStatus);
+
+      return true;
+    } catch (error) {
+      console.error('Failed to start trial:', error);
+      return false;
+    }
   };
 
   const impersonate = useCallback((targetUserId, targetUserName, targetProfileName = null) => {
@@ -439,9 +500,18 @@ export const AuthProvider = ({ children }) => {
     userRole,
     impersonating,
     scopeFilter,
+    // Trial-related values
+    accessType,
+    trialInfo,
+    isTrialUser: accessType === 'trial',
+    isTrialExpired: accessType === 'trial_expired',
+    isInactiveUser: accessType === 'inactive',
+    canPerformActions: accessType === 'full' || accessType === 'trial',
+    // Functions
     sendOTP,
     verifyOTP,
     logout,
+    startTrial,
     impersonate,
     exitImpersonation,
     getEffectiveUserId,
@@ -460,6 +530,8 @@ export const AuthProvider = ({ children }) => {
     userRole,
     impersonating,
     scopeFilter,
+    accessType,
+    trialInfo,
     impersonate,
     exitImpersonation,
     getEffectiveUserId,

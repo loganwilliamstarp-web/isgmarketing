@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useLocation } from 'react-router-dom';
 import { useUserSettings, useUserSettingsMutations } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffectiveOwner } from '../hooks/useEffectiveOwner';
@@ -72,11 +72,41 @@ const FormTextarea = ({ label, value, onChange, placeholder, rows = 3, disabled,
 // Main Settings Page Component
 const SettingsPage = ({ t }) => {
   const { userId } = useParams();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('signature');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   const [verifiedDomains, setVerifiedDomains] = useState([]);
   const [emailValidationError, setEmailValidationError] = useState(null);
+
+  // Refs for scrolling to specific sections
+  const agencyInfoRef = useRef(null);
+  const signatureRef = useRef(null);
+
+  // Handle scrollTo from navigation state (e.g., from setup checklist)
+  useEffect(() => {
+    const scrollTo = location.state?.scrollTo;
+    if (scrollTo) {
+      // Map scrollTo targets to tabs and refs
+      const scrollMap = {
+        'domains': { tab: 'domains' },
+        'signature': { tab: 'signature', ref: signatureRef },
+        'email-connection': { tab: 'integrations' },
+        'agency-info': { tab: 'agency', ref: agencyInfoRef }
+      };
+
+      const target = scrollMap[scrollTo];
+      if (target) {
+        setActiveTab(target.tab);
+        // Scroll to specific section after tab change
+        if (target.ref) {
+          setTimeout(() => {
+            target.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }
+      }
+    }
+  }, [location.state?.scrollTo]);
 
   // Get auth context for role checking
   const { isAdmin, isAgencyAdmin, user } = useAuth();
@@ -384,12 +414,15 @@ const SettingsPage = ({ t }) => {
         <>
           {/* Signature Tab */}
           {activeTab === 'signature' && (
-            <div style={{
-              padding: '24px',
-              backgroundColor: t.bgCard,
-              borderRadius: '12px',
-              border: `1px solid ${t.border}`
-            }}>
+            <div
+              ref={signatureRef}
+              style={{
+                padding: '24px',
+                backgroundColor: t.bgCard,
+                borderRadius: '12px',
+                border: `1px solid ${t.border}`
+              }}
+            >
               <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '4px' }}>
                 Your Email Signature
               </h3>
@@ -457,12 +490,15 @@ const SettingsPage = ({ t }) => {
 
           {/* Agency Info Tab - Only visible to admins and agency admins */}
           {activeTab === 'agency' && canEditAgencyInfo && (
-            <div style={{
-              padding: '24px',
-              backgroundColor: t.bgCard,
-              borderRadius: '12px',
-              border: `1px solid ${t.border}`
-            }}>
+            <div
+              ref={agencyInfoRef}
+              style={{
+                padding: '24px',
+                backgroundColor: t.bgCard,
+                borderRadius: '12px',
+                border: `1px solid ${t.border}`
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
                 <div>
                   <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '4px' }}>

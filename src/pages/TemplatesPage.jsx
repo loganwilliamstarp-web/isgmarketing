@@ -4,7 +4,8 @@ import {
   useTemplates,
   useTemplateCategories,
   useTemplateMutations,
-  useEffectiveOwner
+  useEffectiveOwner,
+  useTrialGuard
 } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterTemplates, useMasterTemplateMutations } from '../hooks/useAdmin';
@@ -1066,6 +1067,7 @@ const TemplatesPage = ({ t }) => {
 
   // Check if admin is viewing multiple users (master view mode)
   const { isAdmin, isAgencyAdmin, user } = useAuth();
+  const { canPerformActions, trialMessage } = useTrialGuard();
   const { isMultiOwner } = useEffectiveOwner();
   const showMasterView = isAdmin && isMultiOwner;
   // Agency admin viewing all agents gets grouped view
@@ -1114,11 +1116,19 @@ const TemplatesPage = ({ t }) => {
 
   // Handlers
   const handleCreateTemplate = () => {
+    if (!canPerformActions) {
+      alert(trialMessage);
+      return;
+    }
     setEditingTemplate(null);
     setEditorOpen(true);
   };
 
   const handleEditTemplate = (template) => {
+    if (!canPerformActions) {
+      alert(trialMessage);
+      return;
+    }
     setEditingTemplate(template);
     setEditorOpen(true);
   };
@@ -1595,18 +1605,21 @@ const TemplatesPage = ({ t }) => {
         </div>
         <button
           onClick={handleCreateTemplate}
+          disabled={!canPerformActions}
+          title={!canPerformActions ? trialMessage : ''}
           style={{
             padding: '10px 20px',
-            backgroundColor: t.primary,
+            backgroundColor: canPerformActions ? t.primary : '#94a3b8',
             border: 'none',
             borderRadius: '8px',
             color: '#fff',
-            cursor: 'pointer',
+            cursor: canPerformActions ? 'pointer' : 'not-allowed',
             fontSize: '14px',
             fontWeight: '500',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px'
+            gap: '6px',
+            opacity: canPerformActions ? 1 : 0.7
           }}
         >
           <span>+</span> Create Template

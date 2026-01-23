@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { senderDomainsService } from '../../services';
 import { supabase } from '../../lib/supabase';
 
-const ImpersonationBanner = () => {
+const ImpersonationBanner = ({ topOffset = '0px' }) => {
   const navigate = useNavigate();
   const { impersonating, exitImpersonation, user } = useAuth();
   const [domainWarning, setDomainWarning] = useState(null);
@@ -94,10 +94,10 @@ const ImpersonationBanner = () => {
         fontSize: '14px',
         fontWeight: '500',
         position: 'fixed',
-        top: 0,
+        top: topOffset,
         left: 0,
         right: 0,
-        zIndex: 9999,
+        zIndex: 9998,
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -138,10 +138,10 @@ const ImpersonationBanner = () => {
           fontSize: '14px',
           fontWeight: '500',
           position: 'fixed',
-          top: '44px',
+          top: `calc(${topOffset} + 44px)`,
           left: 0,
           right: 0,
-          zIndex: 9998,
+          zIndex: 9997,
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

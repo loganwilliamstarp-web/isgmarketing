@@ -9,7 +9,8 @@ import {
   useMassEmailLocationBreakdown,
   useMassEmailMutations,
   useRoleUserIds,
-  useVerifiedSenderDomains
+  useVerifiedSenderDomains,
+  useTrialGuard
 } from '../hooks';
 
 // Google Maps API key
@@ -2522,6 +2523,7 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
 const MassEmailPage = ({ t }) => {
   const { userId } = useParams();
   const navigate = useNavigate();
+  const { canPerformActions, trialMessage } = useTrialGuard();
   const [showWizard, setShowWizard] = useState(false);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [step, setStep] = useState(0);
@@ -2604,6 +2606,10 @@ const MassEmailPage = ({ t }) => {
   };
 
   const handleSend = async () => {
+    if (!canPerformActions) {
+      setError(trialMessage);
+      return;
+    }
     if (!selectedTemplate || !subject) return;
 
     // Validate scheduled date/time if scheduling for later
@@ -2693,22 +2699,22 @@ const MassEmailPage = ({ t }) => {
         </div>
         {!showWizard && (
           <button
-            onClick={() => hasVerifiedDomain ? setShowWizard(true) : null}
-            disabled={loadingDomains || !hasVerifiedDomain}
-            title={!hasVerifiedDomain ? 'You need a verified sender domain to create campaigns' : ''}
+            onClick={() => (hasVerifiedDomain && canPerformActions) ? setShowWizard(true) : null}
+            disabled={loadingDomains || !hasVerifiedDomain || !canPerformActions}
+            title={!canPerformActions ? trialMessage : (!hasVerifiedDomain ? 'You need a verified sender domain to create campaigns' : '')}
             style={{
               padding: '10px 20px',
-              backgroundColor: hasVerifiedDomain ? t.primary : t.textMuted,
+              backgroundColor: (hasVerifiedDomain && canPerformActions) ? t.primary : t.textMuted,
               border: 'none',
               borderRadius: '8px',
               color: '#fff',
-              cursor: hasVerifiedDomain ? 'pointer' : 'not-allowed',
+              cursor: (hasVerifiedDomain && canPerformActions) ? 'pointer' : 'not-allowed',
               fontSize: '14px',
               fontWeight: '500',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              opacity: loadingDomains ? 0.7 : 1
+              opacity: (loadingDomains || !canPerformActions) ? 0.7 : 1
             }}
           >
             <span>+</span> New Campaign

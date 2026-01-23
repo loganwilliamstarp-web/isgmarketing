@@ -109,6 +109,12 @@ export const authService = {
    * Get user from users table by Salesforce user ID
    * Checks ALL records for this user ID - user has access if ANY record has
    * marketing_cloud_engagement=true OR marketing_cloud_agency_admin=true
+   *
+   * Returns user data with accessType:
+   * - 'full': User has marketing_cloud_engagement or marketing_cloud_agency_admin
+   * - 'trial': User is in an active trial period
+   * - 'trial_expired': User's trial has expired
+   * - 'inactive': User exists but has no access (needs to start trial)
    */
   async getUserById(userId) {
     const { data, error } = await supabase
@@ -120,18 +126,65 @@ export const authService = {
     if (!data || data.length === 0) return null;
 
     // Check if ANY record for this user has marketing cloud access
-    const hasAccess = data.some(
+    const hasFullAccess = data.some(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
 
-    if (!hasAccess) return null;
-
-    // Return the first record with access
+    // Get the best user record (one with access, or first)
     const accessRecord = data.find(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
+    const userData = accessRecord || data[0];
 
-    return accessRecord || data[0];
+    if (hasFullAccess) {
+      return {
+        ...userData,
+        accessType: 'full',
+        trialInfo: null
+      };
+    }
+
+    // User doesn't have full access - check trial status
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('trial_started_at, trial_ends_at')
+      .eq('user_id', userId)
+      .single();
+
+    const now = new Date();
+    const trialEndsAt = settings?.trial_ends_at ? new Date(settings.trial_ends_at) : null;
+
+    if (trialEndsAt && trialEndsAt > now) {
+      // Active trial
+      const daysLeft = Math.ceil((trialEndsAt - now) / (1000 * 60 * 60 * 24));
+      return {
+        ...userData,
+        accessType: 'trial',
+        trialInfo: {
+          startedAt: settings.trial_started_at,
+          endsAt: settings.trial_ends_at,
+          daysLeft
+        }
+      };
+    } else if (trialEndsAt && trialEndsAt <= now) {
+      // Trial expired
+      return {
+        ...userData,
+        accessType: 'trial_expired',
+        trialInfo: {
+          startedAt: settings.trial_started_at,
+          endsAt: settings.trial_ends_at,
+          daysLeft: 0
+        }
+      };
+    }
+
+    // Never trialed - inactive user
+    return {
+      ...userData,
+      accessType: 'inactive',
+      trialInfo: null
+    };
   },
 
   /**
@@ -213,7 +266,12 @@ export const authService = {
    * Get user from users table by email
    * Checks ALL records for this email - user has access if ANY record has
    * marketing_cloud_engagement=true OR marketing_cloud_agency_admin=true
-   * Returns the first matching user record with access, or null if no access
+   *
+   * Returns user data with accessType:
+   * - 'full': User has marketing_cloud_engagement or marketing_cloud_agency_admin
+   * - 'trial': User is in an active trial period
+   * - 'trial_expired': User's trial has expired
+   * - 'inactive': User exists but has no access (needs to start trial)
    */
   async getUserByEmail(email) {
     const { data, error } = await supabase
@@ -225,18 +283,65 @@ export const authService = {
     if (!data || data.length === 0) return null;
 
     // Check if ANY record for this email has marketing cloud access
-    const hasAccess = data.some(
+    const hasFullAccess = data.some(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
 
-    if (!hasAccess) return null;
-
-    // Return the first record with access (or just the first record for user info)
+    // Get the best user record (one with access, or first)
     const accessRecord = data.find(
       record => record.marketing_cloud_engagement === true || record.marketing_cloud_agency_admin === true
     );
+    const userData = accessRecord || data[0];
 
-    return accessRecord || data[0];
+    if (hasFullAccess) {
+      return {
+        ...userData,
+        accessType: 'full',
+        trialInfo: null
+      };
+    }
+
+    // User doesn't have full access - check trial status
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('trial_started_at, trial_ends_at')
+      .eq('user_id', userData.user_unique_id)
+      .single();
+
+    const now = new Date();
+    const trialEndsAt = settings?.trial_ends_at ? new Date(settings.trial_ends_at) : null;
+
+    if (trialEndsAt && trialEndsAt > now) {
+      // Active trial
+      const daysLeft = Math.ceil((trialEndsAt - now) / (1000 * 60 * 60 * 24));
+      return {
+        ...userData,
+        accessType: 'trial',
+        trialInfo: {
+          startedAt: settings.trial_started_at,
+          endsAt: settings.trial_ends_at,
+          daysLeft
+        }
+      };
+    } else if (trialEndsAt && trialEndsAt <= now) {
+      // Trial expired
+      return {
+        ...userData,
+        accessType: 'trial_expired',
+        trialInfo: {
+          startedAt: settings.trial_started_at,
+          endsAt: settings.trial_ends_at,
+          daysLeft: 0
+        }
+      };
+    }
+
+    // Never trialed - inactive user
+    return {
+      ...userData,
+      accessType: 'inactive',
+      trialInfo: null
+    };
   },
 
   /**

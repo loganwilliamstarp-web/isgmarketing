@@ -3,13 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/auth';
+import { TrialSignupPopup } from '../trial';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated, user, sendOTP, verifyOTP } = useAuth();
+  const { isAuthenticated, user, sendOTP, verifyOTP, startTrial } = useAuth();
 
-  const [step, setStep] = useState('email'); // 'email', 'code', 'no-access'
+  const [step, setStep] = useState('email'); // 'email', 'code', 'no-access', 'trial-signup'
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -65,8 +66,12 @@ const LoginPage = () => {
     try {
       const result = await verifyOTP(email, code);
 
-      if (result.noAccess) {
+      if (result.notFound || result.noAccess) {
+        // User not in database at all
         setStep('no-access');
+      } else if (result.needsTrial) {
+        // User exists but inactive - show trial signup
+        setStep('trial-signup');
       } else if (result.success) {
         navigate(`/${result.userId}/dashboard`, { replace: true });
       }
@@ -106,6 +111,21 @@ const LoginPage = () => {
     setError('');
     setCodeSent(false);
     authService.clearLastEmail();
+  };
+
+  const handleStartTrial = async () => {
+    setError('');
+    try {
+      const success = await startTrial();
+      if (success && user?.id) {
+        navigate(`/${user.id}/dashboard`, { replace: true });
+      } else {
+        setError('Failed to start trial. Please try again.');
+      }
+    } catch (err) {
+      console.error('Start trial error:', err);
+      setError('Failed to start trial. Please try again.');
+    }
   };
 
   const styles = {
@@ -257,6 +277,17 @@ const LoginPage = () => {
       transition: 'background-color 0.2s',
     },
   };
+
+  // Trial Signup State - for inactive users who need to start a trial
+  if (step === 'trial-signup') {
+    return (
+      <TrialSignupPopup
+        email={email}
+        onStartTrial={handleStartTrial}
+        onCancel={handleTryDifferentEmail}
+      />
+    );
+  }
 
   // No Access State
   if (step === 'no-access') {

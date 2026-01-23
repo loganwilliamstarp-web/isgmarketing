@@ -4,7 +4,8 @@ import {
   useAutomationsWithStats,
   useAutomationMutations,
   useVerifiedSenderDomains,
-  useEffectiveOwner
+  useEffectiveOwner,
+  useTrialGuard
 } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterAutomations, useMasterAutomationMutations } from '../hooks/useAdmin';
@@ -499,6 +500,7 @@ const AutomationsPage = ({ t }) => {
 
   // Check if admin is viewing multiple users (master view mode)
   const { isAdmin, isAgencyAdmin, user } = useAuth();
+  const { canPerformActions, trialMessage } = useTrialGuard();
   const { isMultiOwner } = useEffectiveOwner();
   const showMasterView = isAdmin && isMultiOwner;
   // Agency admin viewing all agents gets grouped view
@@ -540,6 +542,10 @@ const AutomationsPage = ({ t }) => {
 
   // Navigation handlers
   const handleCreateNew = () => {
+    if (!canPerformActions) {
+      alert(trialMessage);
+      return;
+    }
     navigate(`/${userId}/automations/new`);
   };
 
@@ -563,6 +569,11 @@ const AutomationsPage = ({ t }) => {
   };
 
   const handleToggleAutomation = async (automationId, action) => {
+    // Block activation for trial-expired users
+    if (action === 'activate' && !canPerformActions) {
+      alert(trialMessage);
+      return;
+    }
     try {
       if (action === 'activate') {
         await activateAutomation.mutateAsync(automationId);

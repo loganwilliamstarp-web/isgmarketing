@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { userSettingsService } from '../services/userSettings';
 import { templatesService } from '../services/templates';
+import { useAuth } from '../contexts/AuthContext';
 
 // Helper to strip HTML for plain text preview
 const htmlToPlainText = (html) => {
@@ -33,6 +34,7 @@ const hasComplexHtml = (html) => {
 };
 
 const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending }) => {
+  const { canPerformActions } = useAuth();
   const [ownerSettings, setOwnerSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [templates, setTemplates] = useState([]);
@@ -118,6 +120,11 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+
+    if (!canPerformActions) {
+      setError('Your trial has expired. Contact your administrator to activate your account.');
+      return;
+    }
 
     if (!subject.trim()) {
       setError('Please enter a subject');
@@ -523,16 +530,17 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
             </button>
             <button
               type="submit"
-              disabled={sending || !recipientEmail}
+              disabled={sending || !recipientEmail || !canPerformActions}
+              title={!canPerformActions ? 'Your trial has expired' : ''}
               style={{
                 padding: '10px 20px',
-                backgroundColor: sending || !recipientEmail ? t.textMuted : t.primary,
+                backgroundColor: (sending || !recipientEmail || !canPerformActions) ? t.textMuted : t.primary,
                 border: 'none',
                 borderRadius: '8px',
                 color: '#fff',
                 fontSize: '14px',
                 fontWeight: '500',
-                cursor: sending || !recipientEmail ? 'not-allowed' : 'pointer',
+                cursor: (sending || !recipientEmail || !canPerformActions) ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px'

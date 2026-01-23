@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { automationsService } from '../services/automations';
 import { useEffectiveOwner } from './useEffectiveOwner';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Get all automations
@@ -102,19 +103,32 @@ export function useAutomationCategories() {
  */
 export function useAutomationMutations() {
   const { ownerIds, filterKey } = useEffectiveOwner();
+  const { canPerformActions } = useAuth();
   const queryClient = useQueryClient();
+
+  const checkTrialAccess = () => {
+    if (!canPerformActions) {
+      throw new Error('Your trial has expired. Contact your administrator to activate your account.');
+    }
+  };
 
   const invalidateAutomations = () => {
     queryClient.invalidateQueries({ queryKey: ['automations'] });
   };
 
   const createAutomation = useMutation({
-    mutationFn: (automation) => automationsService.create(ownerIds, automation),
+    mutationFn: (automation) => {
+      checkTrialAccess();
+      return automationsService.create(ownerIds, automation);
+    },
     onSuccess: invalidateAutomations
   });
 
   const updateAutomation = useMutation({
-    mutationFn: ({ automationId, updates }) => automationsService.update(ownerIds, automationId, updates),
+    mutationFn: ({ automationId, updates }) => {
+      checkTrialAccess();
+      return automationsService.update(ownerIds, automationId, updates);
+    },
     onSuccess: (data) => {
       invalidateAutomations();
       queryClient.setQueryData(['automation', filterKey, data.id], data);
@@ -132,7 +146,10 @@ export function useAutomationMutations() {
   });
 
   const activateAutomation = useMutation({
-    mutationFn: (automationId) => automationsService.activate(ownerIds, automationId),
+    mutationFn: (automationId) => {
+      checkTrialAccess();
+      return automationsService.activate(ownerIds, automationId);
+    },
     onSuccess: (data) => {
       invalidateAutomations();
       queryClient.setQueryData(['automation', filterKey, data.id], data);

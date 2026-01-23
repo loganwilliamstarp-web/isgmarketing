@@ -10,6 +10,7 @@ import { adminService } from './services/admin';
 import { AuthProvider, useAuth, USER_ROLES } from './contexts/AuthContext';
 import { LoginPage, ProtectedRoute, ImpersonationBanner } from './components/auth';
 import { ScopeFilterDropdown } from './components/filters';
+import { SetupChecklistFloater, TrialExpiredBanner } from './components/trial';
 
 // Lazy-loaded page components for code splitting
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -393,7 +394,7 @@ const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
-  const { user, isAdmin, impersonating, logout } = useAuth();
+  const { user, isAdmin, impersonating, logout, isTrialUser, isTrialExpired } = useAuth();
 
   // Fetch user data from Supabase based on userId (the viewed user, not necessarily the logged-in user)
   const { data: userData } = useQuery({
@@ -461,14 +462,27 @@ const AppLayout = () => {
     navigate('/login');
   };
 
-  // Calculate top offset when impersonation banner is active
-  const topOffset = impersonating.active ? '44px' : '0px';
+  // Calculate top offset when banners are active
+  // Trial expired banner (44px) stacks above impersonation banner (44px)
+  const getTopOffset = () => {
+    let offset = 0;
+    if (isTrialExpired) offset += 44;
+    if (impersonating.active) offset += 44;
+    return `${offset}px`;
+  };
+  const topOffset = getTopOffset();
 
   return (
     <ThemeContext.Provider value={{ isDark, setIsDark, t, themes }}>
       <UserContext.Provider value={{ userId, currentUser, setCurrentUser }}>
-        {/* Impersonation Banner */}
-        <ImpersonationBanner />
+        {/* Trial Expired Banner - shows at very top */}
+        <TrialExpiredBanner />
+
+        {/* Impersonation Banner - shows below trial banner if both active */}
+        <ImpersonationBanner topOffset={isTrialExpired ? '44px' : '0px'} />
+
+        {/* Setup Checklist Floater - shows for all users until setup complete */}
+        <SetupChecklistFloater />
 
         <div style={{
           fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",

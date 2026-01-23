@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { templatesService } from '../services/templates';
 import { useEffectiveOwner } from './useEffectiveOwner';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Get all templates
@@ -73,19 +74,32 @@ export function useTemplateCategories() {
  */
 export function useTemplateMutations() {
   const { ownerIds, filterKey } = useEffectiveOwner();
+  const { canPerformActions } = useAuth();
   const queryClient = useQueryClient();
+
+  const checkTrialAccess = () => {
+    if (!canPerformActions) {
+      throw new Error('Your trial has expired. Contact your administrator to activate your account.');
+    }
+  };
 
   const invalidateTemplates = () => {
     queryClient.invalidateQueries({ queryKey: ['templates'] });
   };
 
   const createTemplate = useMutation({
-    mutationFn: (template) => templatesService.create(ownerIds, template),
+    mutationFn: (template) => {
+      checkTrialAccess();
+      return templatesService.create(ownerIds, template);
+    },
     onSuccess: invalidateTemplates
   });
 
   const updateTemplate = useMutation({
-    mutationFn: ({ templateId, updates }) => templatesService.update(ownerIds, templateId, updates),
+    mutationFn: ({ templateId, updates }) => {
+      checkTrialAccess();
+      return templatesService.update(ownerIds, templateId, updates);
+    },
     onSuccess: (data) => {
       invalidateTemplates();
       queryClient.setQueryData(['template', filterKey, data.id], data);

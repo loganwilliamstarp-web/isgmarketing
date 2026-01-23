@@ -156,3 +156,6 @@ export {
   useHasVerifiedDomain,
   useSenderDomainMutations
 } from './useSenderDomains';
+
+// Trial Guard
+export { useTrialGuard } from './useTrialGuard';

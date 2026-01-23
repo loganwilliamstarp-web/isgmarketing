@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { massEmailsService } from '../services/massEmails';
 import { userSettingsService } from '../services/userSettings';
 import { useEffectiveOwner } from './useEffectiveOwner';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Get all user IDs with the same role as the current user
@@ -196,19 +197,32 @@ export function useMassEmailBatchStats(batchId) {
  */
 export function useMassEmailMutations() {
   const { ownerIds, filterKey } = useEffectiveOwner();
+  const { canPerformActions } = useAuth();
   const queryClient = useQueryClient();
+
+  const checkTrialAccess = () => {
+    if (!canPerformActions) {
+      throw new Error('Your trial has expired. Contact your administrator to activate your account.');
+    }
+  };
 
   const invalidateMassEmails = () => {
     queryClient.invalidateQueries({ queryKey: ['massEmails'] });
   };
 
   const createBatch = useMutation({
-    mutationFn: (batch) => massEmailsService.create(ownerIds, batch),
+    mutationFn: (batch) => {
+      checkTrialAccess();
+      return massEmailsService.create(ownerIds, batch);
+    },
     onSuccess: invalidateMassEmails
   });
 
   const updateBatch = useMutation({
-    mutationFn: ({ batchId, updates }) => massEmailsService.update(ownerIds, batchId, updates),
+    mutationFn: ({ batchId, updates }) => {
+      checkTrialAccess();
+      return massEmailsService.update(ownerIds, batchId, updates);
+    },
     onSuccess: invalidateMassEmails
   });
 
@@ -218,7 +232,10 @@ export function useMassEmailMutations() {
   });
 
   const scheduleBatch = useMutation({
-    mutationFn: ({ batchId, scheduledFor }) => massEmailsService.scheduleBatch(ownerIds, batchId, scheduledFor),
+    mutationFn: ({ batchId, scheduledFor }) => {
+      checkTrialAccess();
+      return massEmailsService.scheduleBatch(ownerIds, batchId, scheduledFor);
+    },
     onSuccess: () => {
       invalidateMassEmails();
       queryClient.invalidateQueries({ queryKey: ['scheduledEmails'] });
