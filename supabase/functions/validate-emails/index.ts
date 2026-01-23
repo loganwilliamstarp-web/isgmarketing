@@ -16,7 +16,7 @@ const corsHeaders = {
 const SENDGRID_VALIDATION_URL = 'https://api.sendgrid.com/v3/validations/email'
 
 // Rate limits and batch sizes
-const MAX_VALIDATIONS_PER_RUN = 500  // Limit per cron run to control costs
+const MAX_VALIDATIONS_PER_RUN = 5000  // Limit per cron run to control costs
 const BATCH_SIZE = 50                 // Process in smaller batches for reliability
 const VALIDATION_EXPIRY_DAYS = 90     // Re-validate after 90 days
 

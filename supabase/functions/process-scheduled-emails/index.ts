@@ -823,18 +823,53 @@ async function processReadyEmails(
         }
 
         // Final email validation check - only send to validated emails
+        // If not valid, attempt just-in-time validation before cancelling
         if (email.account?.email_validation_status !== 'valid') {
-          const status = email.account?.email_validation_status || 'unknown'
-          const reason = email.account?.email_validation_reason
-          await supabase
-            .from('scheduled_emails')
-            .update({
-              status: 'Cancelled',
-              error_message: `Email validation status is '${status}'${reason ? ` (${reason})` : ''}`,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', email.id)
-          continue
+          const currentStatus = email.account?.email_validation_status || 'unknown'
+
+          // Check if validation is expired (> 90 days old) or never done
+          const validatedAt = email.account?.email_validated_at ? new Date(email.account.email_validated_at) : null
+          const ninetyDaysAgo = new Date()
+          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+          const isExpired = !validatedAt || validatedAt < ninetyDaysAgo
+          const needsJITValidation = currentStatus === 'unknown' || currentStatus === null || isExpired
+
+          if (needsJITValidation && recipientEmail) {
+            console.log(`[JIT Validation] Attempting validation for ${recipientEmail} (status: ${currentStatus}, expired: ${isExpired})`)
+
+            // Perform just-in-time validation
+            const jitResult = await performJITValidation(supabase, email.account_id, recipientEmail)
+
+            if (jitResult.status === 'valid') {
+              console.log(`[JIT Validation] ${recipientEmail} validated successfully - proceeding with send`)
+              // Update the local account object so we don't cancel
+              email.account.email_validation_status = 'valid'
+            } else {
+              // JIT validation failed - cancel the email
+              await supabase
+                .from('scheduled_emails')
+                .update({
+                  status: 'Cancelled',
+                  error_message: `JIT validation failed: ${jitResult.status}${jitResult.reason ? ` (${jitResult.reason})` : ''}`,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', email.id)
+              console.log(`[JIT Validation] ${recipientEmail} failed validation: ${jitResult.status}`)
+              continue
+            }
+          } else if (currentStatus !== 'valid') {
+            // Not eligible for JIT validation and not valid - cancel
+            const reason = email.account?.email_validation_reason
+            await supabase
+              .from('scheduled_emails')
+              .update({
+                status: 'Cancelled',
+                error_message: `Email validation status is '${currentStatus}'${reason ? ` (${reason})` : ''}`,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', email.id)
+            continue
+          }
         }
       }
 
@@ -1784,4 +1819,168 @@ function moveToNextAllowedDay(date: Date, allowedDays: string[]): Date {
 
   // Should never reach here, but return original date if we do
   return date
+}
+
+// ============================================================================
+// JUST-IN-TIME EMAIL VALIDATION
+// ============================================================================
+
+const SENDGRID_VALIDATION_URL = 'https://api.sendgrid.com/v3/validations/email'
+
+/**
+ * Perform just-in-time email validation before sending
+ * Validates the email via SendGrid API and updates the account record
+ */
+async function performJITValidation(
+  supabase: any,
+  accountId: string,
+  email: string
+): Promise<{ status: 'valid' | 'risky' | 'invalid', reason: string | null }> {
+  // Use dedicated validation key if available, fall back to general SendGrid key
+  const sendgridValidationKey = Deno.env.get('SENDGRID_VALIDATION_KEY') || Deno.env.get('SENDGRID_API_KEY')
+
+  if (!sendgridValidationKey) {
+    console.warn('[JIT Validation] No SendGrid validation key configured - using fallback validation')
+    const fallbackResult = fallbackValidation(email)
+    // Update account with fallback result
+    await updateAccountValidation(supabase, accountId, fallbackResult)
+    return { status: fallbackResult.status, reason: fallbackResult.reason }
+  }
+
+  // Basic format validation first
+  if (!email || !email.includes('@') || !email.includes('.')) {
+    const result = { status: 'invalid' as const, score: 0, reason: 'invalid_format', details: { local_check: true } }
+    await updateAccountValidation(supabase, accountId, result)
+    return { status: 'invalid', reason: 'invalid_format' }
+  }
+
+  try {
+    const response = await fetch(SENDGRID_VALIDATION_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sendgridValidationKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: email,
+        source: 'isg_marketing_jit_validation'
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[JIT Validation] SendGrid API error ${response.status}: ${errorText}`)
+
+      // Fall back to basic validation if API not accessible
+      if (response.status === 403 || response.status === 401 || errorText.includes('not enabled')) {
+        const fallbackResult = fallbackValidation(email)
+        await updateAccountValidation(supabase, accountId, fallbackResult)
+        return { status: fallbackResult.status, reason: fallbackResult.reason }
+      }
+
+      throw new Error(`SendGrid API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const result = data.result
+
+    // Map SendGrid verdict to our status
+    let status: 'valid' | 'risky' | 'invalid'
+    switch (result.verdict) {
+      case 'Valid': status = 'valid'; break
+      case 'Risky': status = 'risky'; break
+      default: status = 'invalid'
+    }
+
+    // Determine reason for risky/invalid
+    let reason: string | null = null
+    if (status !== 'valid') {
+      const reasons: string[] = []
+      if (result.checks?.domain?.is_suspected_disposable_address) reasons.push('disposable')
+      if (result.checks?.local_part?.is_suspected_role_address) reasons.push('role_address')
+      if (!result.checks?.domain?.has_mx_or_a_record) reasons.push('invalid_domain')
+      if (!result.checks?.domain?.has_valid_address_syntax) reasons.push('invalid_syntax')
+      if (result.checks?.additional?.has_known_bounces) reasons.push('known_bounces')
+      reason = reasons.join(', ') || 'unknown'
+    }
+
+    // Update account with validation result
+    const validationResult = { status, score: result.score, reason, details: result }
+    await updateAccountValidation(supabase, accountId, validationResult)
+
+    return { status, reason }
+
+  } catch (err: any) {
+    console.error(`[JIT Validation] Error validating ${email}:`, err.message)
+    // Fall back to basic validation on error
+    const fallbackResult = fallbackValidation(email)
+    await updateAccountValidation(supabase, accountId, fallbackResult)
+    return { status: fallbackResult.status, reason: fallbackResult.reason }
+  }
+}
+
+/**
+ * Update account with validation result
+ */
+async function updateAccountValidation(
+  supabase: any,
+  accountId: string,
+  result: { status: string, score: number, reason: string | null, details?: Record<string, any> }
+): Promise<void> {
+  const { error } = await supabase
+    .from('accounts')
+    .update({
+      email_validation_status: result.status,
+      email_validation_score: result.score,
+      email_validated_at: new Date().toISOString(),
+      email_validation_reason: result.reason,
+      email_validation_details: result.details || {}
+    })
+    .eq('account_unique_id', accountId)
+
+  if (error) {
+    console.error(`[JIT Validation] Failed to update account ${accountId}:`, error.message)
+  }
+}
+
+/**
+ * Fallback validation when SendGrid API is not available
+ */
+function fallbackValidation(email: string): { status: 'valid' | 'risky' | 'invalid', score: number, reason: string | null, details: Record<string, any> } {
+  const details: Record<string, any> = { fallback: true, jit: true }
+
+  // Basic format check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return { status: 'invalid', score: 0, reason: 'invalid_format', details: { ...details, check: 'format' } }
+  }
+
+  const domain = email.split('@')[1].toLowerCase()
+
+  // Check for common disposable email domains
+  const disposableDomains = [
+    'tempmail.com', 'throwaway.email', 'guerrillamail.com', 'mailinator.com',
+    'temp-mail.org', '10minutemail.com', 'fakeinbox.com', 'trashmail.com',
+    'yopmail.com', 'getnada.com', 'maildrop.cc', 'discard.email'
+  ]
+
+  if (disposableDomains.includes(domain)) {
+    return { status: 'invalid', score: 0.1, reason: 'disposable', details: { ...details, check: 'disposable_domain' } }
+  }
+
+  // Check for role-based addresses
+  const localPart = email.split('@')[0].toLowerCase()
+  const roleAddresses = ['admin', 'info', 'support', 'sales', 'contact', 'help', 'noreply', 'no-reply']
+
+  if (roleAddresses.includes(localPart)) {
+    return { status: 'risky', score: 0.5, reason: 'role_address', details: { ...details, check: 'role_address' } }
+  }
+
+  // Check for obviously fake patterns
+  if (/^(test|fake|sample|example)@/i.test(email) || /@(test|fake|sample|example)\./i.test(email)) {
+    return { status: 'invalid', score: 0.1, reason: 'test_address', details: { ...details, check: 'fake_pattern' } }
+  }
+
+  // Passed basic checks
+  return { status: 'valid', score: 0.7, reason: null, details: { ...details, check: 'passed_basic' } }
 }
