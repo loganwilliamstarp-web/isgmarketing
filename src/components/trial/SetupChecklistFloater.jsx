@@ -29,7 +29,7 @@ const SetupChecklistFloater = () => {
     queryKey: ['oauth-connections', user?.id],
     queryFn: () => emailOAuthService.getConnections(user?.id),
     enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000
+    staleTime: 30 * 1000 // 30 seconds - refresh quickly after connecting
   });
 
   // Determine completion status of each task
