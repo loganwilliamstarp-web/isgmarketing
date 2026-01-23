@@ -1,5 +1,5 @@
 // src/pages/TimelinePage.jsx
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLifecycleStages } from '../hooks/useTimeline';
 
 // Loading skeleton component
@@ -36,8 +36,6 @@ const TimelinePage = ({ t }) => {
       )
     );
 
-    // Build the flowchart structure
-    // This defines the logical flow of the customer journey
     return buildFlowchartStructure(allAutomations, lobFilter);
   }, [data?.stages, lobFilter]);
 
@@ -49,7 +47,7 @@ const TimelinePage = ({ t }) => {
           <Skeleton width="300px" height="32px" style={{ marginBottom: '8px' }} />
           <Skeleton width="400px" height="16px" />
         </div>
-        <Skeleton height="500px" />
+        <Skeleton height="600px" />
       </div>
     );
   }
@@ -151,7 +149,7 @@ const TimelinePage = ({ t }) => {
               width: '20px',
               height: '20px',
               backgroundColor: t.bgCard,
-              border: `2px solid ${t.border}`,
+              border: '2px solid #3b82f6',
               borderRadius: '4px'
             }} />
             <span style={{ fontSize: '12px', color: t.textMuted }}>Automation</span>
@@ -159,9 +157,9 @@ const TimelinePage = ({ t }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <svg width="24" height="20" viewBox="0 0 24 20">
               <polygon
-                points="12,0 24,10 12,20 0,10"
+                points="12,2 22,10 12,18 2,10"
                 fill="none"
-                stroke={t.border}
+                stroke="#64748b"
                 strokeWidth="2"
               />
             </svg>
@@ -176,7 +174,7 @@ const TimelinePage = ({ t }) => {
         borderRadius: '12px',
         border: `1px solid ${t.border}`,
         padding: '40px',
-        minHeight: '600px',
+        minHeight: '700px',
         overflow: 'auto'
       }}>
         <FlowchartCanvas
@@ -189,7 +187,7 @@ const TimelinePage = ({ t }) => {
       </div>
 
       {/* Node Details Panel */}
-      {selectedNode && (
+      {selectedNode?.automation && (
         <NodeDetailsPanel
           node={selectedNode}
           templateMap={data?.templateMap}
@@ -203,9 +201,9 @@ const TimelinePage = ({ t }) => {
 
 // ============================================
 // BUILD FLOWCHART STRUCTURE
+// Matches the diagram exactly
 // ============================================
 function buildFlowchartStructure(automations, lobFilter) {
-  // Find automations by category/type
   const findAutomation = (namePattern) => {
     return automations.find(a =>
       a.name?.toLowerCase().includes(namePattern.toLowerCase()) ||
@@ -213,164 +211,162 @@ function buildFlowchartStructure(automations, lobFilter) {
     );
   };
 
-  // Build the flowchart nodes and connections
   const nodes = [];
   const connections = [];
 
-  // ROW 1: Welcome -> Is Cross Sale? -> Midterm Cross Sale
-  //                                  -> No Email
-  const welcomeAuto = findAutomation('welcome');
-  const midtermCrossAuto = findAutomation('midterm') || findAutomation('cross');
-  const renewalAuto = findAutomation('renewal');
-  const renewedAuto = findAutomation('renewed') || findAutomation('policy renewed');
+  // Grid positions (col, row) - using finer grid for precise placement
+  // Row 0: Prospect path
+  // Row 1: Welcome
+  // Row 2: Is Cross Sale path (Yes -> Midterm)
+  // Row 3: Is Cross Sale path (No -> No Feedback -> Periodic)
+  // Row 4: Is Cancelled path
+  // Row 5: Prior Customer from cancelled
 
-  // Welcome node
-  if (welcomeAuto) {
-    nodes.push({
-      id: 'welcome',
-      type: 'automation',
-      label: 'Welcome',
-      automation: welcomeAuto,
-      x: 0,
-      y: 0
-    });
-  }
+  // === TOP LEFT: Prospect ===
+  nodes.push({
+    id: 'prospect',
+    type: 'automation',
+    label: 'Prospect',
+    automation: findAutomation('prospect'),
+    col: 0, row: 0
+  });
 
-  // Cross Sale Decision
+  // Prospect Email (Not sold path)
+  nodes.push({
+    id: 'prospect-email',
+    type: 'automation',
+    label: 'Prospect\nEmail - 6',
+    automation: findAutomation('prospect') || findAutomation('quoted'),
+    col: 3, row: 0
+  });
+  connections.push({ from: 'prospect', to: 'prospect-email', label: 'Not sold', labelPos: 'top' });
+
+  // === Welcome (Sold path) ===
+  nodes.push({
+    id: 'welcome',
+    type: 'automation',
+    label: 'Welcome',
+    automation: findAutomation('welcome'),
+    col: 0, row: 1.5
+  });
+  connections.push({ from: 'prospect', to: 'welcome', label: 'Sold', labelPos: 'left' });
+
+  // === Is Cross Sale Decision ===
   nodes.push({
     id: 'is-cross-sale',
     type: 'decision',
-    label: 'Is Cross\nSale?',
-    x: 1,
-    y: 0
+    label: 'Is Cross\nSale',
+    col: 2, row: 2
   });
 
-  if (welcomeAuto) {
-    connections.push({ from: 'welcome', to: 'is-cross-sale' });
-  }
-
-  // Midterm Cross Sale (Yes path)
-  if (midtermCrossAuto) {
-    nodes.push({
-      id: 'midterm-cross',
-      type: 'automation',
-      label: 'Midterm\nCrosssale',
-      automation: midtermCrossAuto,
-      x: 2,
-      y: 0
-    });
-    connections.push({ from: 'is-cross-sale', to: 'midterm-cross', label: 'Yes' });
-  }
-
-  // No Email (No path)
+  // Midterm Crossale (Yes from Cross Sale)
   nodes.push({
-    id: 'no-email',
+    id: 'midterm-crossale',
     type: 'automation',
-    label: 'No Email',
-    isPlaceholder: true,
-    x: 2,
-    y: 1
+    label: 'Midterm\nCrossale',
+    automation: findAutomation('midterm') || findAutomation('cross-sell'),
+    col: 3, row: 1.5
   });
-  connections.push({ from: 'is-cross-sale', to: 'no-email', label: 'No' });
+  connections.push({ from: 'is-cross-sale', to: 'midterm-crossale', label: 'Yes', labelPos: 'top' });
 
-  // ROW 2: Renewal flow
-  // Is Renewal? -> Renewal Email -> Is Renewed? -> Renewed Email
-  //                                            -> Lost Customer
-
+  // No Feedback (No from Cross Sale)
   nodes.push({
-    id: 'is-renewal',
+    id: 'no-feedback',
     type: 'decision',
-    label: 'Is\nRenewal?',
-    x: 0,
-    y: 2
+    label: 'No\nFeedback',
+    col: 2, row: 3.5
   });
+  connections.push({ from: 'is-cross-sale', to: 'no-feedback', label: 'No', labelPos: 'left' });
 
-  if (renewalAuto) {
-    nodes.push({
-      id: 'renewal',
-      type: 'automation',
-      label: 'Renewal\nEmail',
-      automation: renewalAuto,
-      x: 1,
-      y: 2
-    });
-    connections.push({ from: 'is-renewal', to: 'renewal', label: 'Yes' });
-  }
-
+  // Periodic Feedback
   nodes.push({
-    id: 'is-renewed',
-    type: 'decision',
-    label: 'Is\nRenewed?',
-    x: 2,
-    y: 2
-  });
-
-  if (renewalAuto) {
-    connections.push({ from: 'renewal', to: 'is-renewed' });
-  }
-
-  if (renewedAuto) {
-    nodes.push({
-      id: 'renewed',
-      type: 'automation',
-      label: 'Renewed\nEmail',
-      automation: renewedAuto,
-      x: 3,
-      y: 2
-    });
-    connections.push({ from: 'is-renewed', to: 'renewed', label: 'Yes' });
-  }
-
-  nodes.push({
-    id: 'lost-customer',
+    id: 'periodic-feedback',
     type: 'automation',
-    label: 'Lost\nCustomer',
-    isPlaceholder: true,
-    x: 3,
-    y: 3
+    label: 'Periodic\nFeedback',
+    automation: findAutomation('periodic') || findAutomation('feedback'),
+    col: 3.5, row: 3.5
   });
-  connections.push({ from: 'is-renewed', to: 'lost-customer', label: 'No' });
+  connections.push({ from: 'no-feedback', to: 'periodic-feedback' });
 
-  // ROW 3: Win-back / Prospect flows
-  const prospectAuto = findAutomation('prospect');
-  const priorCustomerAuto = findAutomation('prior');
-  const periodicAuto = findAutomation('periodic');
+  // === Renewal Email (center convergence point) ===
+  nodes.push({
+    id: 'renewal-email',
+    type: 'automation',
+    label: 'Renewal\nEmail',
+    automation: findAutomation('renewal'),
+    col: 5, row: 2
+  });
+  // Connections into Renewal Email
+  connections.push({ from: 'midterm-crossale', to: 'renewal-email', curveDown: true });
+  connections.push({ from: 'periodic-feedback', to: 'renewal-email', curveUp: true });
 
-  // Quoted not sold / Prospect
-  if (prospectAuto) {
-    nodes.push({
-      id: 'prospect',
-      type: 'automation',
-      label: 'Quoted not\nsold',
-      automation: prospectAuto,
-      x: 0,
-      y: 4
-    });
-  }
+  // === Renewed Decision ===
+  nodes.push({
+    id: 'renewed',
+    type: 'decision',
+    label: 'Renewed',
+    col: 6.5, row: 2
+  });
+  connections.push({ from: 'renewal-email', to: 'renewed' });
 
-  // Prior customer
-  if (priorCustomerAuto) {
-    nodes.push({
-      id: 'prior-customer',
-      type: 'automation',
-      label: 'Prior\nCustomer',
-      automation: priorCustomerAuto,
-      x: 1,
-      y: 4
-    });
-  }
+  // Renewed Email (Yes)
+  nodes.push({
+    id: 'renewed-email',
+    type: 'automation',
+    label: 'Renewed\nEmail',
+    automation: findAutomation('renewed') || findAutomation('thank'),
+    col: 8, row: 1.5
+  });
+  connections.push({ from: 'renewed', to: 'renewed-email', label: 'Yes', labelPos: 'top' });
 
-  // Periodic review
-  if (periodicAuto) {
-    nodes.push({
-      id: 'periodic',
-      type: 'automation',
-      label: 'Periodic\nReview',
-      automation: periodicAuto,
-      x: 2,
-      y: 4
-    });
-  }
+  // Prior Customer (No from Renewed) - top right
+  nodes.push({
+    id: 'prior-customer-top',
+    type: 'automation',
+    label: 'Prior\nCustomer',
+    automation: findAutomation('prior'),
+    col: 8, row: 3
+  });
+  connections.push({ from: 'renewed', to: 'prior-customer-top', label: 'No', labelPos: 'bottom' });
+
+  // === Bottom: Is Cancelled Path ===
+  nodes.push({
+    id: 'is-cancelled',
+    type: 'decision',
+    label: 'Is Cancelled',
+    col: 0, row: 4.5
+  });
+
+  // Is Cross Sale (from Cancelled)
+  nodes.push({
+    id: 'is-cross-sale-cancelled',
+    type: 'decision',
+    label: 'Is Cross\nSale',
+    col: 2, row: 4.5
+  });
+  connections.push({ from: 'is-cancelled', to: 'is-cross-sale-cancelled' });
+
+  // Cross Sale automation (Yes from cancelled cross sale check)
+  nodes.push({
+    id: 'cross-sale',
+    type: 'automation',
+    label: 'Cross Sale',
+    automation: findAutomation('cross') || findAutomation('midterm'),
+    col: 3.5, row: 4.5
+  });
+  connections.push({ from: 'is-cross-sale-cancelled', to: 'cross-sale', label: 'Yes', labelPos: 'top' });
+  // Cross Sale connects up to Renewal Email
+  connections.push({ from: 'cross-sale', to: 'renewal-email', curveUp: true });
+
+  // Prior Customer (No from cancelled cross sale)
+  nodes.push({
+    id: 'prior-customer-bottom',
+    type: 'automation',
+    label: 'Prior\nCustomer',
+    automation: findAutomation('prior'),
+    col: 3.5, row: 5.5
+  });
+  connections.push({ from: 'is-cross-sale-cancelled', to: 'prior-customer-bottom', label: 'No', labelPos: 'left' });
 
   return { nodes, connections };
 }
@@ -390,91 +386,131 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
   const { nodes, connections } = flowchartData;
 
   // Grid settings
-  const nodeWidth = 130;
-  const nodeHeight = 70;
-  const horizontalGap = 180;
-  const verticalGap = 120;
-  const startX = 60;
-  const startY = 40;
+  const nodeWidth = 100;
+  const nodeHeight = 55;
+  const colWidth = 120;
+  const rowHeight = 90;
+  const startX = 40;
+  const startY = 30;
 
-  // Calculate node position
+  // Calculate node position from grid coords
   const getNodePosition = (node) => ({
-    x: startX + node.x * horizontalGap,
-    y: startY + node.y * verticalGap
+    x: startX + node.col * colWidth,
+    y: startY + node.row * rowHeight
   });
 
   // Calculate canvas size
-  const maxX = Math.max(...nodes.map(n => n.x)) + 1;
-  const maxY = Math.max(...nodes.map(n => n.y)) + 1;
-  const canvasWidth = startX * 2 + maxX * horizontalGap;
-  const canvasHeight = startY * 2 + maxY * verticalGap;
+  const maxCol = Math.max(...nodes.map(n => n.col)) + 1;
+  const maxRow = Math.max(...nodes.map(n => n.row)) + 1;
+  const canvasWidth = startX * 2 + maxCol * colWidth + nodeWidth;
+  const canvasHeight = startY * 2 + maxRow * rowHeight + nodeHeight;
+
+  // Generate connection path
+  const getConnectionPath = (conn) => {
+    const fromNode = nodes.find(n => n.id === conn.from);
+    const toNode = nodes.find(n => n.id === conn.to);
+    if (!fromNode || !toNode) return null;
+
+    const fromPos = getNodePosition(fromNode);
+    const toPos = getNodePosition(toNode);
+
+    // Calculate exit/entry points
+    let x1, y1, x2, y2;
+
+    // Exit point
+    if (toNode.col > fromNode.col) {
+      // Going right - exit from right
+      x1 = fromPos.x + nodeWidth;
+      y1 = fromPos.y + nodeHeight / 2;
+    } else if (toNode.row > fromNode.row) {
+      // Going down - exit from bottom
+      x1 = fromPos.x + nodeWidth / 2;
+      y1 = fromPos.y + nodeHeight;
+    } else if (toNode.row < fromNode.row) {
+      // Going up - exit from top
+      x1 = fromPos.x + nodeWidth / 2;
+      y1 = fromPos.y;
+    } else {
+      x1 = fromPos.x + nodeWidth;
+      y1 = fromPos.y + nodeHeight / 2;
+    }
+
+    // Entry point
+    if (toNode.col > fromNode.col) {
+      // Coming from left
+      x2 = toPos.x;
+      y2 = toPos.y + nodeHeight / 2;
+    } else if (toNode.row > fromNode.row) {
+      // Coming from top
+      x2 = toPos.x + nodeWidth / 2;
+      y2 = toPos.y;
+    } else if (toNode.row < fromNode.row) {
+      // Coming from bottom
+      x2 = toPos.x + nodeWidth / 2;
+      y2 = toPos.y + nodeHeight;
+    } else {
+      x2 = toPos.x;
+      y2 = toPos.y + nodeHeight / 2;
+    }
+
+    // Generate path
+    let path;
+    if (conn.curveUp || conn.curveDown) {
+      // Curved path for connections that go around
+      const midX = (x1 + x2) / 2;
+      const curveOffset = conn.curveUp ? -40 : 40;
+      path = `M ${x1} ${y1} Q ${midX} ${y1 + curveOffset} ${x2} ${y2}`;
+    } else if (Math.abs(x1 - x2) < 5 || Math.abs(y1 - y2) < 5) {
+      // Straight line
+      path = `M ${x1} ${y1} L ${x2} ${y2}`;
+    } else {
+      // L-shaped or S-shaped path
+      if (toNode.row === fromNode.row) {
+        // Same row - straight with slight curve
+        path = `M ${x1} ${y1} L ${x2} ${y2}`;
+      } else {
+        // Different row - L-shape
+        const midX = x1 + (x2 - x1) * 0.3;
+        path = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+      }
+    }
+
+    return { path, x1, y1, x2, y2, fromNode, toNode };
+  };
 
   return (
     <div style={{ position: 'relative', width: canvasWidth, height: canvasHeight, minWidth: '100%' }}>
       {/* SVG for connections */}
       <svg
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-        viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+        style={{ position: 'absolute', top: 0, left: 0, width: canvasWidth, height: canvasHeight, pointerEvents: 'none' }}
       >
         <defs>
           <marker
             id="arrowhead"
-            markerWidth="10"
-            markerHeight="7"
-            refX="9"
-            refY="3.5"
+            markerWidth="8"
+            markerHeight="6"
+            refX="7"
+            refY="3"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" fill={t.textMuted} />
+            <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
           </marker>
         </defs>
 
         {connections.map((conn, idx) => {
-          const fromNode = nodes.find(n => n.id === conn.from);
-          const toNode = nodes.find(n => n.id === conn.to);
-          if (!fromNode || !toNode) return null;
+          const pathData = getConnectionPath(conn);
+          if (!pathData) return null;
 
-          const fromPos = getNodePosition(fromNode);
-          const toPos = getNodePosition(toNode);
+          const { path, x1, y1, fromNode, toNode } = pathData;
 
-          // Calculate connection points
-          let x1, y1, x2, y2;
-
-          if (fromNode.type === 'decision') {
-            // From decision - exit from right or bottom
-            if (toNode.y === fromNode.y) {
-              // Same row - go right
-              x1 = fromPos.x + nodeWidth;
-              y1 = fromPos.y + nodeHeight / 2;
-            } else {
-              // Different row - go down
-              x1 = fromPos.x + nodeWidth / 2;
-              y1 = fromPos.y + nodeHeight;
-            }
-          } else {
-            // From automation - exit from right
-            x1 = fromPos.x + nodeWidth;
-            y1 = fromPos.y + nodeHeight / 2;
-          }
-
-          // Entry point - left side or top
-          if (toNode.x > fromNode.x) {
-            x2 = toPos.x;
-            y2 = toPos.y + nodeHeight / 2;
-          } else {
-            x2 = toPos.x + nodeWidth / 2;
-            y2 = toPos.y;
-          }
-
-          // Create path
-          let path;
-          if (x1 === x2 || y1 === y2) {
-            // Straight line
-            path = `M ${x1} ${y1} L ${x2} ${y2}`;
-          } else {
-            // L-shaped path
-            const midX = x1 + (x2 - x1) / 2;
-            path = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+          // Label position
+          let labelX = x1 + 10;
+          let labelY = y1 - 8;
+          if (conn.labelPos === 'left') {
+            labelX = x1 - 5;
+            labelY = y1 + 15;
+          } else if (conn.labelPos === 'bottom') {
+            labelY = y1 + 20;
           }
 
           return (
@@ -482,17 +518,17 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
               <path
                 d={path}
                 fill="none"
-                stroke={t.textMuted}
+                stroke="#64748b"
                 strokeWidth="2"
                 markerEnd="url(#arrowhead)"
               />
               {conn.label && (
                 <text
-                  x={x1 + 15}
-                  y={y1 + (toNode.y > fromNode.y ? 20 : -8)}
-                  fill={conn.label === 'Yes' ? '#22c55e' : '#ef4444'}
+                  x={labelX}
+                  y={labelY}
+                  fill="#94a3b8"
                   fontSize="11"
-                  fontWeight="600"
+                  fontWeight="500"
                 >
                   {conn.label}
                 </text>
@@ -546,8 +582,6 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
 // ============================================
 const AutomationNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
   const hasAutomation = !!node.automation;
-  const bgColor = node.isPlaceholder ? t.bgHover : t.bgCard;
-  const borderColor = isSelected ? t.primary : (node.isPlaceholder ? t.border : '#3b82f6');
 
   return (
     <div
@@ -558,24 +592,25 @@ const AutomationNode = ({ node, x, y, width, height, isSelected, onClick, t }) =
         top: y,
         width,
         height,
-        backgroundColor: bgColor,
-        border: `2px solid ${borderColor}`,
-        borderRadius: '8px',
+        backgroundColor: t.bgCard,
+        border: `2px solid ${isSelected ? t.primary : '#64748b'}`,
+        borderRadius: '6px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: hasAutomation ? 'pointer' : 'default',
-        transition: 'all 0.2s',
+        transition: 'all 0.15s',
         boxShadow: isSelected ? `0 0 0 3px ${t.primary}30` : 'none'
       }}
     >
       <span style={{
-        fontSize: '13px',
+        fontSize: '12px',
         fontWeight: '600',
-        color: node.isPlaceholder ? t.textMuted : t.text,
+        color: hasAutomation ? t.text : t.textMuted,
         textAlign: 'center',
         whiteSpace: 'pre-line',
-        lineHeight: '1.3'
+        lineHeight: '1.25',
+        padding: '4px'
       }}>
         {node.label}
       </span>
@@ -584,11 +619,9 @@ const AutomationNode = ({ node, x, y, width, height, isSelected, onClick, t }) =
 };
 
 // ============================================
-// DECISION NODE (Hexagon/Diamond)
+// DECISION NODE (Hexagon)
 // ============================================
 const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => {
-  const borderColor = isSelected ? t.primary : '#f59e0b';
-
   return (
     <div
       onClick={onClick}
@@ -604,7 +637,6 @@ const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => 
         cursor: 'pointer'
       }}
     >
-      {/* Hexagon shape using SVG */}
       <svg
         width={width}
         height={height}
@@ -613,21 +645,21 @@ const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => 
       >
         <polygon
           points={`
-            ${width * 0.15},${height / 2}
-            ${width * 0.35},${height * 0.1}
-            ${width * 0.65},${height * 0.1}
-            ${width * 0.85},${height / 2}
-            ${width * 0.65},${height * 0.9}
-            ${width * 0.35},${height * 0.9}
+            ${width * 0.12},${height / 2}
+            ${width * 0.30},${height * 0.08}
+            ${width * 0.70},${height * 0.08}
+            ${width * 0.88},${height / 2}
+            ${width * 0.70},${height * 0.92}
+            ${width * 0.30},${height * 0.92}
           `}
           fill={t.bgCard}
-          stroke={borderColor}
+          stroke={isSelected ? t.primary : '#64748b'}
           strokeWidth="2"
         />
       </svg>
       <span style={{
         position: 'relative',
-        fontSize: '12px',
+        fontSize: '11px',
         fontWeight: '600',
         color: t.text,
         textAlign: 'center',
@@ -646,7 +678,6 @@ const DecisionNode = ({ node, x, y, width, height, isSelected, onClick, t }) => 
 // ============================================
 const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
   const automation = node.automation;
-
   if (!automation) return null;
 
   // Get templates used
@@ -673,7 +704,7 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
       top: 0,
       right: 0,
       bottom: 0,
-      width: '400px',
+      width: '380px',
       backgroundColor: t.bgCard,
       borderLeft: `1px solid ${t.border}`,
       boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
@@ -684,13 +715,13 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
     }}>
       {/* Header */}
       <div style={{
-        padding: '20px',
+        padding: '16px 20px',
         borderBottom: `1px solid ${t.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <h3 style={{ margin: 0, fontSize: '16px', color: t.text }}>
+        <h3 style={{ margin: 0, fontSize: '15px', color: t.text, fontWeight: '600' }}>
           {automation.name}
         </h3>
         <button
@@ -699,9 +730,9 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
             background: 'none',
             border: 'none',
             color: t.textMuted,
-            fontSize: '24px',
+            fontSize: '20px',
             cursor: 'pointer',
-            padding: '4px'
+            padding: '4px 8px'
           }}
         >
           ×
@@ -709,82 +740,67 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
         {/* Description */}
         {automation.description && (
-          <div style={{ marginBottom: '20px' }}>
-            <h4 style={{
-              margin: '0 0 8px 0',
-              fontSize: '12px',
-              color: t.textMuted,
-              textTransform: 'uppercase'
-            }}>
-              Description
-            </h4>
-            <p style={{ margin: 0, fontSize: '14px', color: t.textSecondary, lineHeight: '1.5' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: t.textSecondary, lineHeight: '1.5' }}>
               {automation.description}
             </p>
           </div>
         )}
 
-        {/* Category & Line of Business */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-          <div style={{
-            padding: '6px 12px',
+        {/* Badges */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <span style={{
+            padding: '4px 10px',
             backgroundColor: `${getCategoryColor(automation.category)}20`,
             color: getCategoryColor(automation.category),
-            borderRadius: '6px',
-            fontSize: '12px',
+            borderRadius: '4px',
+            fontSize: '11px',
             fontWeight: '600'
           }}>
             {automation.category}
-          </div>
-          <div style={{
-            padding: '6px 12px',
+          </span>
+          <span style={{
+            padding: '4px 10px',
             backgroundColor: t.bgHover,
             color: t.textSecondary,
-            borderRadius: '6px',
-            fontSize: '12px',
+            borderRadius: '4px',
+            fontSize: '11px',
             fontWeight: '500'
           }}>
-            {automation.lineOfBusiness} Lines
-          </div>
+            {automation.lineOfBusiness}
+          </span>
         </div>
 
         {/* Templates */}
         {templates.length > 0 && (
-          <div>
+          <div style={{ marginBottom: '16px' }}>
             <h4 style={{
-              margin: '0 0 12px 0',
-              fontSize: '12px',
+              margin: '0 0 10px 0',
+              fontSize: '11px',
               color: t.textMuted,
-              textTransform: 'uppercase'
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
             }}>
-              Email Templates ({templates.length})
+              Email Templates
             </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {templates.map(template => (
                 <div
                   key={template.default_key}
                   style={{
-                    padding: '12px',
+                    padding: '10px 12px',
                     backgroundColor: t.bgHover,
-                    borderRadius: '8px'
+                    borderRadius: '6px'
                   }}
                 >
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: t.text,
-                    marginBottom: '4px'
-                  }}>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: t.text, marginBottom: '2px' }}>
                     {template.name}
                   </div>
-                  <div style={{
-                    fontSize: '12px',
-                    color: t.textSecondary
-                  }}>
-                    Subject: {template.subject}
+                  <div style={{ fontSize: '11px', color: t.textMuted }}>
+                    {template.subject}
                   </div>
                 </div>
               ))}
@@ -792,17 +808,18 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
           </div>
         )}
 
-        {/* Workflow Preview */}
-        <div style={{ marginTop: '20px' }}>
+        {/* Workflow Steps */}
+        <div>
           <h4 style={{
-            margin: '0 0 12px 0',
-            fontSize: '12px',
+            margin: '0 0 10px 0',
+            fontSize: '11px',
             color: t.textMuted,
-            textTransform: 'uppercase'
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
           }}>
             Workflow Steps
           </h4>
-          <WorkflowPreview nodes={automation.nodes} templateMap={templateMap} t={t} />
+          <WorkflowSteps nodes={automation.nodes} templateMap={templateMap} t={t} />
         </div>
       </div>
     </div>
@@ -810,24 +827,24 @@ const NodeDetailsPanel = ({ node, templateMap, onClose, t }) => {
 };
 
 // ============================================
-// WORKFLOW PREVIEW (Mini flowchart)
+// WORKFLOW STEPS
 // ============================================
-const WorkflowPreview = ({ nodes, templateMap, t }) => {
+const WorkflowSteps = ({ nodes, templateMap, t }) => {
   if (!nodes || nodes.length === 0) {
-    return <div style={{ color: t.textMuted, fontSize: '13px' }}>No steps defined</div>;
+    return <div style={{ color: t.textMuted, fontSize: '12px' }}>No steps defined</div>;
   }
 
   const displayNodes = nodes.filter(n => n.type !== 'entry_criteria');
 
-  const nodeTypes = {
-    trigger: { icon: '⚡', color: '#3b82f6' },
-    send_email: { icon: '📧', color: '#22c55e' },
-    delay: { icon: '⏱', color: '#f59e0b' },
-    condition: { icon: '🔀', color: '#a78bfa' },
-    end: { icon: '🏁', color: '#71717a' }
+  const nodeIcons = {
+    trigger: '⚡',
+    send_email: '📧',
+    delay: '⏱',
+    condition: '🔀',
+    end: '🏁'
   };
 
-  const getNodeLabel = (node) => {
+  const getLabel = (node) => {
     if (node.type === 'send_email') {
       const key = node.config?.templateKey || node.config?.template;
       return templateMap?.[key]?.name || 'Send Email';
@@ -846,57 +863,24 @@ const WorkflowPreview = ({ nodes, templateMap, t }) => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {displayNodes.map((node, idx) => {
-        const type = nodeTypes[node.type] || { icon: '?', color: '#71717a' };
-        return (
-          <React.Fragment key={node.id}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 12px',
-              backgroundColor: `${type.color}10`,
-              borderRadius: '8px',
-              borderLeft: `3px solid ${type.color}`
-            }}>
-              <span style={{ fontSize: '16px' }}>{type.icon}</span>
-              <span style={{ fontSize: '13px', color: t.text }}>
-                {getNodeLabel(node)}
-              </span>
-            </div>
-            {idx < displayNodes.length - 1 && !node.branches && (
-              <div style={{
-                width: '2px',
-                height: '12px',
-                backgroundColor: t.border,
-                marginLeft: '20px'
-              }} />
-            )}
-            {node.branches && (
-              <div style={{
-                marginLeft: '20px',
-                paddingLeft: '12px',
-                borderLeft: `2px dashed ${t.border}`,
-                fontSize: '11px',
-                color: t.textMuted
-              }}>
-                <div style={{ color: '#22c55e', marginBottom: '4px' }}>
-                  Yes: {node.branches.yes?.length || 0} step(s)
-                </div>
-                <div style={{ color: '#ef4444' }}>
-                  No: {node.branches.no?.length || 0} step(s)
-                </div>
-              </div>
-            )}
-          </React.Fragment>
-        );
-      })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {displayNodes.map((node, idx) => (
+        <div key={node.id} style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 10px',
+          backgroundColor: t.bgHover,
+          borderRadius: '6px'
+        }}>
+          <span style={{ fontSize: '14px' }}>{nodeIcons[node.type] || '?'}</span>
+          <span style={{ fontSize: '12px', color: t.text }}>{getLabel(node)}</span>
+        </div>
+      ))}
     </div>
   );
 };
 
-// Helper function
 function getCategoryColor(category) {
   const colors = {
     'Onboarding': '#8b5cf6',
