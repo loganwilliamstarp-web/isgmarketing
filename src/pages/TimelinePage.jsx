@@ -432,16 +432,28 @@ const FlowchartCanvas = ({ flowchartData, templateMap, selectedNode, onSelectNod
       y2 = toPos.y + nodeHeight;
     }
 
+    // Build orthogonal path (straight lines with right angles)
     let path;
-    if (conn.curve === 'up' || conn.curve === 'down') {
-      const midX = (x1 + x2) / 2;
-      const curveY = conn.curve === 'up' ? Math.min(y1, y2) - 25 : Math.max(y1, y2) + 25;
-      path = `M ${x1} ${y1} Q ${midX} ${curveY} ${x2} ${y2}`;
-    } else if (Math.abs(x2 - x1) < 10 || Math.abs(y2 - y1) < 10) {
+
+    if (Math.abs(x2 - x1) < 5) {
+      // Vertical line
       path = `M ${x1} ${y1} L ${x2} ${y2}`;
+    } else if (Math.abs(y2 - y1) < 5) {
+      // Horizontal line
+      path = `M ${x1} ${y1} L ${x2} ${y2}`;
+    } else if (conn.direction === 'down') {
+      // Go down first, then horizontal
+      path = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+    } else if (conn.curve === 'up') {
+      // Go right, then up to target
+      const midY = toPos.y + nodeHeight / 2;
+      path = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+    } else if (conn.curve === 'down') {
+      // Go right, then down to target
+      path = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
     } else {
-      const midX = x1 + 15;
-      path = `M ${x1} ${y1} C ${midX} ${y1} ${x2 - 15} ${y2} ${x2} ${y2}`;
+      // Default: horizontal first, then vertical
+      path = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
     }
 
     return { path, x1, y1, x2, y2 };
