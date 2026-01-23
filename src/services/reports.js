@@ -53,25 +53,13 @@ export const reportsService = {
 
     console.log('[Reports] getEmailPerformanceReport called with:', { ownerIds, days, startDate: startDate.toISOString() });
 
-    // Query email_logs directly instead of pre-aggregated stats table
-    // Build the query with owner filter
+    // Use RPC function for efficient multi-owner queries
     const ownerArray = Array.isArray(ownerIds) ? ownerIds : [ownerIds];
 
-    let query = supabase
-      .from('email_logs')
-      .select('sent_at, delivered_at, first_opened_at, first_clicked_at, bounced_at, replied_at')
-      .gte('sent_at', startDate.toISOString());
-
-    // Apply owner filter - use .or() with multiple eq conditions if .in() fails
-    if (ownerArray.length === 1) {
-      query = query.eq('owner_id', ownerArray[0]);
-    } else if (ownerArray.length > 1) {
-      // Build OR filter string for owner_id
-      const ownerFilter = ownerArray.map(id => `owner_id.eq.${id}`).join(',');
-      query = query.or(ownerFilter);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase.rpc('get_email_performance', {
+      p_owner_ids: ownerArray,
+      p_start_date: startDate.toISOString()
+    });
 
     console.log('[Reports] email_logs query result:', { rowCount: data?.length, error });
 
