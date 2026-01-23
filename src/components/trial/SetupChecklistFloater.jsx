@@ -24,18 +24,21 @@ const SetupChecklistFloater = () => {
   // Fetch verified domains (for agency admins)
   const { data: verifiedDomains, isLoading: loadingDomains } = useVerifiedSenderDomains();
 
-  // Fetch OAuth connections
+  // Fetch OAuth connections (using user's id as ownerId)
   const { data: oauthConnections, isLoading: loadingOAuth } = useQuery({
-    queryKey: ['oauth-connections', user?.profileName],
-    queryFn: () => emailOAuthService.getConnectionsByAgency(user?.profileName),
-    enabled: !!user?.profileName,
+    queryKey: ['oauth-connections', user?.id],
+    queryFn: () => emailOAuthService.getConnections(user?.id),
+    enabled: !!user?.id,
     staleTime: 5 * 60 * 1000
   });
 
   // Determine completion status of each task
   const hasVerifiedDomain = (verifiedDomains?.length || 0) > 0;
   const hasSignature = !!(userSettings?.signature_html || userSettings?.signature_name);
-  const hasOAuthConnection = !!(oauthConnections?.gmail || oauthConnections?.microsoft);
+  const hasOAuthConnection = !!(
+    (oauthConnections?.gmail?.status === 'active') ||
+    (oauthConnections?.microsoft?.status === 'active')
+  );
   const hasBusinessInfo = !!(userSettings?.agency_name && userSettings?.agency_address && userSettings?.agency_phone);
 
   // Build checklist items based on user role
