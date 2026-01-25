@@ -182,8 +182,10 @@ export const AuthProvider = ({ children }) => {
     const adminStatus = await authService.isAdmin(userData.user_unique_id);
     setIsAdmin(adminStatus);
 
-    // Check if user is agency admin
-    const agencyAdminStatus = userData.marketing_cloud_agency_admin === true;
+    // Check if user is agency admin (SF flag OR trial agency admin)
+    const sfAgencyAdmin = userData.marketing_cloud_agency_admin === true;
+    const trialAgencyAdmin = userData.trialInfo?.isTrialAgencyAdmin === true;
+    const agencyAdminStatus = sfAgencyAdmin || trialAgencyAdmin;
     setIsAgencyAdmin(agencyAdminStatus);
 
     // Determine user role (priority: Master Admin > Agency Admin > Marketing User)
@@ -321,9 +323,10 @@ export const AuthProvider = ({ children }) => {
     const adminStatus = await authService.isAdmin(userData.user_unique_id);
     setIsAdmin(adminStatus);
 
-    // Check agency admin status
-    const agencyAdminStatus = userData.marketing_cloud_agency_admin === true;
-    setIsAgencyAdmin(agencyAdminStatus);
+    // Check agency admin status (SF flag OR trial agency admin)
+    const sfAgencyAdmin = userData.marketing_cloud_agency_admin === true;
+    const trialAgencyAdmin = userData.trialInfo?.isTrialAgencyAdmin === true;
+    setIsAgencyAdmin(sfAgencyAdmin || trialAgencyAdmin);
 
     return {
       success: true,
@@ -366,10 +369,16 @@ export const AuthProvider = ({ children }) => {
    * Used when an inactive user clicks "Start Trial" button
    */
   const startTrial = async () => {
-    if (!user?.id) return false;
+    if (!user?.id || !user?.email) return { success: false, error: 'User not found' };
 
     try {
-      const trialData = await trialService.startTrial(user.id);
+      // Validate email first
+      const validation = trialService.validateTrialEmail(user.email);
+      if (!validation.valid) {
+        return { success: false, error: validation.reason };
+      }
+
+      const trialData = await trialService.startTrial(user.id, user.email, user.profileName);
       setAccessType('trial');
       setTrialInfo(trialData);
       setIsAuthenticated(true);
@@ -378,10 +387,16 @@ export const AuthProvider = ({ children }) => {
       const adminStatus = await authService.isAdmin(user.id);
       setIsAdmin(adminStatus);
 
-      return true;
+      // Set agency admin status if user is trial agency admin
+      if (trialData.isTrialAgencyAdmin) {
+        setIsAgencyAdmin(true);
+        setUserRole(USER_ROLES.AGENCY_ADMIN);
+      }
+
+      return { success: true, joinedExisting: trialData.joinedExisting };
     } catch (error) {
       console.error('Failed to start trial:', error);
-      return false;
+      return { success: false, error: error.message };
     }
   };
 

@@ -116,15 +116,17 @@ const LoginPage = () => {
   const handleStartTrial = async () => {
     setError('');
     try {
-      const success = await startTrial();
-      if (success && user?.id) {
+      const result = await startTrial();
+      if (result?.success && user?.id) {
         navigate(`/${user.id}/dashboard`, { replace: true });
+        return result;
       } else {
-        setError('Failed to start trial. Please try again.');
+        // Return the result so the popup can display the error
+        return result || { success: false, error: 'Failed to start trial. Please try again.' };
       }
     } catch (err) {
       console.error('Start trial error:', err);
-      setError('Failed to start trial. Please try again.');
+      return { success: false, error: err.message || 'Failed to start trial. Please try again.' };
     }
   };
 

@@ -1,13 +1,33 @@
 // src/components/trial/TrialSignupPopup.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { trialService } from '../../services/trial';
 
 const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isPersonalEmail, setIsPersonalEmail] = useState(false);
+
+  // Check if email is a personal email on mount
+  useEffect(() => {
+    if (email) {
+      const validation = trialService.validateTrialEmail(email);
+      if (!validation.valid) {
+        setIsPersonalEmail(true);
+        setError(validation.reason);
+      }
+    }
+  }, [email]);
 
   const handleStartTrial = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      await onStartTrial();
+      const result = await onStartTrial();
+      if (result && !result.success) {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to start trial');
     } finally {
       setIsLoading(false);
     }
@@ -67,6 +87,27 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
       textAlign: 'center',
       marginBottom: '32px',
       lineHeight: '1.6',
+    },
+    errorSection: {
+      backgroundColor: '#fef2f2',
+      border: '1px solid #fecaca',
+      borderRadius: '12px',
+      padding: '20px',
+      marginBottom: '24px',
+    },
+    errorTitle: {
+      fontSize: '15px',
+      fontWeight: '600',
+      color: '#dc2626',
+      marginBottom: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+    },
+    errorText: {
+      fontSize: '14px',
+      color: '#7f1d1d',
+      lineHeight: '1.5',
     },
     featuresSection: {
       backgroundColor: '#f8fafc',
@@ -170,6 +211,15 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
       color: '#94a3b8',
       lineHeight: '1.5',
     },
+    emailDisplay: {
+      backgroundColor: '#f1f5f9',
+      padding: '10px 16px',
+      borderRadius: '8px',
+      fontSize: '14px',
+      color: '#475569',
+      marginBottom: '24px',
+      textAlign: 'center',
+    },
   };
 
   const features = [
@@ -195,6 +245,34 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
           email automation tools built for insurance professionals.
         </p>
 
+        {email && (
+          <div style={styles.emailDisplay}>
+            Signing up as: <strong>{email}</strong>
+          </div>
+        )}
+
+        {isPersonalEmail ? (
+          <div style={styles.errorSection}>
+            <div style={styles.errorTitle}>
+              <span>⚠️</span>
+              Business Email Required
+            </div>
+            <div style={styles.errorText}>
+              {error}
+            </div>
+          </div>
+        ) : error ? (
+          <div style={styles.errorSection}>
+            <div style={styles.errorTitle}>
+              <span>⚠️</span>
+              Unable to Start Trial
+            </div>
+            <div style={styles.errorText}>
+              {error}
+            </div>
+          </div>
+        ) : null}
+
         <div style={styles.featuresSection}>
           <div style={styles.featuresTitle}>Everything you need to engage clients:</div>
           <div style={styles.featuresList}>
@@ -216,23 +294,25 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
           <div style={styles.trialBadge}>30-Day Free Trial</div>
         </div>
 
-        <button
-          onClick={handleStartTrial}
-          disabled={isLoading}
-          style={{
-            ...styles.buttonPrimary,
-            ...(isLoading ? styles.buttonPrimaryDisabled : {}),
-          }}
-        >
-          {isLoading ? 'Starting Trial...' : 'Start Your 30-Day Free Trial'}
-        </button>
+        {!isPersonalEmail && (
+          <button
+            onClick={handleStartTrial}
+            disabled={isLoading}
+            style={{
+              ...styles.buttonPrimary,
+              ...(isLoading ? styles.buttonPrimaryDisabled : {}),
+            }}
+          >
+            {isLoading ? 'Starting Trial...' : 'Start Your 30-Day Free Trial'}
+          </button>
+        )}
 
         <button
           onClick={onCancel}
           disabled={isLoading}
           style={styles.buttonSecondary}
         >
-          Use a Different Email
+          {isPersonalEmail ? 'Sign In With a Business Email' : 'Use a Different Email'}
         </button>
 
         <div style={styles.footer}>
