@@ -22,31 +22,46 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 const fixEncodingIssues = (content) => {
   if (!content) return content;
 
+  // Use Unicode escapes to avoid build-time parsing issues with special chars
   const replacements = [
     // BOM - must be first
-    ['ï»¿', ''],
+    ['\xef\xbb\xbf', ''],
     ['\uFEFF', ''],
     // Narrow no-break space (U+202F)
-    ['â\u0080\u00af', ' '], ['â€¯', ' '], ['â\u00af', ' '], ['\u202f', ' '],
+    ['\xe2\x80\xaf', ' '], ['\u202f', ' '],
     // Em dash (U+2014)
-    ['â\u0080\u0094', '—'], ['â€"', '—'],
+    ['\xe2\x80\x94', '\u2014'],
     // En dash (U+2013)
-    ['â\u0080\u0093', '–'], ['â€"', '–'],
-    // Quotes
-    ['â\u0080\u0099', '''], ['â€™', '''],
-    ['â\u0080\u0098', '''], ['â€˜', '''],
-    ['â\u0080\u009d', '"'], ['â€\u009d', '"'],
-    ['â\u0080\u009c', '"'], ['â€œ', '"'], ['â€', '"'],
-    // Bullet and ellipsis
-    ['â\u0080\u00a2', '•'], ['â€¢', '•'],
-    ['â\u0080\u00a6', '…'], ['â€¦', '…'],
-    // Stars and spaces
-    ['â˜†', '☆'], ['â˜…', '★'],
-    ['Â ', ' '], ['Â\u00a0', ' '],
-    // Accented characters
-    ['Ã©', 'é'], ['Ã¨', 'è'], ['Ã ', 'à'],
-    ['Ã¢', 'â'], ['Ã®', 'î'], ['Ã´', 'ô'],
-    ['Ã»', 'û'], ['Ã§', 'ç'], ['Ã‰', 'É'], ['Ã€', 'À'],
+    ['\xe2\x80\x93', '\u2013'],
+    // Right single quote (U+2019)
+    ['\xe2\x80\x99', '\u2019'],
+    // Left single quote (U+2018)
+    ['\xe2\x80\x98', '\u2018'],
+    // Right double quote (U+201D)
+    ['\xe2\x80\x9d', '\u201d'],
+    // Left double quote (U+201C)
+    ['\xe2\x80\x9c', '\u201c'],
+    // Bullet (U+2022)
+    ['\xe2\x80\xa2', '\u2022'],
+    // Ellipsis (U+2026)
+    ['\xe2\x80\xa6', '\u2026'],
+    // Stars
+    ['\xe2\x98\x86', '\u2606'],
+    ['\xe2\x98\x85', '\u2605'],
+    // Non-breaking space issues
+    ['\xc2\xa0', ' '],
+    ['\xa0', ' '],
+    // Accented characters (UTF-8 sequences misread as Latin-1)
+    ['\xc3\xa9', '\xe9'], // é
+    ['\xc3\xa8', '\xe8'], // è
+    ['\xc3\xa0', '\xe0'], // à
+    ['\xc3\xa2', '\xe2'], // â
+    ['\xc3\xae', '\xee'], // î
+    ['\xc3\xb4', '\xf4'], // ô
+    ['\xc3\xbb', '\xfb'], // û
+    ['\xc3\xa7', '\xe7'], // ç
+    ['\xc3\x89', '\xc9'], // É
+    ['\xc3\x80', '\xc0'], // À
   ];
 
   let result = content;
@@ -54,14 +69,14 @@ const fixEncodingIssues = (content) => {
     result = result.split(bad).join(good);
   }
 
-  // Regex to catch variations with control characters
-  result = result.replace(/â[\u0080-\u009f][\u0080-\u00bf]/g, (match) => {
+  // Regex to catch remaining UTF-8 sequences misread as Latin-1
+  result = result.replace(/[\xe2][\x80-\x9f][\x80-\xbf]/g, (match) => {
     const byte2 = match.charCodeAt(1);
     const byte3 = match.charCodeAt(2);
     const codePoint = ((0xe2 & 0x0f) << 12) | ((byte2 & 0x3f) << 6) | (byte3 & 0x3f);
     const map = {
-      0x2014: '—', 0x2013: '–', 0x2019: "'", 0x2018: "'",
-      0x201c: '"', 0x201d: '"', 0x2022: '•', 0x2026: '...', 0x202f: ' ',
+      0x2014: '\u2014', 0x2013: '\u2013', 0x2019: "'", 0x2018: "'",
+      0x201c: '"', 0x201d: '"', 0x2022: '\u2022', 0x2026: '...', 0x202f: ' ',
     };
     return map[codePoint] || ' ';
   });
