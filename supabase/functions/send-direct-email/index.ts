@@ -113,9 +113,6 @@ serve(async (req) => {
       .eq('user_id', email.owner_id)
       .single()
 
-    // Build email footer
-    const emailFooter = buildEmailFooter(userSettings, email)
-
     // Get account data for merge field processing (already declared above for validation)
     const recipientName = email.to_name
 
@@ -123,7 +120,7 @@ serve(async (req) => {
     const senderEmail = email.from_email || fromEmail
     const senderName = email.from_name || fromName
 
-    // Create email log first (so we have ID for star rating URLs)
+    // Create email log first (so we have ID for star rating URLs and unsubscribe links)
     const { data: emailLog, error: logError } = await supabaseClient
       .from('email_logs')
       .insert({
@@ -146,19 +143,29 @@ serve(async (req) => {
       throw new Error(`Failed to create email log: ${logError?.message}`)
     }
 
+    // Build email footer with email_log.id for unsubscribe tracking
+    const emailFooter = buildEmailFooter(userSettings, email, emailLog.id)
+
     // Now apply merge fields with the email log ID (for star rating URLs)
     const processedSubject = applyMergeFields(email.subject || '', email, account, emailLog.id)
     const processedBodyHtml = applyMergeFields(bodyHtml || '', email, account, emailLog.id)
     const processedBodyText = applyMergeFields(bodyText || bodyHtml?.replace(/<[^>]*>/g, '') || '', email, account, emailLog.id)
 
-    // Wrap body in proper HTML with footer
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
-        <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
-        ${processedBodyHtml}
-        ${emailFooter}
-      </div>
-    `.trim()
+    // Wrap body in proper HTML document with UTF-8 charset for proper character encoding
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0;">
+  <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
+    <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
+    ${processedBodyHtml}
+    ${emailFooter}
+  </div>
+</body>
+</html>`.trim()
 
     // Update email log with processed content
     await supabaseClient
@@ -428,9 +435,10 @@ function applyMergeFields(content: string, email: any, account: any, emailLogId?
   return result
 }
 
-function buildEmailFooter(userSettings: any, email: any): string {
+function buildEmailFooter(userSettings: any, email: any, emailLogId: number): string {
   const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
-  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${email.id}&email=${encodeURIComponent(email.to_email)}`
+  // Use emailLogId for unsubscribe tracking (matches email_logs table)
+  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${emailLogId}&email=${encodeURIComponent(email.to_email)}`
 
   let footer = ''
 

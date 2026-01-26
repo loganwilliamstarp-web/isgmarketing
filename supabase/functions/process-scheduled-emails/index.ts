@@ -1079,17 +1079,24 @@ async function sendEmailViaSendGrid(
   const textContent = applyMergeFields(template.body_text || '', email, account, emailLogId)
   const finalSubject = applyMergeFields(subject || 'No Subject', email, account, emailLogId)
 
-  // Build email footer with signature, company info, and unsubscribe
-  const emailFooter = buildEmailFooter(userSettings, email)
+  // Build email footer with signature, company info, and unsubscribe (use emailLogId for tracking)
+  const emailFooter = buildEmailFooter(userSettings, email, emailLogId)
 
-  // Wrap in proper HTML email structure with paragraph styling
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
-      <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
-      ${baseHtmlContent}
-      ${emailFooter}
-    </div>
-  `.trim()
+  // Wrap in proper HTML document with UTF-8 charset for proper character encoding
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0;">
+  <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
+    <style>p { margin: 0 0 1em 0; } p:last-of-type { margin-bottom: 0; }</style>
+    ${baseHtmlContent}
+    ${emailFooter}
+  </div>
+</body>
+</html>`.trim()
 
   // Build custom Message-ID for reply tracking
   // Format: <isg-{email_log_id}-{timestamp}@{domain}>
@@ -1295,12 +1302,12 @@ function applyMergeFields(content: string, email: ScheduledEmail, account: Recor
 // EMAIL FOOTER BUILDER
 // ============================================================================
 
-function buildEmailFooter(userSettings: any, email: ScheduledEmail): string {
+function buildEmailFooter(userSettings: any, email: ScheduledEmail, emailLogId: number): string {
   // Single unsubscribe URL for all users - set in Supabase Edge Function secrets
   const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
 
-  // Build unsubscribe URL with email ID for tracking
-  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${email.id}&email=${encodeURIComponent(email.to_email)}`
+  // Build unsubscribe URL with email_log ID for tracking (matches email_logs table)
+  const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${emailLogId}&email=${encodeURIComponent(email.to_email)}`
 
   let footer = ''
 
