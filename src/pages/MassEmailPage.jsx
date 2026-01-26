@@ -336,7 +336,7 @@ const TemplateEditorModal = ({ template, onSave, onClose, theme: t }) => {
 };
 
 // Batch card for history
-const BatchCard = ({ batch, onView, theme: t }) => {
+const BatchCard = ({ batch, onView, onDelete, theme: t }) => {
   const sentPercent = batch.total_recipients > 0
     ? Math.round((batch.emails_sent / batch.total_recipients) * 100)
     : 0;
@@ -374,20 +374,38 @@ const BatchCard = ({ batch, onView, theme: t }) => {
         </div>
       )}
 
-      <button
-        onClick={() => onView(batch)}
-        style={{
-          padding: '8px 16px',
-          backgroundColor: t.bgHover,
-          border: `1px solid ${t.border}`,
-          borderRadius: '6px',
-          color: t.text,
-          cursor: 'pointer',
-          fontSize: '13px'
-        }}
-      >
-        View
-      </button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          onClick={() => onView(batch)}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: t.bgHover,
+            border: `1px solid ${t.border}`,
+            borderRadius: '6px',
+            color: t.text,
+            cursor: 'pointer',
+            fontSize: '13px'
+          }}
+        >
+          {batch.status === 'Draft' ? 'Edit' : 'View'}
+        </button>
+        {batch.status === 'Draft' && onDelete && (
+          <button
+            onClick={() => onDelete(batch)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: 'transparent',
+              border: `1px solid ${t.danger}40`,
+              borderRadius: '6px',
+              color: t.danger,
+              cursor: 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            Delete
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -2569,10 +2587,51 @@ const MassEmailPage = ({ t }) => {
     { limit: 100 }
   );
 
-  const { createBatch, scheduleBatch } = useMassEmailMutations();
+  const { createBatch, scheduleBatch, deleteBatch } = useMassEmailMutations();
   const { createTemplate } = useTemplateMutations();
+  const [editingBatchId, setEditingBatchId] = useState(null);
 
   const steps = ['Select Template', 'Filter Recipients', 'Review & Send'];
+
+  // Load a draft batch into the wizard for editing
+  const handleViewBatch = (batch) => {
+    if (batch.status === 'Draft') {
+      // Load the draft into the wizard
+      setEditingBatchId(batch.id);
+      setName(batch.name || '');
+      setSubject(batch.subject || '');
+      setFilterConfig(batch.filter_config || { rules: [], search: '', notOptedOut: true });
+      // Find and set the template
+      if (batch.template_id && templates) {
+        const template = templates.find(t => t.id === batch.template_id);
+        if (template) {
+          setSelectedTemplate(template);
+        }
+      }
+      setStep(0);
+      setShowWizard(true);
+    } else {
+      // For non-draft batches, could show a details modal or navigate to stats
+      console.log('View batch stats:', batch);
+    }
+  };
+
+  // Delete a batch
+  const handleDeleteBatch = async (batch) => {
+    if (batch.status !== 'Draft') {
+      setError('Only draft campaigns can be deleted');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete "${batch.name || 'Untitled'}"?`)) {
+      return;
+    }
+    try {
+      await deleteBatch.mutateAsync(batch.id);
+      refetchBatches();
+    } catch (err) {
+      setError(err.message || 'Failed to delete campaign');
+    }
+  };
 
   const handleTemplateSelect = (template) => {
     setSelectedTemplate(template);
@@ -2957,7 +3016,8 @@ const MassEmailPage = ({ t }) => {
                   <BatchCard
                     key={batch.id}
                     batch={batch}
-                    onView={(b) => console.log('View batch:', b)}
+                    onView={handleViewBatch}
+                    onDelete={handleDeleteBatch}
                     theme={t}
                   />
                 ))}
