@@ -193,6 +193,20 @@ export function useMassEmailBatchStats(batchId) {
 }
 
 /**
+ * Get detailed batch analytics including opens, clicks, bounces
+ */
+export function useMassEmailBatchAnalytics(batchId) {
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
+  return useQuery({
+    queryKey: ['massEmailAnalytics', filterKey, batchId],
+    queryFn: () => massEmailsService.getBatchAnalytics(ownerIds, batchId),
+    enabled: ownerIds.length > 0 && !!batchId,
+    refetchInterval: 30000 // Refresh every 30 seconds for live updates
+  });
+}
+
+/**
  * Mass email mutations
  */
 export function useMassEmailMutations() {

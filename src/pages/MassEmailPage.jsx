@@ -8,6 +8,7 @@ import {
   useMassEmailRecipientCount,
   useMassEmailLocationBreakdown,
   useMassEmailMutations,
+  useMassEmailBatchAnalytics,
   useRoleUserIds,
   useVerifiedSenderDomains,
   useTrialGuard
@@ -405,6 +406,295 @@ const BatchCard = ({ batch, onView, onDelete, theme: t }) => {
             Delete
           </button>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Campaign Analytics Modal
+const CampaignAnalyticsModal = ({ batch, onClose, theme: t }) => {
+  const { data: analytics, isLoading } = useMassEmailBatchAnalytics(batch?.id);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  const StatCard = ({ label, value, subValue, color }) => (
+    <div style={{
+      backgroundColor: t.bgHover,
+      borderRadius: '10px',
+      padding: '16px',
+      textAlign: 'center'
+    }}>
+      <div style={{ fontSize: '28px', fontWeight: '700', color: color || t.text }}>
+        {value}
+      </div>
+      <div style={{ fontSize: '13px', color: t.textSecondary, marginTop: '4px' }}>
+        {label}
+      </div>
+      {subValue && (
+        <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '2px' }}>
+          {subValue}
+        </div>
+      )}
+    </div>
+  );
+
+  const RateBar = ({ label, rate, color }) => (
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span style={{ fontSize: '13px', color: t.textSecondary }}>{label}</span>
+        <span style={{ fontSize: '13px', fontWeight: '600', color }}>{rate}%</span>
+      </div>
+      <div style={{
+        height: '8px',
+        backgroundColor: t.bgHover,
+        borderRadius: '4px',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          width: `${Math.min(rate, 100)}%`,
+          height: '100%',
+          backgroundColor: color,
+          borderRadius: '4px',
+          transition: 'width 0.3s ease'
+        }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: '20px'
+    }} onClick={onClose}>
+      <div style={{
+        backgroundColor: t.bgCard,
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '700px',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        border: `1px solid ${t.border}`
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{
+          padding: '20px 24px',
+          borderBottom: `1px solid ${t.border}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: t.text, margin: 0 }}>
+              {batch?.name || 'Campaign Analytics'}
+            </h2>
+            <p style={{ fontSize: '13px', color: t.textSecondary, margin: '4px 0 0' }}>
+              {batch?.subject}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              color: t.textMuted,
+              padding: '4px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '24px' }}>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ color: t.textSecondary }}>Loading analytics...</div>
+            </div>
+          ) : analytics ? (
+            <>
+              {/* Summary Stats */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '12px',
+                marginBottom: '24px'
+              }}>
+                <StatCard
+                  label="Total Sent"
+                  value={analytics.summary.sent}
+                  subValue={`of ${analytics.summary.total}`}
+                />
+                <StatCard
+                  label="Delivered"
+                  value={analytics.summary.delivered}
+                  color={t.success}
+                />
+                <StatCard
+                  label="Opened"
+                  value={analytics.summary.opened}
+                  color={t.primary}
+                />
+                <StatCard
+                  label="Clicked"
+                  value={analytics.summary.clicked}
+                  color="#8b5cf6"
+                />
+              </div>
+
+              {/* Rate Bars */}
+              <div style={{
+                backgroundColor: t.bg,
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', color: t.text, marginBottom: '16px' }}>
+                  Performance Rates
+                </h3>
+                <RateBar label="Delivery Rate" rate={analytics.rates.delivery} color={t.success} />
+                <RateBar label="Open Rate" rate={analytics.rates.open} color={t.primary} />
+                <RateBar label="Click Rate" rate={analytics.rates.click} color="#8b5cf6" />
+                {analytics.rates.bounce > 0 && (
+                  <RateBar label="Bounce Rate" rate={analytics.rates.bounce} color={t.danger} />
+                )}
+              </div>
+
+              {/* Status Breakdown */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px',
+                marginBottom: '24px'
+              }}>
+                <div style={{
+                  backgroundColor: t.bg,
+                  borderRadius: '12px',
+                  padding: '20px'
+                }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', color: t.text, marginBottom: '12px' }}>
+                    Send Status
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {analytics.summary.pending > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span style={{ color: t.textSecondary }}>Pending</span>
+                        <span style={{ color: t.warning, fontWeight: '500' }}>{analytics.summary.pending}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                      <span style={{ color: t.textSecondary }}>Sent</span>
+                      <span style={{ color: t.success, fontWeight: '500' }}>{analytics.summary.sent}</span>
+                    </div>
+                    {analytics.summary.failed > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span style={{ color: t.textSecondary }}>Failed</span>
+                        <span style={{ color: t.danger, fontWeight: '500' }}>{analytics.summary.failed}</span>
+                      </div>
+                    )}
+                    {analytics.summary.bounced > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span style={{ color: t.textSecondary }}>Bounced</span>
+                        <span style={{ color: t.danger, fontWeight: '500' }}>{analytics.summary.bounced}</span>
+                      </div>
+                    )}
+                    {analytics.summary.unsubscribed > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span style={{ color: t.textSecondary }}>Unsubscribed</span>
+                        <span style={{ color: t.textMuted, fontWeight: '500' }}>{analytics.summary.unsubscribed}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent Activity */}
+                <div style={{
+                  backgroundColor: t.bg,
+                  borderRadius: '12px',
+                  padding: '20px'
+                }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', color: t.text, marginBottom: '12px' }}>
+                    Recent Activity
+                  </h3>
+                  {analytics.recentActivity.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflow: 'auto' }}>
+                      {analytics.recentActivity.map((activity, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: activity.type === 'open' ? `${t.primary}20` : '#8b5cf620',
+                            color: activity.type === 'open' ? t.primary : '#8b5cf6',
+                            fontSize: '10px',
+                            fontWeight: '500'
+                          }}>
+                            {activity.type === 'open' ? 'OPEN' : 'CLICK'}
+                          </span>
+                          <span style={{ color: t.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {activity.name || activity.email}
+                          </span>
+                          <span style={{ color: t.textMuted, fontSize: '11px' }}>
+                            {formatDate(activity.time)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: t.textMuted, fontSize: '13px' }}>No activity yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Failed Emails */}
+              {analytics.failedEmails.length > 0 && (
+                <div style={{
+                  backgroundColor: `${t.danger}10`,
+                  borderRadius: '12px',
+                  padding: '20px',
+                  border: `1px solid ${t.danger}30`
+                }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', color: t.danger, marginBottom: '12px' }}>
+                    Failed Emails ({analytics.failedEmails.length})
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '120px', overflow: 'auto' }}>
+                    {analytics.failedEmails.slice(0, 5).map((email, i) => (
+                      <div key={i} style={{ fontSize: '12px' }}>
+                        <span style={{ color: t.text }}>{email.email}</span>
+                        {email.error && (
+                          <span style={{ color: t.textMuted, marginLeft: '8px' }}>- {email.error}</span>
+                        )}
+                      </div>
+                    ))}
+                    {analytics.failedEmails.length > 5 && (
+                      <div style={{ fontSize: '12px', color: t.textMuted }}>
+                        +{analytics.failedEmails.length - 5} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
+              No analytics data available
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2590,10 +2880,11 @@ const MassEmailPage = ({ t }) => {
   const { createBatch, scheduleBatch, deleteBatch } = useMassEmailMutations();
   const { createTemplate } = useTemplateMutations();
   const [editingBatchId, setEditingBatchId] = useState(null);
+  const [viewingBatch, setViewingBatch] = useState(null);
 
   const steps = ['Select Template', 'Filter Recipients', 'Review & Send'];
 
-  // Load a draft batch into the wizard for editing
+  // Load a draft batch into the wizard for editing, or show analytics for sent batches
   const handleViewBatch = (batch) => {
     if (batch.status === 'Draft') {
       // Load the draft into the wizard
@@ -2611,8 +2902,8 @@ const MassEmailPage = ({ t }) => {
       setStep(0);
       setShowWizard(true);
     } else {
-      // For non-draft batches, could show a details modal or navigate to stats
-      console.log('View batch stats:', batch);
+      // For non-draft batches, show the analytics modal
+      setViewingBatch(batch);
     }
   };
 
@@ -3064,6 +3355,15 @@ const MassEmailPage = ({ t }) => {
           template={null}
           onSave={handleCreateTemplate}
           onClose={handleTemplateEditorClose}
+          theme={t}
+        />
+      )}
+
+      {/* Campaign Analytics Modal */}
+      {viewingBatch && (
+        <CampaignAnalyticsModal
+          batch={viewingBatch}
+          onClose={() => setViewingBatch(null)}
           theme={t}
         />
       )}

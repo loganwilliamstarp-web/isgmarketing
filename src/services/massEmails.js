@@ -1389,6 +1389,138 @@ export const massEmailsService = {
   },
 
   /**
+   * Get detailed batch analytics including opens, clicks, bounces
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   */
+  async getBatchAnalytics(ownerIds, batchId) {
+    // Get scheduled emails for this batch with their email_log references
+    let query = supabase
+      .from('scheduled_emails')
+      .select(`
+        id,
+        to_email,
+        to_name,
+        status,
+        scheduled_for,
+        error_message,
+        email_log_id
+      `)
+      .eq('batch_id', batchId);
+    query = applyOwnerFilter(query, ownerIds);
+    const { data: scheduledEmails, error: scheduledError } = await query;
+
+    if (scheduledError) throw scheduledError;
+
+    // Get email log IDs that exist
+    const emailLogIds = scheduledEmails
+      .filter(e => e.email_log_id)
+      .map(e => e.email_log_id);
+
+    // Fetch email logs for detailed stats
+    let emailLogs = [];
+    if (emailLogIds.length > 0) {
+      const { data: logs, error: logsError } = await supabase
+        .from('email_logs')
+        .select(`
+          id,
+          to_email,
+          to_name,
+          status,
+          sent_at,
+          delivered_at,
+          first_opened_at,
+          first_clicked_at,
+          open_count,
+          click_count,
+          bounced_at,
+          bounce_type,
+          unsubscribed_at
+        `)
+        .in('id', emailLogIds);
+
+      if (logsError) throw logsError;
+      emailLogs = logs || [];
+    }
+
+    // Calculate analytics
+    const total = scheduledEmails.length;
+    const sent = scheduledEmails.filter(e => e.status === 'Sent').length;
+    const pending = scheduledEmails.filter(e => e.status === 'Pending').length;
+    const failed = scheduledEmails.filter(e => e.status === 'Failed').length;
+
+    const delivered = emailLogs.filter(e => e.delivered_at).length;
+    const opened = emailLogs.filter(e => e.first_opened_at).length;
+    const clicked = emailLogs.filter(e => e.first_clicked_at).length;
+    const bounced = emailLogs.filter(e => e.bounced_at).length;
+    const unsubscribed = emailLogs.filter(e => e.unsubscribed_at).length;
+
+    // Calculate rates (based on delivered for accuracy)
+    const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 0;
+    const openRate = delivered > 0 ? Math.round((opened / delivered) * 100) : 0;
+    const clickRate = delivered > 0 ? Math.round((clicked / delivered) * 100) : 0;
+    const bounceRate = sent > 0 ? Math.round((bounced / sent) * 100) : 0;
+
+    // Get recent activity (last 10 opens/clicks)
+    const recentOpens = emailLogs
+      .filter(e => e.first_opened_at)
+      .sort((a, b) => new Date(b.first_opened_at) - new Date(a.first_opened_at))
+      .slice(0, 10)
+      .map(e => ({
+        email: e.to_email,
+        name: e.to_name,
+        time: e.first_opened_at,
+        type: 'open'
+      }));
+
+    const recentClicks = emailLogs
+      .filter(e => e.first_clicked_at)
+      .sort((a, b) => new Date(b.first_clicked_at) - new Date(a.first_clicked_at))
+      .slice(0, 10)
+      .map(e => ({
+        email: e.to_email,
+        name: e.to_name,
+        time: e.first_clicked_at,
+        type: 'click'
+      }));
+
+    // Merge and sort recent activity
+    const recentActivity = [...recentOpens, ...recentClicks]
+      .sort((a, b) => new Date(b.time) - new Date(a.time))
+      .slice(0, 10);
+
+    // Get failed emails for troubleshooting
+    const failedEmails = scheduledEmails
+      .filter(e => e.status === 'Failed')
+      .map(e => ({
+        email: e.to_email,
+        name: e.to_name,
+        error: e.error_message
+      }));
+
+    return {
+      summary: {
+        total,
+        sent,
+        pending,
+        failed,
+        delivered,
+        opened,
+        clicked,
+        bounced,
+        unsubscribed
+      },
+      rates: {
+        delivery: deliveryRate,
+        open: openRate,
+        click: clickRate,
+        bounce: bounceRate
+      },
+      recentActivity,
+      failedEmails
+    };
+  },
+
+  /**
    * Get all batches with stats summary
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
