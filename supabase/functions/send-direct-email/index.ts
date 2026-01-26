@@ -436,7 +436,7 @@ function applyMergeFields(content: string, email: any, account: any, emailLogId?
 }
 
 function buildEmailFooter(userSettings: any, email: any, emailLogId: number): string {
-  const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://app.isgmarketing.com/unsubscribe'
+  const unsubscribeBaseUrl = Deno.env.get('UNSUBSCRIBE_URL') || 'https://isgmarketing-production.up.railway.app/unsubscribe'
   // Use emailLogId for unsubscribe tracking (matches email_logs table)
   const unsubscribeUrl = `${unsubscribeBaseUrl}?id=${emailLogId}&email=${encodeURIComponent(email.to_email)}`
 
