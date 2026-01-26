@@ -14,6 +14,21 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
+    // Check if we already have body content in the activity (from the feed query)
+    if (activity?.body_html || activity?.body_text) {
+      // Use activity data directly - no need to fetch
+      setEmailData({
+        body_html: activity.body_html,
+        body_text: activity.body_text,
+        to_email: activity.to_email,
+        to_name: activity.to_name,
+        subject: activity.subject
+      });
+      setAccount(activity.account);
+      setLoading(false);
+      return;
+    }
+
     if (!activity?.email_log_id) {
       setLoading(false);
       return;
@@ -45,7 +60,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
     };
 
     fetchEmailData();
-  }, [activity?.email_log_id]);
+  }, [activity?.email_log_id, activity?.body_html, activity?.body_text]);
 
   if (!activity) return null;
 
@@ -54,7 +69,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
 
   const applyMergeFields = (content) => {
     if (!content) return '';
-    const acc = account || {};
+    const acc = account || activity.account || {};
     const nameParts = (acc.name || '').trim().split(/\s+/);
     const derivedFirstName = nameParts[0] || '';
     const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
@@ -65,9 +80,9 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
       '{{full_name}}': [acc.primary_contact_first_name, acc.primary_contact_last_name].filter(Boolean).join(' ') || acc.name || '',
       '{{name}}': acc.name || '',
       '{{company_name}}': acc.name || '',
-      '{{email}}': acc.person_email || emailData?.to_email || '',
-      '{{recipient_name}}': emailData?.to_name || '',
-      '{{recipient_email}}': emailData?.to_email || '',
+      '{{email}}': acc.person_email || emailData?.to_email || activity?.to_email || '',
+      '{{recipient_name}}': emailData?.to_name || activity?.to_name || '',
+      '{{recipient_email}}': emailData?.to_email || activity?.to_email || '',
       '{{today}}': new Date().toLocaleDateString('en-US'),
       '{{current_year}}': new Date().getFullYear().toString(),
     };
@@ -80,12 +95,16 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   };
 
   const getBodyContent = () => {
+    // Check activity first, then emailData, then template
+    if (activity?.body_html) return applyMergeFields(activity.body_html);
     if (emailData?.body_html) return applyMergeFields(emailData.body_html);
     if (emailData?.template?.body_html) return applyMergeFields(emailData.template.body_html);
     return null;
   };
 
   const getTextContent = () => {
+    // Check activity first, then emailData, then template
+    if (activity?.body_text) return applyMergeFields(activity.body_text);
     if (emailData?.body_text) return applyMergeFields(emailData.body_text);
     if (emailData?.template?.body_text) return applyMergeFields(emailData.template.body_text);
     return null;
@@ -189,9 +208,13 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
             <div style={{ color: t.textMuted, textAlign: 'center', padding: '40px', fontSize: '14px' }}>
               Loading preview...
             </div>
-          ) : isReply && activity.snippet ? (
-            <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
-              {activity.snippet}
+          ) : isReply && (activity.snippet || activity.body_text || activity.body_html) ? (
+            <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}>
+              {activity.body_html ? (
+                <div dangerouslySetInnerHTML={{ __html: activity.body_html }} />
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap' }}>{activity.snippet || activity.body_text}</div>
+              )}
               <div style={{
                 marginTop: '20px',
                 padding: '12px',
@@ -200,7 +223,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 fontSize: '12px',
                 color: '#666'
               }}>
-                This is a preview snippet. View the full reply in your email client.
+                This is a preview of the reply. View the full conversation in your email client.
               </div>
             </div>
           ) : getBodyContent() ? (
