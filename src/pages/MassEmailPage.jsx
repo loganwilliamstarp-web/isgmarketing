@@ -2560,7 +2560,7 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
 };
 
 // Review step
-const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, scheduleOption, setScheduleOption, scheduledDate, setScheduledDate, scheduledTime, setScheduledTime, recipients, isLoadingRecipients, theme: t }) => {
+const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, scheduleOption, setScheduleOption, scheduledDate, setScheduledDate, scheduledTime, setScheduledTime, recipients, isLoadingRecipients, recipientCount, theme: t }) => {
   // Get minimum date (today) and time
   const today = new Date().toISOString().split('T')[0];
 
@@ -2766,7 +2766,7 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
         }}>
           <div style={{ fontSize: '12px', color: t.textMuted, marginBottom: '4px' }}>Recipients</div>
           <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
-            {isLoadingRecipients ? '...' : (recipients?.length || 0).toLocaleString()} accounts
+            {isLoadingRecipients ? '...' : (recipientCount ?? recipients?.length ?? 0).toLocaleString()} accounts
           </div>
         </div>
       </div>
@@ -2816,9 +2816,9 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
               </div>
             ))}
           </div>
-          {recipients.length > 10 && (
+          {(recipientCount ?? recipients.length) > 10 && (
             <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '8px', textAlign: 'center' }}>
-              +{recipients.length - 10} more recipients
+              +{(recipientCount ?? recipients.length) - 10} more recipients
             </div>
           )}
         </div>
@@ -3206,6 +3206,7 @@ const MassEmailPage = ({ t }) => {
                 setScheduledTime={setScheduledTime}
                 recipients={recipients}
                 isLoadingRecipients={loadingRecipients}
+                recipientCount={recipientCount}
                 theme={t}
               />
             )}
