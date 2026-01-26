@@ -1221,6 +1221,20 @@ export const massEmailsService = {
     if (!batch) throw new Error('Batch not found');
     if (batch.status !== 'Draft') throw new Error('Can only schedule draft batches');
 
+    // Get user settings for from_email and from_name
+    const { data: userSettings } = await supabase
+      .from('user_settings')
+      .select('from_email, from_name')
+      .eq('user_id', ownerId)
+      .single();
+
+    const fromEmail = userSettings?.from_email;
+    const fromName = userSettings?.from_name;
+
+    if (!fromEmail) {
+      throw new Error('Please set up your sender email in Settings before sending mass emails');
+    }
+
     // Get recipients (fetch more for actual sending)
     const recipients = await this.getRecipients(ownerIds, batch.filter_config, { limit: 10000 });
     if (recipients.length === 0) throw new Error('No recipients match the filter');
@@ -1294,10 +1308,13 @@ export const massEmailsService = {
       to_name: recipient.primary_contact_first_name
         ? `${recipient.primary_contact_first_name} ${recipient.primary_contact_last_name || ''}`.trim()
         : recipient.name,
+      from_email: fromEmail,
+      from_name: fromName,
       subject: batch.subject,
       scheduled_for: sendTime,
       status: 'Pending',
-      batch_id: batchId
+      batch_id: batchId,
+      requires_verification: false  // Mass emails don't need 24-hour verification
     }));
 
     // Insert in batches of 100
