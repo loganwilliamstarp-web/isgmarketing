@@ -1290,8 +1290,8 @@ export const massEmailsService = {
       owner_id: ownerId,
       account_id: recipient.account_unique_id,
       template_id: batch.template_id,
-      recipient_email: recipient.person_email || recipient.email,
-      recipient_name: recipient.primary_contact_first_name
+      to_email: recipient.person_email || recipient.email,
+      to_name: recipient.primary_contact_first_name
         ? `${recipient.primary_contact_first_name} ${recipient.primary_contact_last_name || ''}`.trim()
         : recipient.name,
       subject: batch.subject,
