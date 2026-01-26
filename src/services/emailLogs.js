@@ -707,7 +707,7 @@ export const emailActivityService = {
         }));
       })(),
 
-      // Recent clicks (from email_logs first_clicked_at)
+      // Recent clicks (from email_logs first_clicked_at + click events for URLs)
       (async () => {
         let query = supabase
           .from('email_logs')
@@ -722,6 +722,32 @@ export const emailActivityService = {
         if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
         console.log('Recent clicks query:', { count: data?.length, error, ownerIds, limit });
+
+        // Fetch click events to get URLs for each email
+        const emailLogIds = (data || []).map(e => e.id);
+        let clickEvents = [];
+        if (emailLogIds.length > 0) {
+          const { data: events } = await supabase
+            .from('email_events')
+            .select('email_log_id, event_data, created_at')
+            .in('email_log_id', emailLogIds)
+            .eq('event_type', 'click')
+            .order('created_at', { ascending: false });
+          clickEvents = events || [];
+        }
+
+        // Group click events by email_log_id
+        const clicksByEmail = {};
+        clickEvents.forEach(event => {
+          if (!clicksByEmail[event.email_log_id]) {
+            clicksByEmail[event.email_log_id] = [];
+          }
+          clicksByEmail[event.email_log_id].push({
+            url: event.event_data?.url,
+            clicked_at: event.created_at
+          });
+        });
+
         return (data || []).map(e => ({
           id: `click-${e.id}`,
           type: 'clicked',
@@ -732,6 +758,7 @@ export const emailActivityService = {
           from_email: e.from_email,
           from_name: e.from_name,
           click_count: e.click_count,
+          clicked_urls: clicksByEmail[e.id] || [],
           account: e.account,
           timestamp: e.first_clicked_at
         }));

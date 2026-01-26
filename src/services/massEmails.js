@@ -1435,6 +1435,7 @@ export const massEmailsService = {
 
     // Fetch email logs for detailed stats
     let emailLogs = [];
+    let clickEvents = [];
     if (emailLogIds.length > 0) {
       const { data: logs, error: logsError } = await supabase
         .from('email_logs')
@@ -1457,7 +1458,28 @@ export const massEmailsService = {
 
       if (logsError) throw logsError;
       emailLogs = logs || [];
+
+      // Fetch click events to get URLs
+      const { data: events } = await supabase
+        .from('email_events')
+        .select('email_log_id, event_data, created_at')
+        .in('email_log_id', emailLogIds)
+        .eq('event_type', 'click')
+        .order('created_at', { ascending: false });
+      clickEvents = events || [];
     }
+
+    // Group click events by email_log_id
+    const clicksByEmail = {};
+    clickEvents.forEach(event => {
+      if (!clicksByEmail[event.email_log_id]) {
+        clicksByEmail[event.email_log_id] = [];
+      }
+      clicksByEmail[event.email_log_id].push({
+        url: event.event_data?.url,
+        clicked_at: event.created_at
+      });
+    });
 
     // Calculate analytics
     const total = scheduledEmails.length;
@@ -1497,7 +1519,8 @@ export const massEmailsService = {
         email: e.to_email,
         name: e.to_name,
         time: e.first_clicked_at,
-        type: 'click'
+        type: 'click',
+        url: clicksByEmail[e.id]?.[0]?.url // Most recent clicked URL
       }));
 
     // Merge and sort recent activity

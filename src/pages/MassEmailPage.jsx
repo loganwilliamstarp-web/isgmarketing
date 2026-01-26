@@ -634,23 +634,42 @@ const CampaignAnalyticsModal = ({ batch, onClose, theme: t }) => {
                   {analytics.recentActivity.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflow: 'auto' }}>
                       {analytics.recentActivity.map((activity, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: activity.type === 'open' ? `${t.primary}20` : '#8b5cf620',
-                            color: activity.type === 'open' ? t.primary : '#8b5cf6',
-                            fontSize: '10px',
-                            fontWeight: '500'
-                          }}>
-                            {activity.type === 'open' ? 'OPEN' : 'CLICK'}
-                          </span>
-                          <span style={{ color: t.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {activity.name || activity.email}
-                          </span>
-                          <span style={{ color: t.textMuted, fontSize: '11px' }}>
-                            {formatDate(activity.time)}
-                          </span>
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: activity.type === 'open' ? `${t.primary}20` : '#8b5cf620',
+                              color: activity.type === 'open' ? t.primary : '#8b5cf6',
+                              fontSize: '10px',
+                              fontWeight: '500'
+                            }}>
+                              {activity.type === 'open' ? 'OPEN' : 'CLICK'}
+                            </span>
+                            <span style={{ color: t.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {activity.name || activity.email}
+                            </span>
+                            <span style={{ color: t.textMuted, fontSize: '11px' }}>
+                              {formatDate(activity.time)}
+                            </span>
+                          </div>
+                          {activity.type === 'click' && activity.url && (
+                            <div style={{ marginLeft: '38px', fontSize: '11px' }}>
+                              <a
+                                href={activity.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: t.primary,
+                                  textDecoration: 'none',
+                                  wordBreak: 'break-all'
+                                }}
+                                title={activity.url}
+                              >
+                                🔗 {activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url}
+                              </a>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

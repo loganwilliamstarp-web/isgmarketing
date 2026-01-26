@@ -507,6 +507,48 @@ const EmailActivityPage = ({ t }) => {
                         </span>
                       )}
                     </div>
+
+                    {/* Show clicked URLs for click events */}
+                    {activity.type === 'clicked' && activity.clicked_urls?.length > 0 && (
+                      <div style={{ marginTop: '8px' }}>
+                        <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px' }}>
+                          Clicked links:
+                        </div>
+                        {activity.clicked_urls.slice(0, 3).map((click, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              fontSize: '12px',
+                              color: t.primary,
+                              padding: '4px 8px',
+                              backgroundColor: `${t.primary}10`,
+                              borderRadius: '4px',
+                              marginTop: '4px',
+                              wordBreak: 'break-all',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span style={{ fontSize: '10px' }}>🔗</span>
+                            <a
+                              href={click.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: t.primary, textDecoration: 'none' }}
+                              title={click.url}
+                            >
+                              {click.url?.length > 60 ? click.url.substring(0, 60) + '...' : click.url}
+                            </a>
+                          </div>
+                        ))}
+                        {activity.clicked_urls.length > 3 && (
+                          <div style={{ fontSize: '11px', color: t.textMuted, marginTop: '4px' }}>
+                            +{activity.clicked_urls.length - 3} more links
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>

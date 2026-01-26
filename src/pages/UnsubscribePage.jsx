@@ -22,6 +22,8 @@ const UnsubscribePage = () => {
 
   useEffect(() => {
     const processUnsubscribe = async () => {
+      console.log('Unsubscribe processing:', { emailLogId, email });
+
       // Validate required params
       if (!emailLogId || !email) {
         setStatus('error');
@@ -111,6 +113,19 @@ const UnsubscribePage = () => {
               .eq('id', emailLogId);
           } catch (updateErr) {
             console.error('Error updating email log:', updateErr);
+            // Non-critical, continue
+          }
+        }
+
+        // Mark the account as opted out (if we have the email)
+        if (email) {
+          try {
+            await supabasePublic
+              .from('accounts')
+              .update({ person_has_opted_out_of_email: true })
+              .ilike('person_email', email.trim());
+          } catch (accountErr) {
+            console.error('Error updating account opt-out status:', accountErr);
             // Non-critical, continue
           }
         }
