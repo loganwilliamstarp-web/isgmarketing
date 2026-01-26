@@ -391,9 +391,11 @@ export const emailLogsService = {
     const previousStart = new Date(currentStart);
     previousStart.setDate(previousStart.getDate() - days);
 
+    // Use full ISO timestamp for end dates to include emails sent today
+    // Without this, "2026-01-26" would be interpreted as midnight, excluding today's emails
     const [currentStats, previousStats] = await Promise.all([
-      this.getStats(ownerIds, currentStart.toISOString().split('T')[0], now.toISOString().split('T')[0]),
-      this.getStats(ownerIds, previousStart.toISOString().split('T')[0], currentStart.toISOString().split('T')[0])
+      this.getStats(ownerIds, currentStart.toISOString().split('T')[0], now.toISOString()),
+      this.getStats(ownerIds, previousStart.toISOString().split('T')[0], currentStart.toISOString())
     ]);
 
     const calculateChange = (current, previous) => {

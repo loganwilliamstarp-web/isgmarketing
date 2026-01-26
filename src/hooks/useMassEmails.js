@@ -253,6 +253,8 @@ export function useMassEmailMutations() {
     onSuccess: () => {
       invalidateMassEmails();
       queryClient.invalidateQueries({ queryKey: ['scheduledEmails'] });
+      // Invalidate dashboard stats so email counts update immediately
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     }
   });
 

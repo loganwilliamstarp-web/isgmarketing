@@ -28,8 +28,8 @@ export function useQuickStats() {
     queryKey: ['dashboard', filterKey, 'quick'],
     queryFn: () => dashboardService.getQuickStats(ownerIds),
     enabled: ownerIds.length > 0,
-    staleTime: 10000,
-    refetchInterval: 30000
+    staleTime: 5000,      // Consider stale after 5 seconds
+    refetchInterval: 15000 // Auto-refresh every 15 seconds for more responsive updates
   });
 }
 
