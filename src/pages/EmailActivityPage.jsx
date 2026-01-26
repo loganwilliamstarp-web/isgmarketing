@@ -7,6 +7,56 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
   <div style={{ width, height, backgroundColor: 'currentColor', opacity: 0.1, borderRadius: '4px' }} />
 );
 
+// Fix garbled UTF-8 characters from incorrectly encoded emails
+const fixEncodingIssues = (content) => {
+  if (!content) return content;
+
+  // Common UTF-8 mojibake patterns (UTF-8 interpreted as Latin-1/Windows-1252)
+  const replacements = [
+    // Em dash and en dash
+    ['â€"', '—'],
+    ['â€"', '–'],
+    // Quotes
+    ['â€™', '''],
+    ['â€˜', '''],
+    ['â€œ', '"'],
+    ['â€\u009d', '"'],  // Right double quote (special case)
+    ['â€', '"'],
+    // Bullets and symbols
+    ['â€¢', '•'],
+    ['â€¦', '…'],
+    // Stars
+    ['â˜†', '☆'],
+    ['â˜…', '★'],
+    // Non-breaking space issues
+    ['Â ', ' '],
+    ['Â\u00a0', ' '],
+    // Narrow no-break space (shows as â¯)
+    ['â\u00af', ' '],
+    ['\u202f', ' '],  // Actual narrow no-break space
+    // BOM
+    ['ï»¿', ''],
+    // Other common issues
+    ['Ã©', 'é'],
+    ['Ã¨', 'è'],
+    ['Ã ', 'à'],
+    ['Ã¢', 'â'],
+    ['Ã®', 'î'],
+    ['Ã´', 'ô'],
+    ['Ã»', 'û'],
+    ['Ã§', 'ç'],
+    ['Ã‰', 'É'],
+    ['Ã€', 'À'],
+  ];
+
+  let result = content;
+  for (const [bad, good] of replacements) {
+    result = result.split(bad).join(good);
+  }
+
+  return result;
+};
+
 // Activity Preview Modal
 const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   const [emailData, setEmailData] = React.useState(null);
@@ -96,17 +146,19 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
 
   const getBodyContent = () => {
     // Check activity first, then emailData, then template
-    if (activity?.body_html) return applyMergeFields(activity.body_html);
-    if (emailData?.body_html) return applyMergeFields(emailData.body_html);
-    if (emailData?.template?.body_html) return applyMergeFields(emailData.template.body_html);
+    // Apply encoding fix for old emails with garbled UTF-8 characters
+    if (activity?.body_html) return fixEncodingIssues(applyMergeFields(activity.body_html));
+    if (emailData?.body_html) return fixEncodingIssues(applyMergeFields(emailData.body_html));
+    if (emailData?.template?.body_html) return fixEncodingIssues(applyMergeFields(emailData.template.body_html));
     return null;
   };
 
   const getTextContent = () => {
     // Check activity first, then emailData, then template
-    if (activity?.body_text) return applyMergeFields(activity.body_text);
-    if (emailData?.body_text) return applyMergeFields(emailData.body_text);
-    if (emailData?.template?.body_text) return applyMergeFields(emailData.template.body_text);
+    // Apply encoding fix for old emails with garbled UTF-8 characters
+    if (activity?.body_text) return fixEncodingIssues(applyMergeFields(activity.body_text));
+    if (emailData?.body_text) return fixEncodingIssues(applyMergeFields(emailData.body_text));
+    if (emailData?.template?.body_text) return fixEncodingIssues(applyMergeFields(emailData.template.body_text));
     return null;
   };
 
@@ -211,9 +263,9 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
           ) : isReply && (activity.snippet || activity.body_text || activity.body_html) ? (
             <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}>
               {activity.body_html ? (
-                <div dangerouslySetInnerHTML={{ __html: activity.body_html }} />
+                <div dangerouslySetInnerHTML={{ __html: fixEncodingIssues(activity.body_html) }} />
               ) : (
-                <div style={{ whiteSpace: 'pre-wrap' }}>{activity.snippet || activity.body_text}</div>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{fixEncodingIssues(activity.snippet || activity.body_text)}</div>
               )}
               <div style={{
                 marginTop: '20px',

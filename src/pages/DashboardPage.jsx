@@ -6,17 +6,42 @@ import { userSettingsService } from '../services/userSettings';
 
 // Loading skeleton component
 const Skeleton = ({ width = '100%', height = '20px' }) => (
-  <div 
-    style={{ 
-      width, 
-      height, 
-      backgroundColor: 'currentColor', 
-      opacity: 0.1, 
+  <div
+    style={{
+      width,
+      height,
+      backgroundColor: 'currentColor',
+      opacity: 0.1,
       borderRadius: '4px',
       animation: 'pulse 1.5s ease-in-out infinite'
-    }} 
+    }}
   />
 );
+
+// Fix garbled UTF-8 characters from incorrectly encoded emails
+const fixEncodingIssues = (content) => {
+  if (!content) return content;
+
+  const replacements = [
+    ['â€"', '—'], ['â€"', '–'],
+    ['â€™', '''], ['â€˜', '''],
+    ['â€œ', '"'], ['â€\u009d', '"'], ['â€', '"'],
+    ['â€¢', '•'], ['â€¦', '…'],
+    ['â˜†', '☆'], ['â˜…', '★'],
+    ['Â ', ' '], ['Â\u00a0', ' '],
+    ['â\u00af', ' '], ['\u202f', ' '],
+    ['ï»¿', ''],
+    ['Ã©', 'é'], ['Ã¨', 'è'], ['Ã ', 'à'],
+    ['Ã¢', 'â'], ['Ã®', 'î'], ['Ã´', 'ô'],
+    ['Ã»', 'û'], ['Ã§', 'ç'], ['Ã‰', 'É'], ['Ã€', 'À'],
+  ];
+
+  let result = content;
+  for (const [bad, good] of replacements) {
+    result = result.split(bad).join(good);
+  }
+  return result;
+};
 
 // Stat card with loading state
 const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t }) => (
@@ -201,8 +226,9 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   };
 
   // Use scheduled email's own body first (populated during sync), fallback to template
-  const subject = applyMergeFields(email.subject || email.template?.subject || 'No subject');
-  const htmlContent = applyMergeFields(email.body_html || email.template?.body_html || '');
+  // Apply encoding fix for old emails with garbled UTF-8 characters
+  const subject = fixEncodingIssues(applyMergeFields(email.subject || email.template?.subject || 'No subject'));
+  const htmlContent = fixEncodingIssues(applyMergeFields(email.body_html || email.template?.body_html || ''));
   const footerHtml = buildFooter();
 
   return (
@@ -440,16 +466,17 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   // Get the body content - check multiple sources
   const getBodyContent = () => {
     // First check if activity has body_html directly (from activity feed)
+    // Apply encoding fix for old emails with garbled UTF-8 characters
     if (activity?.body_html) {
-      return applyMergeFields(activity.body_html);
+      return fixEncodingIssues(applyMergeFields(activity.body_html));
     }
     // Then check if email_log has body_html directly (direct emails)
     if (emailData?.body_html) {
-      return applyMergeFields(emailData.body_html);
+      return fixEncodingIssues(applyMergeFields(emailData.body_html));
     }
     // Then check template body_html (automation emails)
     if (emailData?.template?.body_html) {
-      return applyMergeFields(emailData.template.body_html);
+      return fixEncodingIssues(applyMergeFields(emailData.template.body_html));
     }
     return null;
   };
@@ -457,14 +484,15 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   // Get plain text content as fallback
   const getTextContent = () => {
     // First check activity data
+    // Apply encoding fix for old emails with garbled UTF-8 characters
     if (activity?.body_text) {
-      return applyMergeFields(activity.body_text);
+      return fixEncodingIssues(applyMergeFields(activity.body_text));
     }
     if (emailData?.body_text) {
-      return applyMergeFields(emailData.body_text);
+      return fixEncodingIssues(applyMergeFields(emailData.body_text));
     }
     if (emailData?.template?.body_text) {
-      return applyMergeFields(emailData.template.body_text);
+      return fixEncodingIssues(applyMergeFields(emailData.template.body_text));
     }
     return null;
   };
@@ -596,7 +624,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
               <div
                 dangerouslySetInnerHTML={{
                   __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
-                    activity.body_html
+                    fixEncodingIssues(activity.body_html)
                 }}
                 style={{
                   fontFamily: 'Arial, sans-serif',
@@ -613,7 +641,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 color: '#333',
                 whiteSpace: 'pre-wrap'
               }}>
-                {activity.body_text}
+                {fixEncodingIssues(activity.body_text)}
               </div>
             )
           ) : getBodyContent() ? (

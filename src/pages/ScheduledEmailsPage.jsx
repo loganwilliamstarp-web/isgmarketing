@@ -9,6 +9,31 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
   <div style={{ width, height, backgroundColor: 'currentColor', opacity: 0.1, borderRadius: '4px' }} />
 );
 
+// Fix garbled UTF-8 characters from incorrectly encoded emails
+const fixEncodingIssues = (content) => {
+  if (!content) return content;
+
+  const replacements = [
+    ['â€"', '—'], ['â€"', '–'],
+    ['â€™', '''], ['â€˜', '''],
+    ['â€œ', '"'], ['â€\u009d', '"'], ['â€', '"'],
+    ['â€¢', '•'], ['â€¦', '…'],
+    ['â˜†', '☆'], ['â˜…', '★'],
+    ['Â ', ' '], ['Â\u00a0', ' '],
+    ['â\u00af', ' '], ['\u202f', ' '],
+    ['ï»¿', ''],
+    ['Ã©', 'é'], ['Ã¨', 'è'], ['Ã ', 'à'],
+    ['Ã¢', 'â'], ['Ã®', 'î'], ['Ã´', 'ô'],
+    ['Ã»', 'û'], ['Ã§', 'ç'], ['Ã‰', 'É'], ['Ã€', 'À'],
+  ];
+
+  let result = content;
+  for (const [bad, good] of replacements) {
+    result = result.split(bad).join(good);
+  }
+  return result;
+};
+
 // Status badge component
 const StatusBadge = ({ status, theme: t }) => {
   const configs = {
@@ -92,8 +117,8 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
     return result;
   };
 
-  const subject = applyMergeFields(email.subject || email.template?.subject || 'No subject');
-  const htmlContent = applyMergeFields(email.body_html || email.template?.body_html || '');
+  const subject = fixEncodingIssues(applyMergeFields(email.subject || email.template?.subject || 'No subject'));
+  const htmlContent = fixEncodingIssues(applyMergeFields(email.body_html || email.template?.body_html || ''));
 
   return (
     <div style={{
