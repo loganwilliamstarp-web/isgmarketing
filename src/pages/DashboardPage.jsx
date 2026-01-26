@@ -23,14 +23,27 @@ const fixEncodingIssues = (content) => {
   if (!content) return content;
 
   const replacements = [
-    ['â€"', '—'], ['â€"', '–'],
-    ['â€™', '''], ['â€˜', '''],
-    ['â€œ', '"'], ['â€\u009d', '"'], ['â€', '"'],
-    ['â€¢', '•'], ['â€¦', '…'],
+    // BOM - must be first
+    ['ï»¿', ''],
+    ['\uFEFF', ''],
+    // Narrow no-break space (U+202F)
+    ['â\u0080\u00af', ' '], ['â€¯', ' '], ['â\u00af', ' '], ['\u202f', ' '],
+    // Em dash (U+2014)
+    ['â\u0080\u0094', '—'], ['â€"', '—'],
+    // En dash (U+2013)
+    ['â\u0080\u0093', '–'], ['â€"', '–'],
+    // Quotes
+    ['â\u0080\u0099', '''], ['â€™', '''],
+    ['â\u0080\u0098', '''], ['â€˜', '''],
+    ['â\u0080\u009d', '"'], ['â€\u009d', '"'],
+    ['â\u0080\u009c', '"'], ['â€œ', '"'], ['â€', '"'],
+    // Bullet and ellipsis
+    ['â\u0080\u00a2', '•'], ['â€¢', '•'],
+    ['â\u0080\u00a6', '…'], ['â€¦', '…'],
+    // Stars and spaces
     ['â˜†', '☆'], ['â˜…', '★'],
     ['Â ', ' '], ['Â\u00a0', ' '],
-    ['â\u00af', ' '], ['\u202f', ' '],
-    ['ï»¿', ''],
+    // Accented characters
     ['Ã©', 'é'], ['Ã¨', 'è'], ['Ã ', 'à'],
     ['Ã¢', 'â'], ['Ã®', 'î'], ['Ã´', 'ô'],
     ['Ã»', 'û'], ['Ã§', 'ç'], ['Ã‰', 'É'], ['Ã€', 'À'],
@@ -40,6 +53,19 @@ const fixEncodingIssues = (content) => {
   for (const [bad, good] of replacements) {
     result = result.split(bad).join(good);
   }
+
+  // Regex to catch variations with control characters
+  result = result.replace(/â[\u0080-\u009f][\u0080-\u00bf]/g, (match) => {
+    const byte2 = match.charCodeAt(1);
+    const byte3 = match.charCodeAt(2);
+    const codePoint = ((0xe2 & 0x0f) << 12) | ((byte2 & 0x3f) << 6) | (byte3 & 0x3f);
+    const map = {
+      0x2014: '—', 0x2013: '–', 0x2019: "'", 0x2018: "'",
+      0x201c: '"', 0x201d: '"', 0x2022: '•', 0x2026: '...', 0x202f: ' ',
+    };
+    return map[codePoint] || ' ';
+  });
+
   return result;
 };
 

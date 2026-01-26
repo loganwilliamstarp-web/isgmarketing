@@ -13,17 +13,38 @@ const fixEncodingIssues = (content) => {
 
   // Common UTF-8 mojibake patterns (UTF-8 interpreted as Latin-1/Windows-1252)
   const replacements = [
-    // Em dash and en dash
+    // BOM - must be first
+    ['ï»¿', ''],
+    ['\uFEFF', ''],
+    // Narrow no-break space (U+202F) - shows as â followed by box characters
+    ['â\u0080\u00af', ' '],
+    ['â€¯', ' '],
+    ['â\u00af', ' '],
+    ['\u202f', ' '],
+    // Em dash (U+2014) - shows as â followed by box characters
+    ['â\u0080\u0094', '—'],
     ['â€"', '—'],
+    // En dash (U+2013)
+    ['â\u0080\u0093', '–'],
     ['â€"', '–'],
-    // Quotes
+    // Right single quote / apostrophe (U+2019)
+    ['â\u0080\u0099', '''],
     ['â€™', '''],
+    // Left single quote (U+2018)
+    ['â\u0080\u0098', '''],
     ['â€˜', '''],
+    // Right double quote (U+201D)
+    ['â\u0080\u009d', '"'],
+    ['â€\u009d', '"'],
+    // Left double quote (U+201C)
+    ['â\u0080\u009c', '"'],
     ['â€œ', '"'],
-    ['â€\u009d', '"'],  // Right double quote (special case)
     ['â€', '"'],
-    // Bullets and symbols
+    // Bullet (U+2022)
+    ['â\u0080\u00a2', '•'],
     ['â€¢', '•'],
+    // Ellipsis (U+2026)
+    ['â\u0080\u00a6', '…'],
     ['â€¦', '…'],
     // Stars
     ['â˜†', '☆'],
@@ -31,12 +52,7 @@ const fixEncodingIssues = (content) => {
     // Non-breaking space issues
     ['Â ', ' '],
     ['Â\u00a0', ' '],
-    // Narrow no-break space (shows as â¯)
-    ['â\u00af', ' '],
-    ['\u202f', ' '],  // Actual narrow no-break space
-    // BOM
-    ['ï»¿', ''],
-    // Other common issues
+    // Accented characters
     ['Ã©', 'é'],
     ['Ã¨', 'è'],
     ['Ã ', 'à'],
@@ -53,6 +69,29 @@ const fixEncodingIssues = (content) => {
   for (const [bad, good] of replacements) {
     result = result.split(bad).join(good);
   }
+
+  // Also use regex to catch variations with replacement characters (U+FFFD shown as boxes)
+  result = result.replace(/â[\u0080-\u009f][\u0080-\u00bf]/g, (match) => {
+    // Decode the UTF-8 sequence that was misinterpreted
+    const byte2 = match.charCodeAt(1);
+    const byte3 = match.charCodeAt(2);
+    const codePoint = ((0xe2 & 0x0f) << 12) | ((byte2 & 0x3f) << 6) | (byte3 & 0x3f);
+
+    // Map common Unicode punctuation to ASCII equivalents for safety
+    const map = {
+      0x2014: '—',  // em dash
+      0x2013: '–',  // en dash
+      0x2019: "'",  // right single quote
+      0x2018: "'",  // left single quote
+      0x201c: '"',  // left double quote
+      0x201d: '"',  // right double quote
+      0x2022: '•',  // bullet
+      0x2026: '...', // ellipsis
+      0x202f: ' ',  // narrow no-break space
+    };
+
+    return map[codePoint] || ' ';
+  });
 
   return result;
 };
