@@ -318,12 +318,60 @@ const ClientProfilePage = ({ t }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [showComposeModal, setShowComposeModal] = useState(false);
+  const [unsubscribeStatus, setUnsubscribeStatus] = useState({ checked: false, isUnsubscribed: false, loading: false });
 
   // Mutations for sending email
   const { sendDirectEmail } = useScheduledEmailMutations();
 
   // Primary data - always load
   const { data: client, isLoading, error } = useAccountWithPolicies(accountId);
+
+  // Check unsubscribe status when client loads
+  React.useEffect(() => {
+    const checkUnsubscribeStatus = async () => {
+      const email = client?.person_email || client?.email;
+      if (!email || unsubscribeStatus.checked) return;
+
+      try {
+        const { unsubscribesService } = await import('../services/unsubscribes');
+        const unsubs = await unsubscribesService.getByEmail(email);
+        const isUnsubscribed = unsubs?.some(u => u.unsubscribe_type === 'all' && u.is_active);
+        setUnsubscribeStatus({ checked: true, isUnsubscribed, loading: false, data: unsubs });
+      } catch (err) {
+        console.error('Error checking unsubscribe status:', err);
+        setUnsubscribeStatus({ checked: true, isUnsubscribed: false, loading: false });
+      }
+    };
+
+    if (client) {
+      checkUnsubscribeStatus();
+    }
+  }, [client, unsubscribeStatus.checked]);
+
+  // Handle unsubscribe/resubscribe
+  const handleUnsubscribeToggle = async () => {
+    const email = client?.person_email || client?.email;
+    if (!email) return;
+
+    setUnsubscribeStatus(prev => ({ ...prev, loading: true }));
+
+    try {
+      const { unsubscribesService } = await import('../services/unsubscribes');
+
+      if (unsubscribeStatus.isUnsubscribed) {
+        // Resubscribe
+        await unsubscribesService.resubscribeAll(email);
+        setUnsubscribeStatus({ checked: true, isUnsubscribed: false, loading: false });
+      } else {
+        // Unsubscribe
+        await unsubscribesService.unsubscribeAll(email, 'manual');
+        setUnsubscribeStatus({ checked: true, isUnsubscribed: true, loading: false });
+      }
+    } catch (err) {
+      console.error('Error toggling unsubscribe:', err);
+      setUnsubscribeStatus(prev => ({ ...prev, loading: false }));
+    }
+  };
   
   // Lazy load other data based on tab (or for overview stats)
   const { data: emailLogs, isLoading: logsLoading } = useAccountEmailLogs(
@@ -555,6 +603,41 @@ const ClientProfilePage = ({ t }) => {
             <span style={{ color: t.textSecondary, fontSize: '14px' }}>
               {client.primary_contact_first_name} {client.primary_contact_last_name}
             </span>
+          </div>
+        )}
+
+        {/* Unsubscribe Status & Toggle */}
+        {(client.person_email || client.email) && (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {unsubscribeStatus.isUnsubscribed && (
+              <span style={{
+                padding: '4px 10px',
+                backgroundColor: `${t.danger}20`,
+                color: t.danger,
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: '500'
+              }}>
+                🚫 Unsubscribed
+              </span>
+            )}
+            <button
+              onClick={handleUnsubscribeToggle}
+              disabled={unsubscribeStatus.loading || !unsubscribeStatus.checked}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: unsubscribeStatus.isUnsubscribed ? t.success : t.danger,
+                border: 'none',
+                borderRadius: '6px',
+                color: '#fff',
+                cursor: unsubscribeStatus.loading ? 'wait' : 'pointer',
+                fontSize: '12px',
+                fontWeight: '500',
+                opacity: unsubscribeStatus.loading ? 0.7 : 1
+              }}
+            >
+              {unsubscribeStatus.loading ? '...' : unsubscribeStatus.isUnsubscribed ? 'Resubscribe' : 'Unsubscribe'}
+            </button>
           </div>
         )}
       </div>
