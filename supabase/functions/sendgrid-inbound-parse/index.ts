@@ -259,7 +259,8 @@ serve(async (req) => {
         receivedAt: new Date().toISOString(),
         // Pass the original recipient email so Reply-To is set correctly
         // This ensures when user hits "reply" in their inbox, it goes to the contact
-        originalRecipientEmail: email.from
+        // expectedSenderEmail is the original to_email from email_logs (the contact's email)
+        originalRecipientEmail: expectedSenderEmail || email.from
       })
       console.log(`Inbox injection result:`, injectionResult)
     }
