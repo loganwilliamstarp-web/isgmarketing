@@ -9,6 +9,11 @@ DROP POLICY IF EXISTS "Anyone can insert unsubscribes" ON unsubscribes;
 DROP POLICY IF EXISTS "Authenticated users can view unsubscribes" ON unsubscribes;
 DROP POLICY IF EXISTS "Users can view their own unsubscribes" ON unsubscribes;
 DROP POLICY IF EXISTS "Anonymous can insert unsubscribes" ON unsubscribes;
+DROP POLICY IF EXISTS "Anonymous can check unsubscribes" ON unsubscribes;
+DROP POLICY IF EXISTS "Authenticated can view unsubscribes" ON unsubscribes;
+DROP POLICY IF EXISTS "Authenticated can insert unsubscribes" ON unsubscribes;
+DROP POLICY IF EXISTS "Authenticated can update unsubscribes" ON unsubscribes;
+DROP POLICY IF EXISTS "Authenticated can delete unsubscribes" ON unsubscribes;
 DROP POLICY IF EXISTS "Service role full access unsubscribes" ON unsubscribes;
 
 -- Allow anonymous users to INSERT (for public unsubscribe page)

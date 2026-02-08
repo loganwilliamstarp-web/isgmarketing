@@ -10,6 +10,7 @@ import {
   useScheduledEmailMutations
 } from '../hooks';
 import ComposeEmailModal from '../components/ComposeEmailModal';
+import { calculateLeadScore, getGradeColor } from '../utils/leadScore';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -389,6 +390,7 @@ const ClientProfilePage = ({ t }) => {
   const { data: orgStats } = useQuickStats();
 
   // Calculate this account's stats
+  const activePolicyCount = client?.policies?.filter(p => (p.policy_status || p.status || '').toLowerCase() === 'active').length || 0;
   const accountStats = {
     emailsSent: emailLogs?.length || 0,
     opened: emailLogs?.filter(l => l.first_opened_at).length || 0,
@@ -397,6 +399,14 @@ const ClientProfilePage = ({ t }) => {
     clickRate: emailLogs?.length > 0 ? Math.round((emailLogs.filter(l => l.first_clicked_at).length / emailLogs.length) * 100) : 0,
     activeEnrollments: enrollments?.filter(e => e.status === 'Active').length || 0
   };
+
+  // Calculate lead score
+  const leadScore = calculateLeadScore({
+    emailLogs: emailLogs || [],
+    surveyStars: client?.survey_stars || null,
+    accountStatus: client?.account_status || '',
+    activePolicyCount,
+  });
 
   // Org averages for comparison
   const orgAverages = {
@@ -830,7 +840,7 @@ const ClientProfilePage = ({ t }) => {
                   </div>
                 </div>
 
-                {/* Engagement Score */}
+                {/* Lead Score */}
                 <div style={{
                   padding: '16px',
                   backgroundColor: t.bg,
@@ -838,32 +848,49 @@ const ClientProfilePage = ({ t }) => {
                   textAlign: 'center',
                   marginTop: '8px'
                 }}>
-                  <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px' }}>ENGAGEMENT SCORE</div>
-                  <div style={{ 
-                    fontSize: '32px', 
-                    fontWeight: '700', 
-                    color: accountStats.openRate >= orgAverages.openRate && accountStats.clickRate >= orgAverages.clickRate 
-                      ? t.success 
-                      : accountStats.openRate >= orgAverages.openRate || accountStats.clickRate >= orgAverages.clickRate
-                        ? t.warning
-                        : t.danger
-                  }}>
-                    {accountStats.emailsSent === 0 ? '—' : 
-                      accountStats.openRate >= orgAverages.openRate && accountStats.clickRate >= orgAverages.clickRate 
-                        ? 'High' 
-                        : accountStats.openRate >= orgAverages.openRate || accountStats.clickRate >= orgAverages.clickRate
-                          ? 'Medium'
-                          : 'Low'
-                    }
-                  </div>
-                  <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '4px' }}>
-                    {accountStats.emailsSent === 0 
-                      ? 'No emails sent yet'
-                      : accountStats.openRate >= orgAverages.openRate 
-                        ? 'Above average engagement' 
-                        : 'Below average engagement'
-                    }
-                  </div>
+                  <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '8px' }}>LEAD SCORE</div>
+                  {accountStats.emailsSent === 0 && !client?.survey_stars ? (
+                    <>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: t.textMuted }}>—</div>
+                      <div style={{ fontSize: '12px', color: t.textSecondary, marginTop: '4px' }}>No engagement data yet</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        border: `3px solid ${getGradeColor(leadScore.grade, t)}`,
+                        marginBottom: '8px'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '24px', fontWeight: '700', color: getGradeColor(leadScore.grade, t), lineHeight: 1 }}>
+                            {leadScore.score}
+                          </div>
+                          <div style={{ fontSize: '12px', fontWeight: '600', color: getGradeColor(leadScore.grade, t) }}>
+                            {leadScore.grade}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Score breakdown */}
+                      <div style={{ textAlign: 'left', marginTop: '8px' }}>
+                        {[
+                          { label: 'Email Engagement', value: leadScore.breakdown.emailEngagement.total, max: 85 },
+                          { label: 'NPS Rating', value: leadScore.breakdown.nps, max: 20 },
+                          { label: 'Customer Status', value: leadScore.breakdown.customerStatus, max: 15 },
+                          { label: 'Active Policies', value: leadScore.breakdown.hasPolicy, max: 10 },
+                        ].map(item => (
+                          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: t.textSecondary, marginBottom: '2px' }}>
+                            <span>{item.label}</span>
+                            <span style={{ color: item.value > 0 ? t.text : t.textMuted }}>{item.value}/{item.max}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

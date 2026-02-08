@@ -4,10 +4,8 @@
 ALTER TABLE user_settings
 ADD COLUMN IF NOT EXISTS is_trial_agency_admin BOOLEAN DEFAULT FALSE;
 
--- Index for finding trial agency admins by profile
-CREATE INDEX IF NOT EXISTS idx_user_settings_trial_agency_admin
-ON user_settings(profile_name, is_trial_agency_admin)
-WHERE is_trial_agency_admin = TRUE;
+-- Note: Index on (profile_name, is_trial_agency_admin) is created in migration
+-- 20260127000001_add_profile_name_to_user_settings.sql after profile_name column is added
 
 -- Comment for documentation
 COMMENT ON COLUMN user_settings.is_trial_agency_admin IS 'Whether this trial user is the agency admin for their trial domain';

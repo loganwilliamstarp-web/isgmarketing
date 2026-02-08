@@ -1,19 +1,6 @@
 -- Fix garbled UTF-8 characters in email_logs body_html and body_text
 -- These characters were incorrectly encoded due to missing charset declaration
-
--- Common encoding issues to fix:
--- â€" -> — (em dash)
--- â€" -> – (en dash)
--- â€™ -> ' (right single quote / apostrophe)
--- â€˜ -> ' (left single quote)
--- â€œ -> " (left double quote)
--- â€ -> " (right double quote)
--- â€¢ -> • (bullet)
--- â€¦ -> … (ellipsis)
--- Â  -> (non-breaking space, remove the Â)
--- â˜† -> ☆ (empty star)
--- â˜… -> ★ (filled star)
--- â€" -> — (another em dash variant)
+-- Using E'' escape strings for proper encoding
 
 -- Fix body_html in email_logs
 UPDATE email_logs
@@ -30,34 +17,34 @@ SET body_html = REPLACE(
                     REPLACE(
                       REPLACE(
                         body_html,
-                        'â€"', '—'
+                        E'\u00e2\u0080\u0094', E'\u2014'
                       ),
-                      'â€"', '–'
+                      E'\u00e2\u0080\u0093', E'\u2013'
                     ),
-                    'â€™', '''
+                    E'\u00e2\u0080\u0099', E'\u2019'
                   ),
-                  'â€˜', '''
+                  E'\u00e2\u0080\u0098', E'\u2018'
                 ),
-                'â€œ', '"'
+                E'\u00e2\u0080\u009c', E'\u201c'
               ),
-              'â€', '"'
+              E'\u00e2\u0080\u009d', E'\u201d'
             ),
-            'â€¢', '•'
+            E'\u00e2\u0080\u00a2', E'\u2022'
           ),
-          'â€¦', '…'
+          E'\u00e2\u0080\u00a6', E'\u2026'
         ),
-        'Â ', ' '
+        E'\u00c2\u00a0', ' '
       ),
-      'â˜†', '☆'
+      E'\u00e2\u0098\u0086', E'\u2606'
     ),
-    'â˜…', '★'
+    E'\u00e2\u0098\u0085', E'\u2605'
   ),
-  'ï»¿', ''
+  E'\u00ef\u00bb\u00bf', ''
 )
-WHERE body_html LIKE '%â€%'
-   OR body_html LIKE '%Â %'
-   OR body_html LIKE '%ï»¿%'
-   OR body_html LIKE '%â˜%';
+WHERE body_html LIKE E'%\u00e2\u0080%'
+   OR body_html LIKE E'%\u00c2\u00a0%'
+   OR body_html LIKE E'%\u00ef\u00bb\u00bf%'
+   OR body_html LIKE E'%\u00e2\u0098%';
 
 -- Fix body_text in email_logs
 UPDATE email_logs
@@ -74,34 +61,36 @@ SET body_text = REPLACE(
                     REPLACE(
                       REPLACE(
                         body_text,
-                        'â€"', '—'
+                        E'\u00e2\u0080\u0094', E'\u2014'
                       ),
-                      'â€"', '–'
+                      E'\u00e2\u0080\u0093', E'\u2013'
                     ),
-                    'â€™', '''
+                    E'\u00e2\u0080\u0099', E'\u2019'
                   ),
-                  'â€˜', '''
+                  E'\u00e2\u0080\u0098', E'\u2018'
                 ),
-                'â€œ', '"'
+                E'\u00e2\u0080\u009c', E'\u201c'
               ),
-              'â€', '"'
+              E'\u00e2\u0080\u009d', E'\u201d'
             ),
-            'â€¢', '•'
+            E'\u00e2\u0080\u00a2', E'\u2022'
           ),
-          'â€¦', '…'
+          E'\u00e2\u0080\u00a6', E'\u2026'
         ),
-        'Â ', ' '
+        E'\u00c2\u00a0', ' '
       ),
-      'â˜†', '☆'
+      E'\u00e2\u0098\u0086', E'\u2606'
     ),
-    'â˜…', '★'
+    E'\u00e2\u0098\u0085', E'\u2605'
   ),
-  'ï»¿', ''
+  E'\u00ef\u00bb\u00bf', ''
 )
-WHERE body_text LIKE '%â€%'
-   OR body_text LIKE '%Â %'
-   OR body_text LIKE '%ï»¿%'
-   OR body_text LIKE '%â˜%';
+WHERE body_text IS NOT NULL AND (
+  body_text LIKE E'%\u00e2\u0080%'
+   OR body_text LIKE E'%\u00c2\u00a0%'
+   OR body_text LIKE E'%\u00ef\u00bb\u00bf%'
+   OR body_text LIKE E'%\u00e2\u0098%'
+);
 
 -- Fix subject in email_logs
 UPDATE email_logs
@@ -118,291 +107,33 @@ SET subject = REPLACE(
                     REPLACE(
                       REPLACE(
                         subject,
-                        'â€"', '—'
+                        E'\u00e2\u0080\u0094', E'\u2014'
                       ),
-                      'â€"', '–'
+                      E'\u00e2\u0080\u0093', E'\u2013'
                     ),
-                    'â€™', '''
+                    E'\u00e2\u0080\u0099', E'\u2019'
                   ),
-                  'â€˜', '''
+                  E'\u00e2\u0080\u0098', E'\u2018'
                 ),
-                'â€œ', '"'
+                E'\u00e2\u0080\u009c', E'\u201c'
               ),
-              'â€', '"'
+              E'\u00e2\u0080\u009d', E'\u201d'
             ),
-            'â€¢', '•'
+            E'\u00e2\u0080\u00a2', E'\u2022'
           ),
-          'â€¦', '…'
+          E'\u00e2\u0080\u00a6', E'\u2026'
         ),
-        'Â ', ' '
+        E'\u00c2\u00a0', ' '
       ),
-      'â˜†', '☆'
+      E'\u00e2\u0098\u0086', E'\u2606'
     ),
-    'â˜…', '★'
+    E'\u00e2\u0098\u0085', E'\u2605'
   ),
-  'ï»¿', ''
+  E'\u00ef\u00bb\u00bf', ''
 )
-WHERE subject LIKE '%â€%'
-   OR subject LIKE '%Â %'
-   OR subject LIKE '%ï»¿%'
-   OR subject LIKE '%â˜%';
-
--- Also fix email_templates in case any were saved with bad encoding
-UPDATE email_templates
-SET body_html = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        body_html,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE body_html LIKE '%â€%'
-   OR body_html LIKE '%Â %'
-   OR body_html LIKE '%ï»¿%'
-   OR body_html LIKE '%â˜%';
-
-UPDATE email_templates
-SET body_text = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        body_text,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE body_text LIKE '%â€%'
-   OR body_text LIKE '%Â %'
-   OR body_text LIKE '%ï»¿%'
-   OR body_text LIKE '%â˜%';
-
-UPDATE email_templates
-SET subject = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        subject,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE subject LIKE '%â€%'
-   OR subject LIKE '%Â %'
-   OR subject LIKE '%ï»¿%'
-   OR subject LIKE '%â˜%';
-
--- Fix scheduled_emails as well
-UPDATE scheduled_emails
-SET body_html = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        body_html,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE body_html LIKE '%â€%'
-   OR body_html LIKE '%Â %'
-   OR body_html LIKE '%ï»¿%'
-   OR body_html LIKE '%â˜%';
-
-UPDATE scheduled_emails
-SET body_text = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        body_text,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE body_text LIKE '%â€%'
-   OR body_text LIKE '%Â %'
-   OR body_text LIKE '%ï»¿%'
-   OR body_text LIKE '%â˜%';
-
-UPDATE scheduled_emails
-SET subject = REPLACE(
-  REPLACE(
-    REPLACE(
-      REPLACE(
-        REPLACE(
-          REPLACE(
-            REPLACE(
-              REPLACE(
-                REPLACE(
-                  REPLACE(
-                    REPLACE(
-                      REPLACE(
-                        subject,
-                        'â€"', '—'
-                      ),
-                      'â€"', '–'
-                    ),
-                    'â€™', '''
-                  ),
-                  'â€˜', '''
-                ),
-                'â€œ', '"'
-              ),
-              'â€', '"'
-            ),
-            'â€¢', '•'
-          ),
-          'â€¦', '…'
-        ),
-        'Â ', ' '
-      ),
-      'â˜†', '☆'
-    ),
-    'â˜…', '★'
-  ),
-  'ï»¿', ''
-)
-WHERE subject LIKE '%â€%'
-   OR subject LIKE '%Â %'
-   OR subject LIKE '%ï»¿%'
-   OR subject LIKE '%â˜%';
+WHERE subject IS NOT NULL AND (
+  subject LIKE E'%\u00e2\u0080%'
+   OR subject LIKE E'%\u00c2\u00a0%'
+   OR subject LIKE E'%\u00ef\u00bb\u00bf%'
+   OR subject LIKE E'%\u00e2\u0098%'
+);
