@@ -91,6 +91,11 @@ const EmbedEmailActivityPage = () => {
       }));
     } catch (err) {
       console.error('Failed to load email detail:', err);
+      // Still set data so UI doesn't stay in limbo — show empty detail
+      setExpandedData(prev => ({
+        ...prev,
+        [email.id]: { clickedUrls: [], replies: [], events: [], error: err.message },
+      }));
     } finally {
       setExpandLoading(null);
     }
@@ -266,8 +271,15 @@ const EmbedEmailActivityPage = () => {
                             </div>
                           )}
 
+                          {/* Error loading detail */}
+                          {detail.error && (
+                            <div style={{ fontSize: '12px', color: '#ea001e', padding: '4px 0' }}>
+                              Error loading details: {detail.error}
+                            </div>
+                          )}
+
                           {/* No engagement detail */}
-                          {detail.clickedUrls.length === 0 && detail.replies.length === 0 && (
+                          {!detail.error && detail.clickedUrls.length === 0 && detail.replies.length === 0 && (
                             <div style={{ fontSize: '12px', color: '#706e6b', padding: '4px 0' }}>
                               No click or reply activity for this email.
                             </div>
