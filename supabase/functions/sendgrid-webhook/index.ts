@@ -360,8 +360,8 @@ async function processEvent(supabase: any, event: SendGridEvent): Promise<void> 
           .insert({
             email_log_id: logId,
             event_type: 'click',
-            event_data: { url: event.url, ip: event.ip, useragent: event.useragent },
-            created_at: eventTime
+            raw_payload: { url: event.url, ip: event.ip, useragent: event.useragent },
+            event_timestamp: eventTime
           })
       }
       break

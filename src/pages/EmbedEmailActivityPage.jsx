@@ -81,13 +81,13 @@ const EmbedEmailActivityPage = () => {
       ]);
 
       const clickedUrls = (detail.events || [])
-        .filter(ev => ev.event_type === 'click' && (ev.url || ev.event_data?.url))
-        .map(ev => ({ url: ev.event_data?.url || ev.url, date: ev.created_at }))
+        .filter(ev => ev.event_type === 'click' && (ev.raw_payload?.url || ev.url))
+        .map(ev => ({ url: ev.raw_payload?.url || ev.url, date: ev.event_timestamp }))
         .filter((item, i, arr) => arr.findIndex(a => a.url === item.url) === i);
 
       const starRatings = (detail.events || [])
         .filter(ev => ev.event_type === 'star_rating')
-        .map(ev => ({ rating: ev.event_data?.rating, date: ev.created_at }));
+        .map(ev => ({ rating: ev.raw_payload?.rating, date: ev.event_timestamp }));
 
       setExpandedData(prev => ({
         ...prev,

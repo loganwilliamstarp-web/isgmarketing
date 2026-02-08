@@ -109,8 +109,8 @@ serve(async (req) => {
       .insert({
         email_log_id: emailLogId,
         event_type: 'star_rating',
-        event_data: { rating, account_id: actualAccountId },
-        created_at: new Date().toISOString()
+        event_timestamp: new Date().toISOString(),
+        raw_payload: { rating, account_id: actualAccountId }
       })
 
     // Log activity
