@@ -85,10 +85,15 @@ const EmbedEmailActivityPage = () => {
         .map(ev => ({ url: ev.event_data?.url || ev.url, date: ev.created_at }))
         .filter((item, i, arr) => arr.findIndex(a => a.url === item.url) === i);
 
+      const starRatings = (detail.events || [])
+        .filter(ev => ev.event_type === 'star_rating')
+        .map(ev => ({ rating: ev.event_data?.rating, date: ev.created_at }));
+
       setExpandedData(prev => ({
         ...prev,
         [email.id]: {
           clickedUrls,
+          starRatings,
           replies: replies || [],
           events: detail.events || [],
           openCount: email.openCount,
@@ -103,7 +108,7 @@ const EmbedEmailActivityPage = () => {
       setExpandedData(prev => ({
         ...prev,
         [email.id]: {
-          clickedUrls: [], replies: [], events: [], error: err.message,
+          clickedUrls: [], starRatings: [], replies: [], events: [], error: err.message,
           openCount: email.openCount,
           clickCount: email.clickCount,
           replyCount: email.replyCount,
@@ -265,6 +270,22 @@ const EmbedEmailActivityPage = () => {
                             </div>
                           )}
 
+                          {/* Star Ratings */}
+                          {detail.starRatings && detail.starRatings.length > 0 && (
+                            <div style={styles.detailBlock}>
+                              <div style={styles.detailLabel}>STAR RATING</div>
+                              {detail.starRatings.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '3px 0' }}>
+                                  <span style={{ color: '#fbbf24', fontSize: '16px', letterSpacing: '1px' }}>
+                                    {'★'.repeat(item.rating || 0)}{'☆'.repeat(5 - (item.rating || 0))}
+                                  </span>
+                                  <span style={{ color: '#3e3e3c', fontWeight: '500' }}>{item.rating}/5</span>
+                                  {item.date && <span style={styles.urlDate}>{formatRelativeDate(item.date)}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Replies */}
                           {detail.replies.length > 0 && (
                             <div style={styles.detailBlock}>
@@ -321,6 +342,7 @@ const EmbedEmailActivityPage = () => {
 
                           {/* Only show "no activity" when truly nothing */}
                           {!detail.error && detail.clickedUrls.length === 0 && detail.replies.length === 0
+                            && (!detail.starRatings || detail.starRatings.length === 0)
                             && !detail.clickCount && !detail.replyCount && (
                             <div style={{ fontSize: '12px', color: '#706e6b', padding: '4px 0' }}>
                               No click or reply activity for this email.

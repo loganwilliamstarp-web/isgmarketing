@@ -87,7 +87,7 @@ serve(async (req) => {
         .update({
           survey_stars: rating,
           survey_completed_at: new Date().toISOString(),
-          survey_email_log_id: parseInt(emailLogId, 10)
+          survey_email_log_id: emailLogId
         })
         .ilike('account_unique_id', actualAccountId)
         .select('account_unique_id')
@@ -107,10 +107,10 @@ serve(async (req) => {
     await supabaseClient
       .from('email_events')
       .insert({
-        email_log_id: parseInt(emailLogId, 10),
+        email_log_id: emailLogId,
         event_type: 'star_rating',
-        event_timestamp: new Date().toISOString(),
-        raw_payload: { rating, account_id: actualAccountId }
+        event_data: { rating, account_id: actualAccountId },
+        created_at: new Date().toISOString()
       })
 
     // Log activity
