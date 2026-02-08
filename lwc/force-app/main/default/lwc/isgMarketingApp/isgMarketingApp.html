@@ -1,0 +1,25 @@
+<template>
+    <template if:false={hasConfig}>
+        <div class="slds-p-around_medium slds-text-color_weak slds-text-body_small">
+            Unable to detect current user. Please contact your administrator.
+        </div>
+    </template>
+
+    <template if:true={hasConfig}>
+        <template if:true={showLoading}>
+            <div class="loading-container">
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <div class="iframe-container" style={containerStyle}>
+            <iframe
+                src={iframeUrl}
+                class="embed-iframe"
+                title="ISG Marketing"
+                frameborder="0"
+                onload={handleIframeLoad}
+            ></iframe>
+        </div>
+    </template>
+</template>

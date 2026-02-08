@@ -486,6 +486,19 @@ const AppLayout = () => {
   };
   const topOffset = getTopOffset();
 
+  // When embedded in an iframe (Salesforce), report content height to parent so it can size the iframe
+  useEffect(() => {
+    if (window.parent === window) return; // not in iframe
+    const report = () => {
+      const height = document.documentElement.scrollHeight;
+      window.parent.postMessage({ type: 'isg-iframe-resize', height }, '*');
+    };
+    const observer = new ResizeObserver(report);
+    observer.observe(document.body);
+    report(); // initial
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ isDark, setIsDark, t, themes }}>
       <UserContext.Provider value={{ userId, currentUser, setCurrentUser }}>
