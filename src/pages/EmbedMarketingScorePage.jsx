@@ -163,7 +163,7 @@ const EmbedMarketingScorePage = () => {
 
 const spinnerCSS = `
   @keyframes spin { to { transform: rotate(360deg); } }
-  body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  body { margin: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
 `;
 
 const styles = {
