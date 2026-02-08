@@ -135,8 +135,8 @@ const EmbedEmailActivityPage = () => {
       ]);
 
       const clickedUrls = (emailDetail.events || [])
-        .filter(ev => ev.event_type === 'click' && (ev.url || ev.event_data?.url))
-        .map(ev => ev.url || ev.event_data?.url)
+        .filter(ev => ev.event_type === 'click' && (ev.raw_payload?.url || ev.url))
+        .map(ev => ev.raw_payload?.url || ev.url)
         .filter((url, i, arr) => arr.indexOf(url) === i);
 
       setPreviewData({ email: emailDetail, replies: replies || [], clickedUrls });

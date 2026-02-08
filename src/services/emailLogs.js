@@ -729,10 +729,10 @@ export const emailActivityService = {
         if (emailLogIds.length > 0) {
           const { data: events } = await supabase
             .from('email_events')
-            .select('email_log_id, event_data, created_at')
+            .select('email_log_id, raw_payload, event_timestamp')
             .in('email_log_id', emailLogIds)
             .eq('event_type', 'click')
-            .order('created_at', { ascending: false });
+            .order('event_timestamp', { ascending: false });
           clickEvents = events || [];
         }
 
@@ -743,8 +743,8 @@ export const emailActivityService = {
             clicksByEmail[event.email_log_id] = [];
           }
           clicksByEmail[event.email_log_id].push({
-            url: event.event_data?.url,
-            clicked_at: event.created_at
+            url: event.raw_payload?.url,
+            clicked_at: event.event_timestamp
           });
         });
 
