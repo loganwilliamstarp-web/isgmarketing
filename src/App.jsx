@@ -30,6 +30,8 @@ const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const TimelinePage = lazy(() => import('./pages/TimelinePage'));
 const MasterAdminDashboardPage = lazy(() => import('./pages/MasterAdminDashboardPage'));
+const EmbedMarketingScorePage = lazy(() => import('./pages/EmbedMarketingScorePage'));
+const EmbedEmailActivityPage = lazy(() => import('./pages/EmbedEmailActivityPage'));
 
 // ============================================
 // PAGE LOADING FALLBACK
@@ -860,6 +862,22 @@ const App = () => {
 
             {/* Redirect root based on auth state */}
             <Route path="/" element={<RedirectToAuth />} />
+
+            {/* Embed routes for Salesforce LWC — no sidebar/nav */}
+            <Route path="/:userId/embed/score/:accountId" element={
+              <ProtectedRoute>
+                <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Loading...</div>}>
+                  <EmbedMarketingScorePage />
+                </Suspense>
+              </ProtectedRoute>
+            } />
+            <Route path="/:userId/embed/email-activity/:accountId" element={
+              <ProtectedRoute>
+                <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Loading...</div>}>
+                  <EmbedEmailActivityPage />
+                </Suspense>
+              </ProtectedRoute>
+            } />
 
             {/* Protected routes under userId */}
             <Route path="/:userId/*" element={

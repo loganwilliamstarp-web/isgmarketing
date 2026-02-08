@@ -1,0 +1,27 @@
+<template>
+    <lightning-card title="Marketing Score" icon-name="standard:lead">
+        <template if:false={hasConfig}>
+            <div class="slds-p-around_medium slds-text-color_weak slds-text-body_small">
+                Configure the User ID property in Lightning App Builder.
+            </div>
+        </template>
+
+        <template if:true={hasConfig}>
+            <template if:true={showLoading}>
+                <div class="slds-p-around_medium slds-align_absolute-center">
+                    <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+                </div>
+            </template>
+
+            <div class="iframe-container">
+                <iframe
+                    src={iframeUrl}
+                    class="embed-iframe"
+                    title="Marketing Score"
+                    frameborder="0"
+                    onload={handleIframeLoad}
+                ></iframe>
+            </div>
+        </template>
+    </lightning-card>
+</template>

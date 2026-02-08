@@ -30,6 +30,20 @@ export function useUpcomingEmails(limit = 10) {
 }
 
 /**
+ * Get scheduled emails for a specific account
+ */
+export function useAccountScheduledEmails(accountId) {
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
+  return useQuery({
+    queryKey: ['scheduledEmails', filterKey, 'account', accountId],
+    queryFn: () => scheduledEmailsService.getByAccount(ownerIds, accountId),
+    enabled: ownerIds.length > 0 && !!accountId,
+    staleTime: 30000,
+  });
+}
+
+/**
  * Get a single scheduled email
  */
 export function useScheduledEmail(scheduledEmailId) {

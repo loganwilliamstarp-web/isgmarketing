@@ -86,6 +86,30 @@ export const scheduledEmailsService = {
   },
 
   /**
+   * Get scheduled emails for a specific account
+   * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
+   * @param {string} accountId - The account unique ID
+   */
+  async getByAccount(ownerIds, accountId) {
+    let query = supabase
+      .from('scheduled_emails')
+      .select(`
+        *,
+        template:email_templates(id, name, subject),
+        automation:automations(id, name)
+      `)
+      .eq('account_id', accountId)
+      .in('status', ['Pending', 'Processing'])
+      .gte('scheduled_for', new Date().toISOString())
+      .order('scheduled_for', { ascending: true });
+    query = applyOwnerFilter(query, ownerIds);
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
    * Get a single scheduled email
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
