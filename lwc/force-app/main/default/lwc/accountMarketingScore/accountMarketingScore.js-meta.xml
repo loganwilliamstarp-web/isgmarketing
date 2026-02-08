@@ -10,7 +10,6 @@
             <objects>
                 <object>Account</object>
             </objects>
-            <property name="userId" type="String" label="ISG Marketing User ID" description="Your ISG Marketing user ID (from the app URL)" required="true" />
             <property name="baseUrl" type="String" label="App Base URL" default="https://isgmarketing-production.up.railway.app" description="Base URL of the ISG Marketing app" />
         </targetConfig>
     </targetConfigs>

@@ -111,13 +111,6 @@ const EmbedEmailActivityPage = () => {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {/* Header */}
-        <div style={styles.header}>
-          <span style={styles.headerIcon}>📧</span>
-          <span style={styles.headerText}>Email Activity</span>
-          <span style={styles.headerCount}>{allEmails.length}</span>
-        </div>
-
         {/* Filter Buttons */}
         <div style={styles.filterRow}>
           {[
@@ -349,26 +342,7 @@ const styles = {
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: '4px',
-    border: '1px solid #d8dde6',
-    padding: '16px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #e5e5e5',
-    marginBottom: '12px',
-  },
-  headerIcon: { fontSize: '16px' },
-  headerText: { fontSize: '14px', fontWeight: '600', color: '#3e3e3c' },
-  headerCount: {
-    fontSize: '12px',
-    color: '#706e6b',
-    backgroundColor: '#f3f3f3',
-    padding: '2px 8px',
-    borderRadius: '10px',
+    padding: '8px 4px',
   },
   filterRow: {
     display: 'flex',

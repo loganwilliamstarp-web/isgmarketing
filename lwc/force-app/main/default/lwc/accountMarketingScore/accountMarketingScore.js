@@ -1,10 +1,11 @@
 import { LightningElement, api } from 'lwc';
+import currentUserId from '@salesforce/user/Id';
 
 export default class AccountMarketingScore extends LightningElement {
     @api recordId;
-    @api userId;
     @api baseUrl = 'https://isgmarketing-production.up.railway.app';
 
+    userId = currentUserId;
     iframeLoaded = false;
 
     get iframeUrl() {

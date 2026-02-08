@@ -69,12 +69,6 @@ const EmbedMarketingScorePage = () => {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {/* Header */}
-        <div style={styles.header}>
-          <span style={styles.headerIcon}>📊</span>
-          <span style={styles.headerText}>Marketing Score</span>
-        </div>
-
         {!hasData ? (
           <div style={styles.emptyState}>No engagement data yet</div>
         ) : (
@@ -178,25 +172,7 @@ const styles = {
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: '4px',
-    border: '1px solid #d8dde6',
-    padding: '16px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #e5e5e5',
-    marginBottom: '16px',
-  },
-  headerIcon: {
-    fontSize: '16px',
-  },
-  headerText: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#3e3e3c',
+    padding: '8px 4px',
   },
   scoreSection: {
     textAlign: 'center',
