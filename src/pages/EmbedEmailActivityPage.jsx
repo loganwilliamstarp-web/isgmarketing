@@ -82,7 +82,7 @@ const EmbedEmailActivityPage = () => {
 
       const clickedUrls = (detail.events || [])
         .filter(ev => ev.event_type === 'click' && (ev.url || ev.event_data?.url))
-        .map(ev => ({ url: ev.url || ev.event_data?.url, date: ev.event_timestamp || ev.created_at }))
+        .map(ev => ({ url: ev.event_data?.url || ev.url, date: ev.created_at }))
         .filter((item, i, arr) => arr.findIndex(a => a.url === item.url) === i);
 
       setExpandedData(prev => ({

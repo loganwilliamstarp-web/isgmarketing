@@ -80,10 +80,10 @@ export const emailLogsService = {
       .from('email_events')
       .select('*')
       .eq('email_log_id', emailLogId)
-      .order('event_timestamp', { ascending: true });
-    
+      .order('created_at', { ascending: true });
+
     if (error) throw error;
-    
+
     return {
       ...emailLog,
       events
@@ -826,8 +826,8 @@ export const emailEventsService = {
       .from('email_events')
       .select('*')
       .eq('email_log_id', emailLogId)
-      .order('event_timestamp', { ascending: true });
-    
+      .order('created_at', { ascending: true });
+
     if (error) throw error;
     return data;
   },
@@ -867,8 +867,8 @@ export const emailEventsService = {
       .from('email_events')
       .select('*')
       .eq('sendgrid_message_id', messageId)
-      .order('event_timestamp');
-    
+      .order('created_at');
+
     if (error) throw error;
     return data;
   }
