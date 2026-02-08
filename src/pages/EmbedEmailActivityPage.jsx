@@ -87,14 +87,29 @@ const EmbedEmailActivityPage = () => {
 
       setExpandedData(prev => ({
         ...prev,
-        [email.id]: { clickedUrls, replies: replies || [], events: detail.events || [] },
+        [email.id]: {
+          clickedUrls,
+          replies: replies || [],
+          events: detail.events || [],
+          openCount: email.openCount,
+          clickCount: email.clickCount,
+          replyCount: email.replyCount,
+          firstClickedAt: email.firstClickedAt,
+          firstRepliedAt: email.firstRepliedAt,
+        },
       }));
     } catch (err) {
       console.error('Failed to load email detail:', err);
-      // Still set data so UI doesn't stay in limbo — show empty detail
       setExpandedData(prev => ({
         ...prev,
-        [email.id]: { clickedUrls: [], replies: [], events: [], error: err.message },
+        [email.id]: {
+          clickedUrls: [], replies: [], events: [], error: err.message,
+          openCount: email.openCount,
+          clickCount: email.clickCount,
+          replyCount: email.replyCount,
+          firstClickedAt: email.firstClickedAt,
+          firstRepliedAt: email.firstRepliedAt,
+        },
       }));
     } finally {
       setExpandLoading(null);
@@ -271,6 +286,32 @@ const EmbedEmailActivityPage = () => {
                             </div>
                           )}
 
+                          {/* Fallback: clicks exist but no event rows */}
+                          {detail.clickedUrls.length === 0 && detail.clickCount > 0 && (
+                            <div style={styles.detailBlock}>
+                              <div style={styles.detailLabel}>CLICKS</div>
+                              <div style={styles.urlRow}>
+                                <span style={{ color: '#706e6b', fontSize: '11px' }}>
+                                  {detail.clickCount} click{detail.clickCount > 1 ? 's' : ''} — URL details not available
+                                </span>
+                                {detail.firstClickedAt && (
+                                  <span style={styles.urlDate}>{formatRelativeDate(detail.firstClickedAt)}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Fallback: replies exist but no reply rows loaded */}
+                          {detail.replies.length === 0 && detail.replyCount > 0 && (
+                            <div style={styles.detailBlock}>
+                              <div style={styles.detailLabel}>REPLIES</div>
+                              <div style={{ fontSize: '11px', color: '#706e6b' }}>
+                                {detail.replyCount} repl{detail.replyCount > 1 ? 'ies' : 'y'} received
+                                {detail.firstRepliedAt && ` — ${formatRelativeDate(detail.firstRepliedAt)}`}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Error loading detail */}
                           {detail.error && (
                             <div style={{ fontSize: '12px', color: '#ea001e', padding: '4px 0' }}>
@@ -278,8 +319,9 @@ const EmbedEmailActivityPage = () => {
                             </div>
                           )}
 
-                          {/* No engagement detail */}
-                          {!detail.error && detail.clickedUrls.length === 0 && detail.replies.length === 0 && (
+                          {/* Only show "no activity" when truly nothing */}
+                          {!detail.error && detail.clickedUrls.length === 0 && detail.replies.length === 0
+                            && !detail.clickCount && !detail.replyCount && (
                             <div style={{ fontSize: '12px', color: '#706e6b', padding: '4px 0' }}>
                               No click or reply activity for this email.
                             </div>
