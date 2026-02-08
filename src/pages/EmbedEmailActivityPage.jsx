@@ -16,10 +16,13 @@ const EmbedEmailActivityPage = () => {
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
+  const [expandedEmail, setExpandedEmail] = useState(null);
+  const [expandedData, setExpandedData] = useState({});
+  const [expandLoading, setExpandLoading] = useState(null);
 
   const isLoading = emailsLoading || scheduledLoading;
 
-  // Merge sent and scheduled emails into a unified list
+  // Build unified email list with engagement data inline
   const allEmails = (() => {
     const sent = (emailLogs || []).map(e => ({
       id: e.id,
@@ -34,6 +37,10 @@ const EmbedEmailActivityPage = () => {
       toName: e.to_name,
       openCount: e.open_count || 0,
       clickCount: e.click_count || 0,
+      replyCount: e.reply_count || 0,
+      firstOpenedAt: e.first_opened_at,
+      firstClickedAt: e.first_clicked_at,
+      firstRepliedAt: e.first_replied_at,
       bodyHtml: e.body_html,
     }));
 
@@ -44,10 +51,6 @@ const EmbedEmailActivityPage = () => {
       status: e.status || 'Pending',
       date: e.scheduled_for,
       automationName: e.automation?.name,
-      fromEmail: e.from_email,
-      fromName: e.from_name,
-      toEmail: e.to_email,
-      toName: e.to_name,
     }));
 
     return [...sent, ...scheduled].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -59,6 +62,39 @@ const EmbedEmailActivityPage = () => {
 
   const sentCount = allEmails.filter(e => e.type === 'sent').length;
   const scheduledCount = allEmails.filter(e => e.type === 'scheduled').length;
+
+  // Expand email to show click URLs and replies
+  const handleExpand = useCallback(async (email) => {
+    if (expandedEmail === email.id) {
+      setExpandedEmail(null);
+      return;
+    }
+    setExpandedEmail(email.id);
+
+    if (expandedData[email.id]) return; // Already loaded
+
+    setExpandLoading(email.id);
+    try {
+      const [detail, replies] = await Promise.all([
+        emailLogsService.getByIdWithEvents(ownerIds, email.id),
+        emailRepliesService.getByEmailLog(email.id),
+      ]);
+
+      const clickedUrls = (detail.events || [])
+        .filter(ev => ev.event_type === 'click' && (ev.url || ev.event_data?.url))
+        .map(ev => ({ url: ev.url || ev.event_data?.url, date: ev.event_timestamp || ev.created_at }))
+        .filter((item, i, arr) => arr.findIndex(a => a.url === item.url) === i);
+
+      setExpandedData(prev => ({
+        ...prev,
+        [email.id]: { clickedUrls, replies: replies || [], events: detail.events || [] },
+      }));
+    } catch (err) {
+      console.error('Failed to load email detail:', err);
+    } finally {
+      setExpandLoading(null);
+    }
+  }, [ownerIds, expandedEmail, expandedData]);
 
   // Preview modal
   const handlePreview = useCallback(async (email) => {
@@ -74,15 +110,11 @@ const EmbedEmailActivityPage = () => {
       ]);
 
       const clickedUrls = (emailDetail.events || [])
-        .filter(ev => ev.event_type === 'click' && ev.url)
-        .map(ev => ev.url)
+        .filter(ev => ev.event_type === 'click' && (ev.url || ev.event_data?.url))
+        .map(ev => ev.url || ev.event_data?.url)
         .filter((url, i, arr) => arr.indexOf(url) === i);
 
-      setPreviewData({
-        email: emailDetail,
-        replies: replies || [],
-        clickedUrls,
-      });
+      setPreviewData({ email: emailDetail, replies: replies || [], clickedUrls });
     } catch (err) {
       setPreviewError(err.message || 'Unable to load email preview');
     } finally {
@@ -136,21 +168,29 @@ const EmbedEmailActivityPage = () => {
           <div style={styles.emptyState}>No emails found.</div>
         ) : (
           <div>
-            {filteredEmails.map(email => (
-              <div key={`${email.type}-${email.id}`} style={styles.emailRow}>
-                <div style={styles.emailRowMain}>
+            {filteredEmails.map(email => {
+              const isExpanded = expandedEmail === email.id;
+              const detail = expandedData[email.id];
+              const isLoadingDetail = expandLoading === email.id;
+
+              return (
+                <div key={`${email.type}-${email.id}`} style={styles.emailRow}>
+                  {/* Subject + Actions Row */}
                   <div style={styles.emailSubjectRow}>
                     <div style={styles.emailSubject} title={email.subject}>{email.subject}</div>
                     {email.type === 'sent' && (
-                      <button
-                        onClick={() => handlePreview(email)}
-                        style={styles.previewButton}
-                        title="Preview email"
-                      >
-                        👁
-                      </button>
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        <button onClick={() => handleExpand(email)} style={styles.expandButton} title="Show details">
+                          {isExpanded ? '▲' : '▼'}
+                        </button>
+                        <button onClick={() => handlePreview(email)} style={styles.previewButton} title="Preview email">
+                          👁
+                        </button>
+                      </div>
                     )}
                   </div>
+
+                  {/* Status + Date + Engagement Icons */}
                   <div style={styles.emailMeta}>
                     <span style={getStatusBadgeStyle(email.status)}>{email.status}</span>
                     <span style={styles.emailDate}>{formatRelativeDate(email.date)}</span>
@@ -158,9 +198,87 @@ const EmbedEmailActivityPage = () => {
                       <span style={styles.automationTag}>{email.automationName}</span>
                     )}
                   </div>
+
+                  {/* Inline Engagement Summary */}
+                  {email.type === 'sent' && (email.openCount > 0 || email.clickCount > 0 || email.replyCount > 0) && (
+                    <div style={styles.engagementIcons}>
+                      {email.firstOpenedAt && (
+                        <span style={styles.engagementChip} title={`Opened ${email.openCount}x — ${new Date(email.firstOpenedAt).toLocaleString()}`}>
+                          📬 Opened {email.openCount > 1 ? `(${email.openCount}x)` : ''}
+                        </span>
+                      )}
+                      {email.firstClickedAt && (
+                        <span style={{ ...styles.engagementChip, backgroundColor: '#e3f3e3', color: '#2e844a' }} title={`Clicked ${email.clickCount}x`}>
+                          🔗 Clicked {email.clickCount > 1 ? `(${email.clickCount}x)` : ''}
+                        </span>
+                      )}
+                      {email.firstRepliedAt && (
+                        <span style={{ ...styles.engagementChip, backgroundColor: '#e8f4fd', color: '#0070d2' }} title={`Replied ${new Date(email.firstRepliedAt).toLocaleString()}`}>
+                          💬 Replied {email.replyCount > 1 ? `(${email.replyCount})` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Expanded Detail */}
+                  {isExpanded && email.type === 'sent' && (
+                    <div style={styles.expandedSection}>
+                      {isLoadingDetail && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 0' }}>
+                          <div style={{ ...styles.spinner, width: '14px', height: '14px' }} />
+                          <span style={{ fontSize: '11px', color: '#706e6b' }}>Loading details...</span>
+                        </div>
+                      )}
+
+                      {detail && (
+                        <>
+                          {/* Clicked URLs */}
+                          {detail.clickedUrls.length > 0 && (
+                            <div style={styles.detailBlock}>
+                              <div style={styles.detailLabel}>CLICKED URLS</div>
+                              {detail.clickedUrls.map((item, i) => (
+                                <div key={i} style={styles.urlRow}>
+                                  <span style={styles.urlText}>{item.url.length > 55 ? item.url.substring(0, 55) + '...' : item.url}</span>
+                                  <span style={styles.urlDate}>{formatRelativeDate(item.date)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Replies */}
+                          {detail.replies.length > 0 && (
+                            <div style={styles.detailBlock}>
+                              <div style={styles.detailLabel}>REPLIES</div>
+                              {detail.replies.map(reply => (
+                                <div key={reply.id} style={styles.replyBox}>
+                                  <div style={styles.replyHeader}>
+                                    <strong>{reply.from_name || reply.from_email}</strong>
+                                    <span style={styles.replyDate}>
+                                      {reply.received_at ? formatRelativeDate(reply.received_at) : ''}
+                                    </span>
+                                  </div>
+                                  <div style={styles.replyBody}>
+                                    {(reply.body_text || reply.body_html?.replace(/<[^>]*>/g, '') || '').substring(0, 200)}
+                                    {(reply.body_text || '').length > 200 ? '...' : ''}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* No engagement detail */}
+                          {detail.clickedUrls.length === 0 && detail.replies.length === 0 && (
+                            <div style={{ fontSize: '12px', color: '#706e6b', padding: '4px 0' }}>
+                              No click or reply activity for this email.
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -201,12 +319,16 @@ const EmbedEmailActivityPage = () => {
                   {/* Engagement Stats */}
                   <div style={styles.engagementRow}>
                     <div style={styles.engagementStat}>
-                      <div style={styles.engagementLabel}>Opens</div>
-                      <div style={styles.engagementValue}>{previewData.email.open_count || 0}</div>
+                      <div style={styles.engagementStatLabel}>Opens</div>
+                      <div style={styles.engagementStatValue}>{previewData.email.open_count || 0}</div>
                     </div>
                     <div style={styles.engagementStat}>
-                      <div style={styles.engagementLabel}>Clicks</div>
-                      <div style={styles.engagementValue}>{previewData.email.click_count || 0}</div>
+                      <div style={styles.engagementStatLabel}>Clicks</div>
+                      <div style={styles.engagementStatValue}>{previewData.email.click_count || 0}</div>
+                    </div>
+                    <div style={styles.engagementStat}>
+                      <div style={styles.engagementStatLabel}>Replies</div>
+                      <div style={styles.engagementStatValue}>{previewData.replies.length}</div>
                     </div>
                   </div>
 
@@ -368,7 +490,6 @@ const styles = {
     padding: '10px 0',
     borderBottom: '1px solid #f0f0f0',
   },
-  emailRowMain: {},
   emailSubjectRow: {
     display: 'flex',
     alignItems: 'center',
@@ -384,6 +505,15 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     flex: 1,
+  },
+  expandButton: {
+    background: 'none',
+    border: '1px solid #d8dde6',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    padding: '2px 6px',
+    fontSize: '10px',
+    color: '#706e6b',
   },
   previewButton: {
     background: 'none',
@@ -411,6 +541,76 @@ const styles = {
     padding: '1px 6px',
     borderRadius: '3px',
   },
+  engagementIcons: {
+    display: 'flex',
+    gap: '6px',
+    marginTop: '6px',
+    flexWrap: 'wrap',
+  },
+  engagementChip: {
+    fontSize: '11px',
+    padding: '2px 8px',
+    borderRadius: '10px',
+    backgroundColor: '#f0f4ff',
+    color: '#3e3e3c',
+    whiteSpace: 'nowrap',
+  },
+  expandedSection: {
+    marginTop: '8px',
+    paddingTop: '8px',
+    borderTop: '1px dashed #e5e5e5',
+  },
+  detailBlock: {
+    marginBottom: '10px',
+  },
+  detailLabel: {
+    fontSize: '10px',
+    color: '#706e6b',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '4px',
+  },
+  urlRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: '11px',
+    padding: '3px 0',
+    gap: '8px',
+  },
+  urlText: {
+    color: '#0070d2',
+    wordBreak: 'break-all',
+    flex: 1,
+  },
+  urlDate: {
+    color: '#706e6b',
+    flexShrink: 0,
+    fontSize: '10px',
+  },
+  replyBox: {
+    padding: '8px 10px',
+    backgroundColor: '#f3f3f3',
+    borderRadius: '6px',
+    marginBottom: '6px',
+  },
+  replyHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '11px',
+    color: '#706e6b',
+    marginBottom: '4px',
+  },
+  replyDate: {
+    fontSize: '10px',
+    color: '#999',
+  },
+  replyBody: {
+    fontSize: '12px',
+    color: '#3e3e3c',
+    lineHeight: '1.4',
+  },
   emptyState: {
     textAlign: 'center',
     padding: '24px 0',
@@ -421,10 +621,7 @@ const styles = {
   // Modal
   modalBackdrop: {
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     display: 'flex',
     alignItems: 'center',
@@ -448,118 +645,36 @@ const styles = {
     padding: '16px 20px',
     borderBottom: '1px solid #e5e5e5',
   },
-  modalTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#3e3e3c',
-  },
+  modalTitle: { fontSize: '16px', fontWeight: '600', color: '#3e3e3c' },
   modalClose: {
-    background: 'none',
-    border: 'none',
-    fontSize: '18px',
-    cursor: 'pointer',
-    color: '#706e6b',
-    padding: '4px 8px',
+    background: 'none', border: 'none', fontSize: '18px',
+    cursor: 'pointer', color: '#706e6b', padding: '4px 8px',
   },
-  modalBody: {
-    overflowY: 'auto',
-    padding: '16px 20px',
-    flex: 1,
-  },
+  modalBody: { overflowY: 'auto', padding: '16px 20px', flex: 1 },
 
   // Preview content
-  previewMeta: {
-    marginBottom: '16px',
-  },
-  previewSubject: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#3e3e3c',
-    marginBottom: '8px',
-  },
-  previewMetaRow: {
-    fontSize: '12px',
-    color: '#706e6b',
-    marginBottom: '2px',
-  },
-  engagementRow: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '16px',
-  },
+  previewMeta: { marginBottom: '16px' },
+  previewSubject: { fontSize: '16px', fontWeight: '600', color: '#3e3e3c', marginBottom: '8px' },
+  previewMetaRow: { fontSize: '12px', color: '#706e6b', marginBottom: '2px' },
+  engagementRow: { display: 'flex', gap: '8px', marginBottom: '16px' },
   engagementStat: {
-    textAlign: 'center',
-    padding: '10px 16px',
-    backgroundColor: '#f3f3f3',
-    borderRadius: '6px',
-    flex: 1,
+    textAlign: 'center', padding: '8px 12px',
+    backgroundColor: '#f3f3f3', borderRadius: '6px', flex: 1,
   },
-  engagementLabel: {
-    fontSize: '10px',
-    color: '#706e6b',
-    textTransform: 'uppercase',
-    fontWeight: '600',
-    marginBottom: '4px',
+  engagementStatLabel: {
+    fontSize: '10px', color: '#706e6b',
+    textTransform: 'uppercase', fontWeight: '600', marginBottom: '2px',
   },
-  engagementValue: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#3e3e3c',
-  },
-  section: {
-    marginBottom: '16px',
-  },
+  engagementStatValue: { fontSize: '18px', fontWeight: '700', color: '#3e3e3c' },
+  section: { marginBottom: '16px' },
   sectionLabel: {
-    fontSize: '10px',
-    color: '#706e6b',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: '6px',
+    fontSize: '10px', color: '#706e6b', fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
   },
-  urlList: {
-    margin: '0',
-    paddingLeft: '16px',
-    listStyleType: 'disc',
-  },
-  urlItem: {
-    fontSize: '12px',
-    color: '#3e3e3c',
-    marginBottom: '2px',
-    wordBreak: 'break-all',
-  },
-  previewFrame: {
-    border: '1px solid #d8dde6',
-    borderRadius: '4px',
-    overflow: 'hidden',
-  },
-  iframe: {
-    width: '100%',
-    height: '400px',
-    border: 'none',
-  },
-  replyBox: {
-    padding: '10px 12px',
-    backgroundColor: '#f3f3f3',
-    borderRadius: '6px',
-    marginBottom: '8px',
-  },
-  replyHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '12px',
-    color: '#706e6b',
-    marginBottom: '6px',
-  },
-  replyDate: {
-    fontSize: '11px',
-    color: '#999',
-  },
-  replyBody: {
-    fontSize: '13px',
-    color: '#3e3e3c',
-    lineHeight: '1.4',
-  },
+  urlList: { margin: '0', paddingLeft: '16px', listStyleType: 'disc' },
+  urlItem: { fontSize: '12px', color: '#3e3e3c', marginBottom: '2px', wordBreak: 'break-all' },
+  previewFrame: { border: '1px solid #d8dde6', borderRadius: '4px', overflow: 'hidden' },
+  iframe: { width: '100%', height: '400px', border: 'none' },
 };
 
 export default EmbedEmailActivityPage;
