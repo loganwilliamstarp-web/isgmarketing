@@ -49,7 +49,7 @@ const EmbedMarketingScorePage = () => {
   });
 
   const gradeColor = getGradeColor(leadScore.grade, theme);
-  const hasData = (emailLogs?.length > 0) || client.survey_stars;
+  const hasScoreData = (emailLogs?.length > 0) || client.survey_stars || client.account_status?.toLowerCase() === 'customer' || activePolicyCount > 0;
 
   const npsCategory = client.survey_stars >= 4 ? 'Promoter'
     : client.survey_stars === 3 ? 'Passive'
@@ -69,76 +69,92 @@ const EmbedMarketingScorePage = () => {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {!hasData ? (
-          <div style={styles.emptyState}>No engagement data yet</div>
-        ) : (
-          <>
-            {/* Score Circle */}
-            <div style={styles.scoreSection}>
-              <div style={{
-                ...styles.scoreCircle,
-                border: `3px solid ${gradeColor}`,
+        {/* Score Circle */}
+        <div style={styles.scoreSection}>
+          {hasScoreData ? (
+            <div style={{
+              ...styles.scoreCircle,
+              border: `3px solid ${gradeColor}`,
+            }}>
+              <div style={{ ...styles.scoreNumber, color: gradeColor }}>{leadScore.score}</div>
+              <div style={{ ...styles.scoreGrade, color: gradeColor }}>{leadScore.grade}</div>
+            </div>
+          ) : (
+            <div style={{
+              ...styles.scoreCircle,
+              border: '3px solid #d8dde6',
+            }}>
+              <div style={{ ...styles.scoreNumber, color: '#d8dde6' }}>—</div>
+            </div>
+          )}
+        </div>
+
+        {/* NPS / Survey Response */}
+        <div style={styles.npsSection}>
+          {npsCategory ? (
+            <>
+              <div style={{ fontSize: '20px', color: '#fbbf24', letterSpacing: '2px', marginBottom: '6px' }}>
+                {'★'.repeat(client.survey_stars)}
+                {'☆'.repeat(5 - client.survey_stars)}
+              </div>
+              <span style={{
+                display: 'inline-block',
+                padding: '3px 10px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: '500',
+                backgroundColor: npsBgColor,
+                color: npsTextColor,
               }}>
-                <div style={{ ...styles.scoreNumber, color: gradeColor }}>{leadScore.score}</div>
-                <div style={{ ...styles.scoreGrade, color: gradeColor }}>{leadScore.grade}</div>
+                {npsCategory}
+              </span>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: '20px', color: '#d8dde6', letterSpacing: '2px', marginBottom: '6px' }}>
+                {'☆'.repeat(5)}
               </div>
+              <div style={{ fontSize: '12px', color: '#706e6b' }}>No survey response yet</div>
+            </>
+          )}
+        </div>
+
+        {/* Score Breakdown */}
+        <div style={styles.breakdown}>
+          {[
+            { label: 'Email Engagement', value: leadScore.breakdown.emailEngagement.total, max: 85 },
+            { label: 'NPS Rating', value: leadScore.breakdown.nps, max: 20 },
+            { label: 'Customer Status', value: leadScore.breakdown.customerStatus, max: 15 },
+            { label: 'Active Policies', value: leadScore.breakdown.hasPolicy, max: 10 },
+          ].map(item => (
+            <div key={item.label} style={styles.breakdownRow}>
+              <span style={styles.breakdownLabel}>{item.label}</span>
+              <span style={{
+                ...styles.breakdownValue,
+                color: item.value > 0 ? '#3e3e3c' : '#999',
+              }}>
+                {item.value}/{item.max}
+              </span>
             </div>
+          ))}
+        </div>
 
-            {/* NPS Badge */}
-            {npsCategory && (
-              <div style={styles.npsSection}>
-                <div style={{ fontSize: '20px', color: '#fbbf24', letterSpacing: '2px', marginBottom: '6px' }}>
-                  {'★'.repeat(client.survey_stars)}
-                  {'☆'.repeat(5 - client.survey_stars)}
+        {/* Feedback */}
+        <div style={styles.feedbackSection}>
+          <div style={styles.feedbackLabel}>FEEDBACK</div>
+          {client.survey_feedback_text ? (
+            <>
+              <div style={styles.feedbackText}>"{client.survey_feedback_text}"</div>
+              {client.survey_completed_at && (
+                <div style={styles.feedbackDate}>
+                  {new Date(client.survey_completed_at).toLocaleDateString()}
                 </div>
-                <span style={{
-                  display: 'inline-block',
-                  padding: '3px 10px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  backgroundColor: npsBgColor,
-                  color: npsTextColor,
-                }}>
-                  {npsCategory}
-                </span>
-              </div>
-            )}
-
-            {/* Score Breakdown */}
-            <div style={styles.breakdown}>
-              {[
-                { label: 'Email Engagement', value: leadScore.breakdown.emailEngagement.total, max: 85 },
-                { label: 'NPS Rating', value: leadScore.breakdown.nps, max: 20 },
-                { label: 'Customer Status', value: leadScore.breakdown.customerStatus, max: 15 },
-                { label: 'Active Policies', value: leadScore.breakdown.hasPolicy, max: 10 },
-              ].map(item => (
-                <div key={item.label} style={styles.breakdownRow}>
-                  <span style={styles.breakdownLabel}>{item.label}</span>
-                  <span style={{
-                    ...styles.breakdownValue,
-                    color: item.value > 0 ? '#3e3e3c' : '#999',
-                  }}>
-                    {item.value}/{item.max}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Feedback */}
-            {client.survey_feedback_text && (
-              <div style={styles.feedbackSection}>
-                <div style={styles.feedbackLabel}>FEEDBACK</div>
-                <div style={styles.feedbackText}>"{client.survey_feedback_text}"</div>
-                {client.survey_date && (
-                  <div style={styles.feedbackDate}>
-                    {new Date(client.survey_date).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#706e6b' }}>No feedback received</div>
+          )}
+        </div>
       </div>
       <style>{spinnerCSS}</style>
     </div>
