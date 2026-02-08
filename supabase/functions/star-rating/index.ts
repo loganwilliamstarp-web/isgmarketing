@@ -87,7 +87,7 @@ serve(async (req) => {
         .update({
           survey_stars: rating,
           survey_completed_at: new Date().toISOString(),
-          survey_email_log_id: emailLogId
+          survey_email_log_id: parseInt(emailLogId, 10)
         })
         .ilike('account_unique_id', actualAccountId)
         .select('account_unique_id')
