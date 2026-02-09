@@ -554,13 +554,17 @@ function parseHeaders(headersString: string): Record<string, string> {
 interface InjectionParams {
   replyId: number
   ownerId: string
+  // fromEmail is the email address that SendGrid received the reply FROM (could be any address)
+  // For display and Reply-To, we should use originalRecipientEmail instead
   fromEmail: string
   fromName?: string
   subject: string
   bodyText?: string
   bodyHtml?: string
   receivedAt: string
-  // The original recipient email (contact's email) - used for Reply-To so replies go back to the contact
+  // The original recipient email (contact's actual email from email_logs.to_email)
+  // This is the CORRECT email to display in "Reply from:" and use for Reply-To
+  // When we sent the original email to contact@example.com, this should be contact@example.com
   originalRecipientEmail?: string
 }
 
@@ -793,10 +797,13 @@ async function forwardViaSendGrid(
 
   try {
     // Build the forwarded email content
-    const fromName = params.fromName || params.fromEmail
+    // Use originalRecipientEmail (the contact's actual email) for display, fallback to fromEmail
+    const contactEmail = params.originalRecipientEmail || params.fromEmail
+    const fromName = params.fromName || contactEmail
+
     const forwardHeader = `
       <div style="padding: 10px; margin-bottom: 15px; border-left: 3px solid #4a90d9; background: #f5f8fa;">
-        <strong>Reply from:</strong> ${fromName} &lt;${params.fromEmail}&gt;<br>
+        <strong>Reply from:</strong> ${fromName} &lt;${contactEmail}&gt;<br>
         <strong>Received:</strong> ${new Date(params.receivedAt).toLocaleString()}
       </div>
     `
@@ -806,8 +813,8 @@ async function forwardViaSendGrid(
       : `${forwardHeader}<pre style="white-space: pre-wrap;">${params.bodyText || ''}</pre>`
 
     const textContent = params.bodyText
-      ? `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyText}`
-      : `--- Reply from: ${fromName} <${params.fromEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyHtml?.replace(/<[^>]*>/g, '') || ''}`
+      ? `--- Reply from: ${fromName} <${contactEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyText}`
+      : `--- Reply from: ${fromName} <${contactEmail}> ---\nReceived: ${new Date(params.receivedAt).toLocaleString()}\n\n${params.bodyHtml?.replace(/<[^>]*>/g, '') || ''}`
 
     // fromEmail is already set above from SENDGRID_FORWARD_FROM env var
     // The reply-to will be set to the contact's email so replies go to them
@@ -821,7 +828,7 @@ async function forwardViaSendGrid(
         name: `Reply from ${fromName}`
       },
       reply_to: {
-        email: params.fromEmail,
+        email: contactEmail,
         name: params.fromName || undefined
       },
       subject: params.subject.startsWith('Re:') ? params.subject : `Re: ${params.subject}`,
@@ -866,9 +873,11 @@ async function injectIntoGmail(
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     // Build RFC 2822 email message
+    // Use originalRecipientEmail (the contact's actual email) for From, fallback to fromEmail
+    const contactEmail = params.originalRecipientEmail || params.fromEmail
     const fromHeader = params.fromName
-      ? `"${params.fromName}" <${params.fromEmail}>`
-      : params.fromEmail
+      ? `"${params.fromName}" <${contactEmail}>`
+      : contactEmail
 
     // Build email headers - include Reply-To so replies go back to the contact
     const emailLines = [
@@ -878,17 +887,10 @@ async function injectIntoGmail(
       `Date: ${new Date(params.receivedAt).toUTCString()}`
     ]
 
-    // Add Reply-To header pointing to the original sender (contact)
-    // This ensures when you hit "reply" in Gmail, it goes to the contact, not somewhere else
-    if (params.originalRecipientEmail) {
-      const replyToHeader = params.fromName
-        ? `"${params.fromName}" <${params.originalRecipientEmail}>`
-        : params.originalRecipientEmail
-      emailLines.push(`Reply-To: ${replyToHeader}`)
-    } else {
-      // Fallback: use the from email as reply-to
-      emailLines.push(`Reply-To: ${fromHeader}`)
-    }
+    // Add Reply-To header pointing to the contact
+    // This ensures when you hit "reply" in Gmail, it goes to the contact
+    // For Gmail injection, From and Reply-To should both be the contact's email
+    emailLines.push(`Reply-To: ${fromHeader}`)
 
     emailLines.push(
       `Content-Type: ${params.bodyHtml ? 'text/html' : 'text/plain'}; charset=UTF-8`,
@@ -952,8 +954,9 @@ async function injectIntoMicrosoft(
   params: InjectionParams
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const fromName = params.fromName || params.fromEmail
+    // Use originalRecipientEmail (the contact's actual email) for display, fallback to fromEmail
     const contactEmail = params.originalRecipientEmail || params.fromEmail
+    const fromName = params.fromName || contactEmail
 
     // Add a header to the body showing who the reply is from
     // This is necessary because Graph API won't let us set 'from' to an external address
