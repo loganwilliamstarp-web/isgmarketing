@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useDashboard, useQuickStats, useUpcomingEmails, useScheduledEmailMutations, useEmailActivityFeed } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
@@ -372,7 +373,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
             </div>
           ) : htmlContent ? (
             <div
-              dangerouslySetInnerHTML={{ __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` + htmlContent + footerHtml }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` + htmlContent + footerHtml) }}
               style={{
                 fontFamily: 'Arial, sans-serif',
                 fontSize: '14px',
@@ -664,8 +665,8 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
             activity.body_html ? (
               <div
                 dangerouslySetInnerHTML={{
-                  __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
-                    fixEncodingIssues(activity.body_html)
+                  __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
+                    fixEncodingIssues(activity.body_html))
                 }}
                 style={{
                   fontFamily: 'Arial, sans-serif',
@@ -688,8 +689,8 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
           ) : getBodyContent() ? (
             <div
               dangerouslySetInnerHTML={{
-                __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
-                  getBodyContent()
+                __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
+                  getBodyContent())
               }}
               style={{
                 fontFamily: 'Arial, sans-serif',

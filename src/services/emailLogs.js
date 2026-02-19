@@ -639,12 +639,19 @@ export const emailActivityService = {
    * @param {Object} options - Query options
    */
   async getRecentActivity(ownerIds, options = {}) {
-    const { limit = 20, accountId = null } = options;
+    const { limit = 20, accountId = null, typeFilter = null } = options;
 
-    // Fetch from multiple sources in parallel
+    // When filtering by type, only query that specific type for better results
+    const fetchSends = !typeFilter || typeFilter === 'sent';
+    const fetchOpens = !typeFilter || typeFilter === 'opened';
+    const fetchClicks = !typeFilter || typeFilter === 'clicked';
+    const fetchReplies = !typeFilter || typeFilter === 'replied';
+
+    // Fetch from multiple sources in parallel (skip types we don't need)
     const [recentSends, recentOpens, recentClicks, recentReplies] = await Promise.all([
       // Recent email sends
       (async () => {
+        if (!fetchSends) return [];
         let query = supabase
           .from('email_logs')
           .select(`
@@ -659,7 +666,7 @@ export const emailActivityService = {
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
-        console.log('Recent sends query:', { count: data?.length, error, ownerIds, limit });
+        if (error) console.error('Error fetching sends:', error);
         return (data || []).map(e => ({
           id: `send-${e.id}`,
           type: 'sent',
@@ -679,6 +686,7 @@ export const emailActivityService = {
 
       // Recent opens (from email_logs first_opened_at)
       (async () => {
+        if (!fetchOpens) return [];
         let query = supabase
           .from('email_logs')
           .select(`
@@ -691,7 +699,7 @@ export const emailActivityService = {
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
-        console.log('Recent opens query:', { count: data?.length, error, ownerIds, limit });
+        if (error) console.error('Error fetching opens:', error);
         return (data || []).map(e => ({
           id: `open-${e.id}`,
           type: 'opened',
@@ -709,6 +717,7 @@ export const emailActivityService = {
 
       // Recent clicks (from email_logs first_clicked_at + click events for URLs)
       (async () => {
+        if (!fetchClicks) return [];
         let query = supabase
           .from('email_logs')
           .select(`
@@ -721,7 +730,7 @@ export const emailActivityService = {
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
-        console.log('Recent clicks query:', { count: data?.length, error, ownerIds, limit });
+        if (error) console.error('Error fetching clicks:', error);
 
         // Fetch click events to get URLs for each email
         const emailLogIds = (data || []).map(e => e.id);
@@ -766,6 +775,7 @@ export const emailActivityService = {
 
       // Recent replies
       (async () => {
+        if (!fetchReplies) return [];
         let query = supabase
           .from('email_replies')
           .select(`
@@ -778,7 +788,6 @@ export const emailActivityService = {
         query = applyOwnerFilter(query, ownerIds);
         if (accountId) query = query.eq('account_id', accountId);
         const { data, error } = await query;
-        console.log('Email replies query result:', { data, error, ownerIds });
         if (error) {
           console.error('Error fetching replies:', error);
           return [];

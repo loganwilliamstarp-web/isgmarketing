@@ -161,11 +161,10 @@ interface SendGridEvent {
 }
 
 serve(async (req) => {
-  // Log immediately on any request to confirm webhook is being called
+  // Log webhook call (without headers to avoid leaking auth tokens)
   console.log('=== SendGrid Webhook Called ===', {
     method: req.method,
-    url: req.url,
-    headers: Object.fromEntries(req.headers.entries())
+    url: req.url
   })
 
   // Handle CORS preflight
@@ -183,33 +182,37 @@ serve(async (req) => {
     const rawBody = await req.text()
     console.log('Raw webhook body length:', rawBody.length, 'chars')
 
-    // Verify SendGrid webhook signature if public key is configured
+    // Verify SendGrid webhook signature (REQUIRED - reject if not configured)
     const sendgridPublicKey = Deno.env.get('SENDGRID_WEBHOOK_PUBLIC_KEY')
-    if (sendgridPublicKey) {
-      const signature = req.headers.get('X-Twilio-Email-Event-Webhook-Signature')
-      const timestamp = req.headers.get('X-Twilio-Email-Event-Webhook-Timestamp')
-
-      if (!signature || !timestamp) {
-        console.error('Missing signature headers')
-        return new Response(
-          JSON.stringify({ error: 'Missing signature headers' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      const isValid = await verifySignature(sendgridPublicKey, rawBody, signature, timestamp)
-      if (!isValid) {
-        console.error('Invalid webhook signature')
-        return new Response(
-          JSON.stringify({ error: 'Invalid signature' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      console.log('Webhook signature verified successfully')
-    } else {
-      console.warn('SENDGRID_WEBHOOK_PUBLIC_KEY not configured - skipping signature verification')
+    if (!sendgridPublicKey) {
+      console.error('SENDGRID_WEBHOOK_PUBLIC_KEY not configured - rejecting request for security')
+      return new Response(
+        JSON.stringify({ error: 'Webhook signature verification not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
+
+    const signature = req.headers.get('X-Twilio-Email-Event-Webhook-Signature')
+    const timestamp = req.headers.get('X-Twilio-Email-Event-Webhook-Timestamp')
+
+    if (!signature || !timestamp) {
+      console.error('Missing signature headers')
+      return new Response(
+        JSON.stringify({ error: 'Missing signature headers' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const isValid = await verifySignature(sendgridPublicKey, rawBody, signature, timestamp)
+    if (!isValid) {
+      console.error('Invalid webhook signature')
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('Webhook signature verified successfully')
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useUserSettings, useUserSettingsMutations } from '../hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffectiveOwner } from '../hooks/useEffectiveOwner';
@@ -454,7 +455,7 @@ const SettingsPage = ({ t }) => {
                 }}>
                   {formData.signature_html ? (
                     <div
-                      dangerouslySetInnerHTML={{ __html: formData.signature_html }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formData.signature_html) }}
                       style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', color: '#333' }}
                     />
                   ) : (

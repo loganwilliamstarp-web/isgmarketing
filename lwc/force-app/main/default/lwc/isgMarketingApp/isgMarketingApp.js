@@ -6,8 +6,6 @@ export default class IsgMarketingApp extends LightningElement {
 
     userId = currentUserId;
     iframeLoaded = false;
-    _contentHeight = 0;
-    _scale = 1;
     _availableHeight = 800;
 
     get iframeUrl() {
@@ -28,10 +26,8 @@ export default class IsgMarketingApp extends LightningElement {
     }
 
     get iframeStyle() {
-        // Scale the iframe so the full content fits in the available space
-        // transform-origin top-left, then scale width back up so it fills horizontally
-        const invScale = 1 / this._scale;
-        return `width:${invScale * 100}%;height:${invScale * 100}%;transform:scale(${this._scale});transform-origin:top left;border:none;`;
+        // Let the iframe fill the container at full size — scrolling is handled inside the app
+        return 'width:100%;height:100%;border:none;';
     }
 
     handleIframeLoad() {
@@ -44,23 +40,10 @@ export default class IsgMarketingApp extends LightningElement {
 
         const rect = container.getBoundingClientRect();
         this._availableHeight = Math.max(window.innerHeight - rect.top, 300);
-
-        if (this._contentHeight > 0 && this._contentHeight > this._availableHeight) {
-            this._scale = this._availableHeight / this._contentHeight;
-        } else {
-            this._scale = 1;
-        }
     }
 
     connectedCallback() {
-        this._messageHandler = (event) => {
-            if (event.data && event.data.type === 'isg-iframe-resize') {
-                this._contentHeight = event.data.height;
-                this._updateLayout();
-            }
-        };
         this._resizeHandler = () => this._updateLayout();
-        window.addEventListener('message', this._messageHandler);
         window.addEventListener('resize', this._resizeHandler);
     }
 
@@ -69,9 +52,6 @@ export default class IsgMarketingApp extends LightningElement {
     }
 
     disconnectedCallback() {
-        if (this._messageHandler) {
-            window.removeEventListener('message', this._messageHandler);
-        }
         if (this._resizeHandler) {
             window.removeEventListener('resize', this._resizeHandler);
         }

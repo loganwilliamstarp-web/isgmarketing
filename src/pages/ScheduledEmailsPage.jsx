@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useScheduledEmails, useScheduledEmailMutations } from '../hooks';
 import { accountsService } from '../services/accounts';
 import { userSettingsService } from '../services/userSettings';
@@ -250,7 +251,7 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
             </div>
           ) : htmlContent ? (
             <div
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(htmlContent) }}
               style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}
             />
           ) : (

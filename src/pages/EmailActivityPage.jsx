@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useEmailActivityFeed } from '../hooks';
 
 // Loading skeleton
@@ -279,7 +280,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
           ) : isReply && (activity.snippet || activity.body_text || activity.body_html) ? (
             <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}>
               {activity.body_html ? (
-                <div dangerouslySetInnerHTML={{ __html: fixEncodingIssues(activity.body_html) }} />
+                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fixEncodingIssues(activity.body_html)) }} />
               ) : (
                 <div style={{ whiteSpace: 'pre-wrap' }}>{fixEncodingIssues(activity.snippet || activity.body_text)}</div>
               )}
@@ -297,7 +298,7 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
           ) : getBodyContent() ? (
             <div
               dangerouslySetInnerHTML={{
-                __html: `<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` + getBodyContent()
+                __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` + getBodyContent())
               }}
               style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}
             />
@@ -344,7 +345,14 @@ const EmailActivityPage = ({ t }) => {
   const [typeFilter, setTypeFilter] = useState('All');
   const [previewActivity, setPreviewActivity] = useState(null);
 
-  const { data: activities, isLoading } = useEmailActivityFeed({ limit: 100 });
+  // Pass typeFilter to service so it queries only the relevant type
+  // This ensures filtered views (e.g. "Replied") get a full set of results
+  // instead of being crowded out by more numerous sends/opens
+  const activeTypeFilter = typeFilter === 'All' ? null : typeFilter.toLowerCase();
+  const { data: activities, isLoading } = useEmailActivityFeed({
+    limit: 100,
+    typeFilter: activeTypeFilter
+  });
 
   const typeOptions = ['All', 'Sent', 'Opened', 'Clicked', 'Replied'];
 
@@ -355,10 +363,8 @@ const EmailActivityPage = ({ t }) => {
     replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
   };
 
-  const filteredActivities = activities?.filter(activity => {
-    if (typeFilter === 'All') return true;
-    return activity.type.toLowerCase() === typeFilter.toLowerCase();
-  });
+  // Activities are already filtered server-side when a type is selected
+  const filteredActivities = activities;
 
   return (
     <div>
