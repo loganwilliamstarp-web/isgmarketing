@@ -56,9 +56,34 @@ serve(async (req) => {
       )
     }
 
+    // Check suppression list (bounced or spam-reported emails) before anything else
+    const recipientEmail = email.to_email
+    if (recipientEmail) {
+      const { data: suppressed } = await supabaseClient
+        .from('email_suppressions')
+        .select('id')
+        .ilike('email', recipientEmail.trim())
+        .limit(1)
+
+      if (suppressed && suppressed.length > 0) {
+        await supabaseClient
+          .from('scheduled_emails')
+          .update({
+            status: 'Cancelled',
+            error_message: 'Recipient is on suppression list (previous bounce or spam report)',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scheduledEmailId)
+
+        return new Response(
+          JSON.stringify({ success: false, error: 'Recipient is on suppression list - cannot send' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Check email validation status - perform JIT validation if needed
     const account = email.account || {}
-    const recipientEmail = email.to_email
     const currentStatus = account.email_validation_status || 'unknown'
 
     // Check if validation is expired (> 90 days old) or never done

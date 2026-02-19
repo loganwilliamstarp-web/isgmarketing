@@ -381,9 +381,11 @@ async function processEvent(supabase: any, event: SendGridEvent): Promise<void> 
         })
         .eq('id', logId)
 
-      // Add to suppression list for hard bounces
+      // Add to suppression list for hard bounces and mark account email as invalid
       if (event.type === 'bounce' && event.email) {
         await addToSuppressionList(supabase, event.email, 'bounce', event.reason)
+        // Mark the account's email as invalid so it's blocked from future sends
+        await markAccountEmailInvalid(supabase, event.email, `hard_bounce: ${event.reason || 'unknown'}`)
       }
       break
 
@@ -407,9 +409,10 @@ async function processEvent(supabase: any, event: SendGridEvent): Promise<void> 
         })
         .eq('id', logId)
 
-      // Add to suppression list
+      // Add to suppression list and mark account email as invalid
       if (event.email) {
         await addToSuppressionList(supabase, event.email, 'spam_report')
+        await markAccountEmailInvalid(supabase, event.email, 'spam_report')
       }
       break
 
@@ -465,6 +468,42 @@ async function addToSuppressionList(
       details,
       created_at: new Date().toISOString()
     })
+}
+
+async function markAccountEmailInvalid(
+  supabase: any,
+  email: string,
+  reason: string
+): Promise<void> {
+  // Find accounts with this email and mark their validation status as invalid
+  // This prevents future sends to bounced/spam-reported addresses
+  const { data: accounts, error } = await supabase
+    .from('accounts')
+    .select('account_unique_id')
+    .or(`person_email.ilike.${email.trim()},email.ilike.${email.trim()}`)
+
+  if (error) {
+    console.error('Error finding accounts for email invalidation:', error)
+    return
+  }
+
+  if (accounts && accounts.length > 0) {
+    const accountIds = accounts.map((a: any) => a.account_unique_id)
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        email_validation_status: 'invalid',
+        email_validation_reason: reason,
+        email_validated_at: new Date().toISOString()
+      })
+      .in('account_unique_id', accountIds)
+
+    if (updateError) {
+      console.error('Error marking account email as invalid:', updateError)
+    } else {
+      console.log(`Marked ${accountIds.length} account(s) as invalid for email: ${email} (reason: ${reason})`)
+    }
+  }
 }
 
 async function addToUnsubscribeList(

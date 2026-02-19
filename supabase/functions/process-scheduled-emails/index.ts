@@ -681,6 +681,17 @@ async function verifyAccountQualifies(
     return { qualifies: false, reason: 'Email is on unsubscribe list' }
   }
 
+  // Check suppression list (bounced or spam-reported emails)
+  const { data: suppressed } = await supabase
+    .from('email_suppressions')
+    .select('id')
+    .ilike('email', recipientEmail.trim())
+    .limit(1)
+
+  if (suppressed && suppressed.length > 0) {
+    return { qualifies: false, reason: 'Email is on suppression list (previous bounce or spam report)' }
+  }
+
   // Verify the trigger condition still applies (for policy-based triggers)
   if (email.trigger_field === 'policy_expiration' || email.trigger_field === 'policy_effective') {
     const dateField = email.trigger_field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
@@ -803,6 +814,25 @@ async function processReadyEmails(
             .update({
               status: 'Cancelled',
               error_message: 'Recipient unsubscribed before send',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', email.id)
+          continue
+        }
+
+        // Check suppression list (bounced or spam-reported emails)
+        const { data: suppressed } = await supabase
+          .from('email_suppressions')
+          .select('id')
+          .ilike('email', recipientEmail.trim())
+          .limit(1)
+
+        if (suppressed && suppressed.length > 0) {
+          await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'Cancelled',
+              error_message: 'Recipient is on suppression list (previous bounce or spam report)',
               updated_at: new Date().toISOString()
             })
             .eq('id', email.id)

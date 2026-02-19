@@ -237,7 +237,7 @@ export const massEmailsService = {
     // Get all accounts first (we'll filter client-side for group OR logic)
     let query = supabase
       .from('accounts')
-      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street, created_at, owner_id');
+      .select('account_unique_id, name, person_email, email, account_status, primary_contact_first_name, primary_contact_last_name, person_has_opted_out_of_email, billing_city, billing_state, billing_postal_code, billing_street, created_at, owner_id, email_validation_status');
 
     // Apply owner filter unless allAccounts is true (for admin testing master automations)
     if (!allAccounts && ownerIds.length > 0) {
@@ -266,10 +266,16 @@ export const massEmailsService = {
     const { data: accounts, error } = await query;
     if (error) throw error;
 
-    // Filter to only include accounts with valid emails
+    // Filter to only include accounts with valid, validated emails
+    // Reject invalid/risky emails to protect sender reputation
     let filteredAccounts = accounts.filter(account => {
       const email = account.person_email || account.email;
-      return email && email.includes('@');
+      if (!email || !email.includes('@')) return false;
+      const status = account.email_validation_status;
+      // Allow 'valid' and 'unknown'/null (not yet validated — will be caught by JIT at send time)
+      // Block 'invalid' and 'risky' which are known bad
+      if (status === 'invalid' || status === 'risky') return false;
+      return true;
     });
 
     // If no filter groups, return all accounts
@@ -1297,10 +1303,39 @@ export const massEmailsService = {
       throw new Error('No eligible recipients - all have received this template within the last 7 days');
     }
 
+    // Filter out suppressed emails (bounced or spam-reported)
+    let suppressedCount = 0;
+    let finalRecipients = eligibleRecipients;
+    if (eligibleRecipients.length > 0) {
+      const recipientEmails = eligibleRecipients.map(r =>
+        (r.person_email || r.email || '').toLowerCase().trim()
+      );
+      const { data: suppressions } = await supabase
+        .from('email_suppressions')
+        .select('email')
+        .in('email', recipientEmails);
+
+      if (suppressions && suppressions.length > 0) {
+        const suppressedSet = new Set(suppressions.map(s => s.email.toLowerCase().trim()));
+        finalRecipients = eligibleRecipients.filter(r => {
+          const email = (r.person_email || r.email || '').toLowerCase().trim();
+          if (suppressedSet.has(email)) {
+            suppressedCount++;
+            return false;
+          }
+          return true;
+        });
+      }
+    }
+
+    if (finalRecipients.length === 0) {
+      throw new Error('No eligible recipients - all are suppressed, recently sent, or have invalid emails');
+    }
+
     const sendTime = scheduledFor || new Date().toISOString();
 
     // Create scheduled emails for each eligible recipient
-    const scheduledEmails = eligibleRecipients.map(recipient => ({
+    const scheduledEmails = finalRecipients.map(recipient => ({
       owner_id: ownerId,
       account_id: recipient.account_unique_id,
       template_id: batch.template_id,
@@ -1335,16 +1370,17 @@ export const massEmailsService = {
     // Update batch status
     await this.update(ownerIds, batchId, {
       status: scheduledFor ? 'Scheduled' : 'Sending',
-      total_recipients: eligibleRecipients.length,
+      total_recipients: finalRecipients.length,
       scheduled_for: sendTime,
       started_at: scheduledFor ? null : new Date().toISOString()
     });
 
     return {
       scheduled: totalCreated,
-      total: eligibleRecipients.length,
+      total: finalRecipients.length,
       duplicatesRemoved: duplicateCount,
       recentlySentSkipped: templateDuplicateCount,
+      suppressedSkipped: suppressedCount,
       scheduledFor: sendTime
     };
   },
