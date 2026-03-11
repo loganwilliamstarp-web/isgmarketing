@@ -1,5 +1,6 @@
 -- Migration: Fix RLS security issues
 -- Re-enables RLS on tables that had it disabled and tightens permissive policies
+-- Note: All statements use IF EXISTS/IF NOT EXISTS for idempotency
 
 -- ============================================
 -- 1. Re-enable RLS on sender_domains
@@ -71,7 +72,7 @@ CREATE POLICY "Users can view own email stats"
     )
     OR current_setting('app.current_user_id', true) IN (
       SELECT user_unique_id FROM users
-      WHERE is_agency_admin = true
+      WHERE marketing_cloud_agency_admin = true
       AND profile_name = (
         SELECT profile_name FROM users WHERE user_unique_id = email_stats_daily.owner_id
       )
@@ -99,7 +100,7 @@ CREATE POLICY "Users can view own NPS stats"
     )
     OR current_setting('app.current_user_id', true) IN (
       SELECT user_unique_id FROM users
-      WHERE is_agency_admin = true
+      WHERE marketing_cloud_agency_admin = true
       AND profile_name = (
         SELECT profile_name FROM users WHERE user_unique_id = nps_stats_daily.owner_id
       )
