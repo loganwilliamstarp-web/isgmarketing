@@ -15,7 +15,10 @@ import {
   useEmailTimeSeries,
   useAgencyBreakdown,
   useSystemHealth,
-  useRecentActivity
+  useRecentActivity,
+  useEmailReplyAnalytics,
+  useQuoteOpportunities,
+  useSoldAccounts
 } from '../hooks/useMasterAdminAnalytics';
 import { LineChart } from '../components/charts';
 
@@ -783,6 +786,9 @@ const MasterAdminDashboardPage = ({ t }) => {
   const { data: agencyBreakdown, isLoading: breakdownLoading } = useAgencyBreakdown();
   const { data: systemHealth, isLoading: healthLoading } = useSystemHealth();
   const { data: recentActivity, isLoading: activityLoading } = useRecentActivity(20);
+  const { data: emailReplyAnalytics, isLoading: repliesAnalyticsLoading } = useEmailReplyAnalytics(timeRange);
+  const { data: quoteOpportunities, isLoading: quotesLoading } = useQuoteOpportunities();
+  const { data: soldAccounts, isLoading: soldLoading } = useSoldAccounts();
 
   // Redirect non-admins
   if (!isAdmin) {
@@ -864,7 +870,19 @@ const MasterAdminDashboardPage = ({ t }) => {
     { header: 'Automation', key: 'name', render: (row) => <span style={{ fontWeight: '500' }}>{row.name}</span> },
     { header: 'Owner', key: 'ownerName', render: (row) => <span style={{ color: t.textMuted }}>{row.ownerName}</span> },
     { header: 'Sent', key: 'sent', align: 'right', render: (row) => formatNumber(row.sent) },
-    { header: 'Open Rate', key: 'openRate', align: 'right', render: (row) => <span style={{ color: '#22c55e', fontWeight: '600' }}>{formatPercent(row.openRate)}</span> }
+    { header: 'Open Rate', key: 'openRate', align: 'right', render: (row) => <span style={{ color: '#22c55e', fontWeight: '600' }}>{formatPercent(row.openRate)}</span> },
+    { header: 'Sold', key: 'sold', align: 'right', render: (row) => (
+      <span style={{
+        color: row.sold > 0 ? '#22c55e' : t.textMuted,
+        fontWeight: row.sold > 0 ? '700' : '400',
+        backgroundColor: row.sold > 0 ? '#dcfce7' : 'transparent',
+        padding: row.sold > 0 ? '2px 8px' : '0',
+        borderRadius: '10px',
+        fontSize: '12px'
+      }}>
+        {row.sold || 0}
+      </span>
+    )}
   ];
 
   const userColumns = [
@@ -1373,6 +1391,361 @@ const MasterAdminDashboardPage = ({ t }) => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ============================================ */}
+      {/* SALES PIPELINE ANALYTICS */}
+      {/* ============================================ */}
+
+      {/* Pipeline Overview Cards */}
+      <div style={{
+        background: `linear-gradient(135deg, ${t.primary}08 0%, ${t.bgCard} 100%)`,
+        borderRadius: '20px',
+        border: `1px solid ${t.border}`,
+        padding: '24px',
+        marginBottom: '24px'
+      }}>
+        <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '700', color: t.text, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          Sales Pipeline Analytics
+          <span style={{ fontSize: '12px', fontWeight: '500', color: t.textMuted, padding: '3px 10px', backgroundColor: t.bgHover, borderRadius: '12px' }}>
+            Email-Driven Conversions
+          </span>
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+          <StatCard
+            label="Email Replies"
+            value={formatNumber(emailReplyAnalytics?.totalReplies)}
+            trend={emailReplyAnalytics?.changePercent}
+            trendLabel="vs prev period"
+            icon="💬"
+            color="#f59e0b"
+            isLoading={repliesAnalyticsLoading}
+            large
+            theme={t}
+          />
+          <StatCard
+            label="Quote Opportunities"
+            value={formatNumber(quoteOpportunities?.totalOpportunities)}
+            subValue={`${formatNumber(quoteOpportunities?.totalProspects)} prospects, ${formatNumber(quoteOpportunities?.totalLeads)} leads`}
+            icon="📋"
+            color="#3b82f6"
+            isLoading={quotesLoading}
+            large
+            theme={t}
+          />
+          <StatCard
+            label="Sold (Email-Driven)"
+            value={formatNumber(soldAccounts?.totalSold)}
+            subValue={`of ${formatNumber(soldAccounts?.totalCustomers)} total customers`}
+            icon="🎯"
+            color="#22c55e"
+            isLoading={soldLoading}
+            large
+            theme={t}
+          />
+          <StatCard
+            label="Prior Customers"
+            value={formatNumber(soldAccounts?.totalPriorCustomers)}
+            subValue="win-back opportunity"
+            icon="🔄"
+            color="#8b5cf6"
+            isLoading={soldLoading}
+            large
+            theme={t}
+          />
+        </div>
+      </div>
+
+      {/* Email Replies Detail + Recent Inbound Replies */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+        {/* Replies by Agency */}
+        <div style={{
+          backgroundColor: t.bgCard,
+          borderRadius: '16px',
+          border: `1px solid ${t.border}`,
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: `1px solid ${t.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Replies by Agency</h3>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Last {timeRange} days</span>
+          </div>
+          <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+            {repliesAnalyticsLoading ? (
+              <div style={{ padding: '20px' }}>
+                {[...Array(5)].map((_, i) => <Skeleton key={i} height="40px" style={{ marginBottom: '8px' }} />)}
+              </div>
+            ) : !emailReplyAnalytics?.agencyBreakdown?.length ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: t.textMuted }}>No reply data available</div>
+            ) : (
+              emailReplyAnalytics.agencyBreakdown.map((agency, i) => (
+                <div key={i} style={{
+                  padding: '14px 20px',
+                  borderBottom: `1px solid ${t.borderLight}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{agency.name}</div>
+                    <div style={{ fontSize: '11px', color: t.textMuted }}>{agency.uniqueAccounts} unique accounts</div>
+                  </div>
+                  <div style={{
+                    padding: '4px 12px',
+                    backgroundColor: '#fef3c7',
+                    color: '#92400e',
+                    borderRadius: '20px',
+                    fontSize: '13px',
+                    fontWeight: '600'
+                  }}>
+                    {agency.count} {agency.count === 1 ? 'reply' : 'replies'}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Recent Inbound Replies */}
+        <div style={{
+          backgroundColor: t.bgCard,
+          borderRadius: '16px',
+          border: `1px solid ${t.border}`,
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: `1px solid ${t.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Recent Email Replies</h3>
+            <span style={{ fontSize: '11px', color: t.textMuted }}>from inbound parse</span>
+          </div>
+          <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+            {repliesAnalyticsLoading ? (
+              <div style={{ padding: '20px' }}>
+                {[...Array(5)].map((_, i) => <Skeleton key={i} height="50px" style={{ marginBottom: '8px' }} />)}
+              </div>
+            ) : !emailReplyAnalytics?.recentReplies?.length ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: t.textMuted }}>No recent replies</div>
+            ) : (
+              emailReplyAnalytics.recentReplies.map((reply, i) => (
+                <div key={i} style={{
+                  padding: '12px 20px',
+                  borderBottom: `1px solid ${t.borderLight}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: t.text }}>{reply.accountName}</div>
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      backgroundColor: reply.accountStatus === 'customer' ? '#dcfce7' : reply.accountStatus === 'prospect' ? '#dbeafe' : '#f3f4f6',
+                      color: reply.accountStatus === 'customer' ? '#166534' : reply.accountStatus === 'prospect' ? '#1e40af' : '#6b7280',
+                      fontWeight: '500',
+                      textTransform: 'capitalize'
+                    }}>
+                      {reply.accountStatus}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: t.textMuted, marginBottom: '2px' }}>
+                    Re: {reply.subject || 'No subject'}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: t.textMuted }}>
+                    <span>{reply.ownerName} ({reply.agency})</span>
+                    <span>{new Date(reply.repliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quote Opportunities + Sold Accounts Tables */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+        {/* Quote Opportunities (Prospects & Leads) */}
+        <div style={{
+          backgroundColor: t.bgCard,
+          borderRadius: '16px',
+          border: `1px solid ${t.border}`,
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: `1px solid ${t.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Quote Opportunities</h3>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Prospects & Leads</span>
+          </div>
+
+          {/* Opportunities by Agency */}
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.borderLight}`, backgroundColor: t.bgHover }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', marginBottom: '10px' }}>By Agency</div>
+            {quotesLoading ? (
+              <Skeleton height="40px" />
+            ) : !quoteOpportunities?.agencyBreakdown?.length ? (
+              <div style={{ fontSize: '12px', color: t.textMuted }}>No data</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {quoteOpportunities.agencyBreakdown.slice(0, 8).map((agency, i) => (
+                  <div key={i} style={{
+                    padding: '6px 12px',
+                    backgroundColor: t.bgCard,
+                    borderRadius: '8px',
+                    border: `1px solid ${t.border}`,
+                    fontSize: '12px'
+                  }}>
+                    <span style={{ fontWeight: '500', color: t.text }}>{agency.name}</span>
+                    <span style={{ marginLeft: '6px', fontWeight: '700', color: '#3b82f6' }}>{agency.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Prospects/Leads */}
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            {quotesLoading ? (
+              <div style={{ padding: '20px' }}>
+                {[...Array(5)].map((_, i) => <Skeleton key={i} height="40px" style={{ marginBottom: '8px' }} />)}
+              </div>
+            ) : !quoteOpportunities?.recentList?.length ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: t.textMuted }}>No prospects or leads found</div>
+            ) : (
+              quoteOpportunities.recentList.map((item, i) => (
+                <div key={i} style={{
+                  padding: '12px 20px',
+                  borderBottom: `1px solid ${t.borderLight}`,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{item.name}</div>
+                    <div style={{ fontSize: '11px', color: t.textMuted }}>
+                      {item.ownerName}{item.agency ? ` - ${item.agency}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      backgroundColor: item.status?.toLowerCase() === 'prospect' ? '#dbeafe' : '#fef3c7',
+                      color: item.status?.toLowerCase() === 'prospect' ? '#1e40af' : '#92400e',
+                      fontWeight: '500',
+                      textTransform: 'capitalize'
+                    }}>
+                      {item.status}
+                    </span>
+                    <span style={{ fontSize: '11px', color: t.textMuted }}>
+                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Sold Accounts (Email-Driven Conversions) */}
+        <div style={{
+          backgroundColor: t.bgCard,
+          borderRadius: '16px',
+          border: `1px solid ${t.border}`,
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: `1px solid ${t.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Sold Accounts</h3>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Emailed → Customer</span>
+          </div>
+
+          {/* Sold by Agency */}
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.borderLight}`, backgroundColor: t.bgHover }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: t.textMuted, textTransform: 'uppercase', marginBottom: '10px' }}>By Agency</div>
+            {soldLoading ? (
+              <Skeleton height="40px" />
+            ) : !soldAccounts?.agencyBreakdown?.length ? (
+              <div style={{ fontSize: '12px', color: t.textMuted }}>No data</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {soldAccounts.agencyBreakdown.slice(0, 8).map((agency, i) => (
+                  <div key={i} style={{
+                    padding: '6px 12px',
+                    backgroundColor: t.bgCard,
+                    borderRadius: '8px',
+                    border: `1px solid ${t.border}`,
+                    fontSize: '12px'
+                  }}>
+                    <span style={{ fontWeight: '500', color: t.text }}>{agency.name}</span>
+                    <span style={{ marginLeft: '6px', fontWeight: '700', color: '#22c55e' }}>{agency.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Sold */}
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            {soldLoading ? (
+              <div style={{ padding: '20px' }}>
+                {[...Array(5)].map((_, i) => <Skeleton key={i} height="40px" style={{ marginBottom: '8px' }} />)}
+              </div>
+            ) : !soldAccounts?.recentList?.length ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: t.textMuted }}>No email-driven conversions yet</div>
+            ) : (
+              soldAccounts.recentList.map((item, i) => (
+                <div key={i} style={{
+                  padding: '12px 20px',
+                  borderBottom: `1px solid ${t.borderLight}`,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                      {item.name}
+                      <span style={{
+                        marginLeft: '8px',
+                        fontSize: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        backgroundColor: '#dcfce7',
+                        color: '#166534',
+                        fontWeight: '500'
+                      }}>
+                        Sold
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: t.textMuted }}>
+                      {item.ownerName}{item.agency ? ` - ${item.agency}` : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', color: t.textMuted }}>
+                    {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

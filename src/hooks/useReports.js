@@ -77,9 +77,25 @@ export function useCohortAnalysis(options = {}) {
   });
 }
 
+/**
+ * Get pipeline/conversion report data
+ * @param {Object} options - { days }
+ */
+export function usePipelineReport(options = {}) {
+  const { ownerIds, filterKey } = useEffectiveOwner();
+
+  return useQuery({
+    queryKey: ['reports', filterKey, 'pipeline', options],
+    queryFn: () => reportsService.getPipelineReport(ownerIds, options),
+    enabled: ownerIds.length > 0,
+    staleTime: 60000
+  });
+}
+
 export default {
   useReportsDashboard,
   useEmailPerformanceReport,
   useReportExport,
-  useCohortAnalysis
+  useCohortAnalysis,
+  usePipelineReport
 };

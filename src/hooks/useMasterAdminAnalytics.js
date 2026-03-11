@@ -117,6 +117,39 @@ export function useRecentActivity(limit = 20) {
   });
 }
 
+/**
+ * Get detailed email reply analytics
+ */
+export function useEmailReplyAnalytics(days = 30) {
+  return useQuery({
+    queryKey: ['masterAdmin', 'emailReplyAnalytics', days],
+    queryFn: () => masterAdminAnalyticsService.getEmailReplyAnalytics(days),
+    staleTime: 60000
+  });
+}
+
+/**
+ * Get quote opportunity analytics (prospects & leads)
+ */
+export function useQuoteOpportunities() {
+  return useQuery({
+    queryKey: ['masterAdmin', 'quoteOpportunities'],
+    queryFn: () => masterAdminAnalyticsService.getQuoteOpportunities(),
+    staleTime: 120000
+  });
+}
+
+/**
+ * Get sold account analytics (emailed accounts that became customers)
+ */
+export function useSoldAccounts() {
+  return useQuery({
+    queryKey: ['masterAdmin', 'soldAccounts'],
+    queryFn: () => masterAdminAnalyticsService.getSoldAccounts(),
+    staleTime: 120000
+  });
+}
+
 export default {
   usePlatformOverview,
   useTopAgencies,
@@ -127,5 +160,8 @@ export default {
   useEmailTimeSeries,
   useAgencyBreakdown,
   useSystemHealth,
-  useRecentActivity
+  useRecentActivity,
+  useEmailReplyAnalytics,
+  useQuoteOpportunities,
+  useSoldAccounts
 };

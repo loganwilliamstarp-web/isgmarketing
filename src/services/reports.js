@@ -269,6 +269,46 @@ export const reportsService = {
         : `full-report-${new Date().toISOString().split('T')[0]}.csv`;
     }
 
+    if (reportType === 'pipeline' || reportType === 'all') {
+      if (csvContent) csvContent += '\n\n';
+
+      const pipelineData = await this.getPipelineReport(ownerIds, { days });
+
+      csvContent += 'Pipeline & Conversion Report\n';
+      csvContent += `Period: Last ${days} days\n`;
+      csvContent += `Generated: ${new Date().toISOString()}\n\n`;
+
+      csvContent += 'Account Status Breakdown\n';
+      csvContent += `Customers,${pipelineData.statusCounts?.customer || 0}\n`;
+      csvContent += `Prospects,${pipelineData.statusCounts?.prospect || 0}\n`;
+      csvContent += `Leads,${pipelineData.statusCounts?.lead || 0}\n`;
+      csvContent += `Prior Customers,${pipelineData.statusCounts?.prior_customer || 0}\n`;
+      csvContent += `Total Accounts,${pipelineData.totalAccounts || 0}\n\n`;
+
+      csvContent += 'Reply Metrics\n';
+      csvContent += `Total Replies,${pipelineData.totalReplies || 0}\n`;
+      csvContent += `Unique Accounts Replied,${pipelineData.uniqueAccountsReplied || 0}\n`;
+      csvContent += `Change vs Previous Period,${pipelineData.replyChange || 0}%\n\n`;
+
+      csvContent += 'Conversion Metrics\n';
+      csvContent += `Email-Driven Sold,${pipelineData.totalSold || 0}\n`;
+      csvContent += `Total Customers,${pipelineData.totalCustomers || 0}\n`;
+      csvContent += `Quote Opportunities,${pipelineData.totalOpportunities || 0}\n`;
+      csvContent += `Prior Customers (Win-Back),${pipelineData.totalPriorCustomers || 0}\n\n`;
+
+      csvContent += 'Daily Reply Trend\n';
+      csvContent += 'Date,Replies\n';
+      (pipelineData.replyTimeSeries || []).forEach(row => {
+        csvContent += `${row.date},${row.replies}\n`;
+      });
+
+      if (reportType === 'pipeline') {
+        filename = `pipeline-report-${new Date().toISOString().split('T')[0]}.csv`;
+      } else {
+        filename = `full-report-${new Date().toISOString().split('T')[0]}.csv`;
+      }
+    }
+
     return {
       content: csvContent,
       filename,
@@ -362,6 +402,188 @@ export const reportsService = {
       .sort((a, b) => a.period.localeCompare(b.period));
 
     return result;
+  },
+
+  /**
+   * Get pipeline/conversion metrics for the user's accounts
+   * Includes: account status breakdown, reply analytics, sold accounts, quote opportunities
+   * @param {string|string[]} ownerIds - Owner ID(s) for filtering
+   * @param {Object} options - { days }
+   */
+  async getPipelineReport(ownerIds, options = {}) {
+    const { days = 30 } = options;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const prevStartDate = new Date();
+    prevStartDate.setDate(prevStartDate.getDate() - days * 2);
+
+    const ownerArray = Array.isArray(ownerIds) ? ownerIds : [ownerIds];
+
+    // Parallel fetch all pipeline data
+    const [
+      accountsByStatus,
+      repliedEmails,
+      prevRepliedEmails,
+      recentReplies,
+      soldQuery,
+      emailedAccountIds
+    ] = await Promise.all([
+      // Account status breakdown
+      supabase
+        .from('accounts')
+        .select('account_status')
+        .in('owner_id', ownerArray),
+
+      // Replies this period
+      (() => {
+        let q = supabase
+          .from('email_logs')
+          .select(`
+            first_replied_at,
+            to_email,
+            subject,
+            account_id,
+            account:accounts(name, account_status)
+          `)
+          .not('first_replied_at', 'is', null)
+          .gte('first_replied_at', startDate.toISOString());
+        return applyOwnerFilter(q, ownerIds);
+      })(),
+
+      // Replies previous period (for comparison)
+      (() => {
+        let q = supabase
+          .from('email_logs')
+          .select('first_replied_at')
+          .not('first_replied_at', 'is', null)
+          .gte('first_replied_at', prevStartDate.toISOString())
+          .lt('first_replied_at', startDate.toISOString());
+        return applyOwnerFilter(q, ownerIds);
+      })(),
+
+      // Recent replies with details
+      (() => {
+        let q = supabase
+          .from('email_logs')
+          .select(`
+            first_replied_at,
+            to_email,
+            subject,
+            account_id,
+            account:accounts(name, account_status)
+          `)
+          .not('first_replied_at', 'is', null)
+          .order('first_replied_at', { ascending: false })
+          .limit(15);
+        return applyOwnerFilter(q, ownerIds);
+      })(),
+
+      // Customer accounts (potential sold)
+      supabase
+        .from('accounts')
+        .select('account_unique_id, name, person_email, account_status, created_at')
+        .in('owner_id', ownerArray)
+        .ilike('account_status', 'customer'),
+
+      // All email_logs account_ids for this user (to find email-driven conversions)
+      (() => {
+        let q = supabase
+          .from('email_logs')
+          .select('account_id')
+          .not('account_id', 'is', null);
+        return applyOwnerFilter(q, ownerIds);
+      })()
+    ]);
+
+    // Account status breakdown
+    const statusCounts = { customer: 0, prospect: 0, prior_customer: 0, lead: 0, other: 0 };
+    (accountsByStatus.data || []).forEach(a => {
+      const status = (a.account_status || '').toLowerCase();
+      if (statusCounts[status] !== undefined) {
+        statusCounts[status]++;
+      } else {
+        statusCounts.other++;
+      }
+    });
+    const totalAccounts = (accountsByStatus.data || []).length;
+
+    // Reply analytics
+    const replies = repliedEmails.data || [];
+    const totalReplies = replies.length;
+    const prevReplyCount = prevRepliedEmails.data?.length || 0;
+    const replyChange = prevReplyCount > 0
+      ? Math.round(((totalReplies - prevReplyCount) / prevReplyCount) * 100)
+      : 0;
+
+    // Unique accounts that replied
+    const repliedAccountIds = new Set();
+    replies.forEach(r => { if (r.account_id) repliedAccountIds.add(r.account_id); });
+
+    // Recent replies list
+    const recentReplyList = (recentReplies.data || []).map(r => ({
+      accountName: r.account?.name || r.to_email,
+      accountStatus: r.account?.account_status || 'Unknown',
+      subject: r.subject,
+      repliedAt: r.first_replied_at
+    }));
+
+    // Sold accounts (customers that received emails)
+    const emailedIds = new Set((emailedAccountIds.data || []).map(e => e.account_id));
+    const customerData = soldQuery.data || [];
+    const soldAccounts = customerData.filter(c => emailedIds.has(c.account_unique_id));
+
+    const recentSold = soldAccounts
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 10)
+      .map(c => ({
+        name: c.name,
+        email: c.person_email,
+        createdAt: c.created_at
+      }));
+
+    // Replies by day for chart
+    const dailyReplies = {};
+    replies.forEach(r => {
+      const date = r.first_replied_at?.split('T')[0];
+      if (date) dailyReplies[date] = (dailyReplies[date] || 0) + 1;
+    });
+
+    // Fill in missing dates
+    const replyTimeSeries = [];
+    const current = new Date(startDate);
+    const now = new Date();
+    while (current <= now) {
+      const dateStr = current.toISOString().split('T')[0];
+      replyTimeSeries.push({ date: dateStr, replies: dailyReplies[dateStr] || 0 });
+      current.setDate(current.getDate() + 1);
+    }
+
+    return {
+      // Account breakdown
+      statusCounts,
+      totalAccounts,
+
+      // Reply metrics
+      totalReplies,
+      replyChange,
+      uniqueAccountsReplied: repliedAccountIds.size,
+      recentReplies: recentReplyList,
+      replyTimeSeries,
+
+      // Sold metrics
+      totalCustomers: customerData.length,
+      totalSold: soldAccounts.length,
+      recentSold,
+
+      // Quote opportunities
+      totalProspects: statusCounts.prospect,
+      totalLeads: statusCounts.lead,
+      totalOpportunities: statusCounts.prospect + statusCounts.lead,
+
+      // Prior customers (win-back)
+      totalPriorCustomers: statusCounts.prior_customer
+    };
   }
 };
 

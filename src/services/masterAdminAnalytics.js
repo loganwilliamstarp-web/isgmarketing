@@ -249,21 +249,25 @@ export const masterAdminAnalyticsService = {
 
   /**
    * Get top automations by performance (from email_logs)
+   * Includes "sold" count: accounts emailed by this automation that are now customers
    */
   async getTopAutomations(limit = 10) {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 30); // Look at last 30 days for better data
 
-    // Get emails with automation info
+    // Get emails with automation info + account status
     const { data: emails, error } = await supabase
       .from('email_logs')
       .select(`
         automation_id,
+        account_id,
         delivered_at,
         first_opened_at,
         first_clicked_at,
+        first_replied_at,
         automation:automations!inner(id, name, status, owner_id),
-        owner:users(first_name, last_name, profile_name)
+        owner:users(first_name, last_name, profile_name),
+        account:accounts(account_status)
       `)
       .not('automation_id', 'is', null)
       .gte('sent_at', weekAgo.toISOString());
@@ -290,19 +294,28 @@ export const masterAdminAnalyticsService = {
           sent: 0,
           delivered: 0,
           opened: 0,
-          clicked: 0
+          clicked: 0,
+          replied: 0,
+          soldAccountIds: new Set()
         };
       }
       automationStats[autoId].sent++;
       if (email.delivered_at) automationStats[autoId].delivered++;
       if (email.first_opened_at) automationStats[autoId].opened++;
       if (email.first_clicked_at) automationStats[autoId].clicked++;
+      if (email.first_replied_at) automationStats[autoId].replied++;
+      // Track sold: account was emailed by this automation and is now a customer
+      if (email.account_id && email.account?.account_status?.toLowerCase() === 'customer') {
+        automationStats[autoId].soldAccountIds.add(email.account_id);
+      }
     });
 
     return Object.values(automationStats)
       .filter(a => a.sent > 0)
       .map(a => ({
         ...a,
+        sold: a.soldAccountIds.size,
+        soldAccountIds: undefined, // don't send the Set
         openRate: a.delivered > 0 ? Math.round((a.opened / a.delivered) * 1000) / 10 : 0,
         clickRate: a.delivered > 0 ? Math.round((a.clicked / a.delivered) * 1000) / 10 : 0
       }))
@@ -696,6 +709,235 @@ export const masterAdminAnalyticsService = {
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, limit)
       .map(a => ({ ...a, sentAt: a.timestamp }));
+  },
+
+  /**
+   * Get detailed email reply analytics
+   */
+  async getEmailReplyAnalytics(days = 30) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const prevStartDate = new Date();
+    prevStartDate.setDate(prevStartDate.getDate() - days * 2);
+
+    // Current period replies + previous period for comparison
+    const [currentReplies, previousReplies, recentReplyDetails] = await Promise.all([
+      supabase
+        .from('email_logs')
+        .select(`
+          first_replied_at,
+          to_email,
+          subject,
+          account_id,
+          account:accounts(name, account_status),
+          owner:users(first_name, last_name, profile_name)
+        `)
+        .not('first_replied_at', 'is', null)
+        .gte('first_replied_at', startDate.toISOString()),
+
+      supabase
+        .from('email_logs')
+        .select('first_replied_at')
+        .not('first_replied_at', 'is', null)
+        .gte('first_replied_at', prevStartDate.toISOString())
+        .lt('first_replied_at', startDate.toISOString()),
+
+      supabase
+        .from('email_replies')
+        .select('from_email, from_name, subject, created_at, body_text')
+        .order('created_at', { ascending: false })
+        .limit(15)
+    ]);
+
+    const replies = currentReplies.data || [];
+    const prevCount = previousReplies.data?.length || 0;
+    const totalReplies = replies.length;
+    const changePercent = prevCount > 0 ? Math.round(((totalReplies - prevCount) / prevCount) * 100) : 0;
+
+    // Group by agency
+    const byAgency = {};
+    replies.forEach(r => {
+      const agency = r.owner?.profile_name || 'Unknown';
+      if (!byAgency[agency]) byAgency[agency] = { name: agency, count: 0, accounts: new Set() };
+      byAgency[agency].count++;
+      if (r.account?.name) byAgency[agency].accounts.add(r.account.name);
+    });
+
+    const agencyBreakdown = Object.values(byAgency)
+      .map(a => ({ name: a.name, count: a.count, uniqueAccounts: a.accounts.size }))
+      .sort((a, b) => b.count - a.count);
+
+    // Recent replies list
+    const recentReplies = replies
+      .sort((a, b) => new Date(b.first_replied_at) - new Date(a.first_replied_at))
+      .slice(0, 15)
+      .map(r => ({
+        accountName: r.account?.name || r.to_email,
+        accountStatus: r.account?.account_status || 'Unknown',
+        subject: r.subject,
+        ownerName: `${r.owner?.first_name || ''} ${r.owner?.last_name || ''}`.trim(),
+        agency: r.owner?.profile_name,
+        repliedAt: r.first_replied_at
+      }));
+
+    // Replies by day for mini-chart
+    const dailyReplies = {};
+    replies.forEach(r => {
+      const date = r.first_replied_at?.split('T')[0];
+      if (date) dailyReplies[date] = (dailyReplies[date] || 0) + 1;
+    });
+
+    return {
+      totalReplies,
+      changePercent,
+      agencyBreakdown,
+      recentReplies,
+      dailyReplies,
+      recentReplyDetails: (recentReplyDetails.data || []).map(r => ({
+        from: r.from_name || r.from_email,
+        subject: r.subject,
+        preview: (r.body_text || '').substring(0, 120),
+        receivedAt: r.created_at
+      }))
+    };
+  },
+
+  /**
+   * Get quote opportunity analytics (prospects & leads)
+   */
+  async getQuoteOpportunities() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [prospects, leads, recentProspects] = await Promise.all([
+      supabase
+        .from('accounts')
+        .select('account_unique_id, name, account_status, owner_id, created_at, person_email, owner:users(first_name, last_name, profile_name)', { count: 'exact' })
+        .ilike('account_status', 'prospect'),
+
+      supabase
+        .from('accounts')
+        .select('account_unique_id', { count: 'exact' })
+        .ilike('account_status', 'lead'),
+
+      supabase
+        .from('accounts')
+        .select('name, account_status, person_email, created_at, owner:users(first_name, last_name, profile_name)')
+        .or('account_status.ilike.prospect,account_status.ilike.lead')
+        .order('created_at', { ascending: false })
+        .limit(20)
+    ]);
+
+    const prospectData = prospects.data || [];
+    const totalProspects = prospects.count || 0;
+    const totalLeads = leads.count || 0;
+
+    // Group by agency
+    const byAgency = {};
+    prospectData.forEach(p => {
+      const agency = p.owner?.profile_name || 'Unknown';
+      if (!byAgency[agency]) byAgency[agency] = { name: agency, count: 0 };
+      byAgency[agency].count++;
+    });
+
+    const agencyBreakdown = Object.values(byAgency)
+      .sort((a, b) => b.count - a.count);
+
+    // Recent prospects/leads
+    const recentList = (recentProspects.data || []).map(p => ({
+      name: p.name,
+      status: p.account_status,
+      email: p.person_email,
+      ownerName: `${p.owner?.first_name || ''} ${p.owner?.last_name || ''}`.trim(),
+      agency: p.owner?.profile_name,
+      createdAt: p.created_at
+    }));
+
+    return {
+      totalProspects,
+      totalLeads,
+      totalOpportunities: totalProspects + totalLeads,
+      agencyBreakdown,
+      recentList
+    };
+  },
+
+  /**
+   * Get sold account analytics — accounts that received marketing emails
+   * and converted to "customer" status (from prospect/prior_customer).
+   * A "sold" account = has email_logs AND current status is "customer".
+   */
+  async getSoldAccounts() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Step 1: Get all customer accounts
+    const { data: customers, count: totalCustomers } = await supabase
+      .from('accounts')
+      .select('account_unique_id, name, person_email, account_status, created_at, owner_id, owner:users(first_name, last_name, profile_name)', { count: 'exact' })
+      .ilike('account_status', 'customer');
+
+    const customerData = customers || [];
+    const customerIds = customerData.map(c => c.account_unique_id);
+
+    // Step 2: Find which customer accounts were actually emailed (marketing-driven conversions)
+    let soldAccounts = [];
+    let emailedCustomerIds = new Set();
+    if (customerIds.length > 0) {
+      // Query in batches if needed (Supabase has limits on IN clause)
+      const batchSize = 500;
+      for (let i = 0; i < customerIds.length; i += batchSize) {
+        const batch = customerIds.slice(i, i + batchSize);
+        const { data: emailLogs } = await supabase
+          .from('email_logs')
+          .select('account_id')
+          .in('account_id', batch);
+        (emailLogs || []).forEach(e => emailedCustomerIds.add(e.account_id));
+      }
+
+      soldAccounts = customerData.filter(c => emailedCustomerIds.has(c.account_unique_id));
+    }
+
+    const totalSold = soldAccounts.length;
+
+    // Step 3: Get prior_customer count (lost accounts)
+    const { count: totalPriorCustomers } = await supabase
+      .from('accounts')
+      .select('account_unique_id', { count: 'exact' })
+      .ilike('account_status', 'prior_customer');
+
+    // Group sold by agency
+    const byAgency = {};
+    soldAccounts.forEach(c => {
+      const agency = c.owner?.profile_name || 'Unknown';
+      if (!byAgency[agency]) byAgency[agency] = { name: agency, count: 0 };
+      byAgency[agency].count++;
+    });
+
+    const agencyBreakdown = Object.values(byAgency)
+      .sort((a, b) => b.count - a.count);
+
+    // Recent sold (sorted by created_at desc)
+    const recentList = soldAccounts
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 20)
+      .map(c => ({
+        name: c.name,
+        email: c.person_email,
+        ownerName: `${c.owner?.first_name || ''} ${c.owner?.last_name || ''}`.trim(),
+        agency: c.owner?.profile_name,
+        createdAt: c.created_at
+      }));
+
+    return {
+      totalCustomers: totalCustomers || 0,
+      totalSold,
+      totalPriorCustomers: totalPriorCustomers || 0,
+      conversionNote: 'Accounts that received marketing emails and are now customers',
+      agencyBreakdown,
+      recentList
+    };
   },
 
   /**
