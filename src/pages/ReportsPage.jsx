@@ -88,7 +88,7 @@ const ReportsPage = ({ t }) => {
 
   const handleExport = async ({ reportType }) => {
     try {
-      await exportMutation.mutateAsync({ reportType, options: { days: dateRange.days } });
+      await exportMutation.mutateAsync({ reportType, options: { days: dateRange.days }, pipelineData });
     } catch (error) {
       console.error('Export failed:', error);
       alert('Failed to export report: ' + error.message);
@@ -212,7 +212,7 @@ const ReportsPage = ({ t }) => {
             <StatCard
               label="Email Replies"
               value={formatNumber(pipelineData?.totalReplies)}
-              subValue={pipelineData?.replyChange !== 0 ? `${pipelineData?.replyChange > 0 ? '+' : ''}${pipelineData?.replyChange}% vs prev` : `${dateRange.label}`}
+              subValue={pipelineData?.replyChange != null ? `${pipelineData.replyChange > 0 ? '+' : ''}${pipelineData.replyChange}% vs prev` : `${dateRange.label}`}
               icon="💬"
               color="#f59e0b"
               isLoading={pipelineLoading}
@@ -391,9 +391,12 @@ const ReportsPage = ({ t }) => {
               ];
               const maxVal = steps[0].value || 1;
               return (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '80px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
                   {steps.map((step, i) => {
-                    const pct = maxVal > 0 ? (step.value / maxVal) * 100 : 0;
+                    // Log scale so small values (replies) are still visible
+                    const logMax = Math.log10(maxVal + 1);
+                    const logVal = Math.log10(step.value + 1);
+                    const barHeight = step.value === 0 ? 4 : Math.max(10, Math.round((logVal / logMax) * 100));
                     const rate = i > 0 && steps[i - 1].value > 0
                       ? Math.round((step.value / steps[i - 1].value) * 100)
                       : 100;
@@ -404,10 +407,9 @@ const ReportsPage = ({ t }) => {
                         </span>
                         <div style={{
                           width: '100%',
-                          height: `${Math.max(pct, 4)}%`,
+                          height: `${barHeight}px`,
                           backgroundColor: step.color,
                           borderRadius: '4px 4px 0 0',
-                          minHeight: '4px',
                           transition: 'height 0.5s ease'
                         }} />
                         <span style={{ fontSize: '11px', color: t.text, fontWeight: '500' }}>{step.label}</span>
@@ -559,7 +561,7 @@ const ReportsPage = ({ t }) => {
             <StatCard
               label="Email Replies"
               value={formatNumber(pipelineData?.totalReplies)}
-              subValue={pipelineData?.replyChange !== 0 ? `${pipelineData?.replyChange > 0 ? '+' : ''}${pipelineData?.replyChange}% vs prev` : undefined}
+              subValue={pipelineData?.replyChange != null ? `${pipelineData.replyChange > 0 ? '+' : ''}${pipelineData.replyChange}% vs prev` : undefined}
               icon="💬"
               color="#f59e0b"
               isLoading={pipelineLoading}

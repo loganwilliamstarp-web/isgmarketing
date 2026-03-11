@@ -210,7 +210,7 @@ export const reportsService = {
    * @param {string} reportType - 'email'|'nps'|'all'
    * @param {Object} options - { days }
    */
-  async exportReportCSV(ownerIds, reportType = 'all', options = {}) {
+  async exportReportCSV(ownerIds, reportType = 'all', options = {}, cache = {}) {
     const { days = 30 } = options;
 
     let csvContent = '';
@@ -272,7 +272,7 @@ export const reportsService = {
     if (reportType === 'pipeline' || reportType === 'all') {
       if (csvContent) csvContent += '\n\n';
 
-      const pipelineData = await this.getPipelineReport(ownerIds, { days });
+      const pipelineData = cache.pipelineData || await this.getPipelineReport(ownerIds, { days });
 
       csvContent += 'Pipeline & Conversion Report\n';
       csvContent += `Period: Last ${days} days\n`;
@@ -422,18 +422,23 @@ export const reportsService = {
 
     // Parallel fetch all pipeline data
     const [
-      accountsByStatus,
+      customerCount,
+      prospectCount,
+      leadCount,
+      priorCustomerCount,
+      totalAccountCount,
       repliedEmails,
       prevRepliedEmails,
       recentReplies,
       soldQuery,
       emailedAccountIds
     ] = await Promise.all([
-      // Account status breakdown
-      supabase
-        .from('accounts')
-        .select('account_status')
-        .in('owner_id', ownerArray),
+      // Account status counts (head-only, no row data transferred)
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'customer'),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'prospect'),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'lead'),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'prior_customer'),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray),
 
       // Replies this period
       (() => {
@@ -496,17 +501,15 @@ export const reportsService = {
       })()
     ]);
 
-    // Account status breakdown
-    const statusCounts = { customer: 0, prospect: 0, prior_customer: 0, lead: 0, other: 0 };
-    (accountsByStatus.data || []).forEach(a => {
-      const status = (a.account_status || '').toLowerCase();
-      if (statusCounts[status] !== undefined) {
-        statusCounts[status]++;
-      } else {
-        statusCounts.other++;
-      }
-    });
-    const totalAccounts = (accountsByStatus.data || []).length;
+    // Account status breakdown (from count queries, no row data)
+    const statusCounts = {
+      customer: customerCount.count || 0,
+      prospect: prospectCount.count || 0,
+      lead: leadCount.count || 0,
+      prior_customer: priorCustomerCount.count || 0,
+      other: Math.max(0, (totalAccountCount.count || 0) - (customerCount.count || 0) - (prospectCount.count || 0) - (leadCount.count || 0) - (priorCustomerCount.count || 0))
+    };
+    const totalAccounts = totalAccountCount.count || 0;
 
     // Reply analytics
     const replies = repliedEmails.data || [];
@@ -514,7 +517,7 @@ export const reportsService = {
     const prevReplyCount = prevRepliedEmails.data?.length || 0;
     const replyChange = prevReplyCount > 0
       ? Math.round(((totalReplies - prevReplyCount) / prevReplyCount) * 100)
-      : 0;
+      : null;
 
     // Unique accounts that replied
     const repliedAccountIds = new Set();
@@ -529,6 +532,7 @@ export const reportsService = {
     }));
 
     // Sold accounts (customers that received emails)
+    // email_logs.account_id references accounts(account_unique_id) per FK
     const emailedIds = new Set((emailedAccountIds.data || []).map(e => e.account_id));
     const customerData = soldQuery.data || [];
     const soldAccounts = customerData.filter(c => emailedIds.has(c.account_unique_id));

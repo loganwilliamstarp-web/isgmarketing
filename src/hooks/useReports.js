@@ -43,8 +43,9 @@ export function useReportExport() {
   const { ownerIds } = useEffectiveOwner();
 
   return useMutation({
-    mutationFn: async ({ reportType = 'all', options = {} }) => {
-      const result = await reportsService.exportReportCSV(ownerIds, reportType, options);
+    mutationFn: async ({ reportType = 'all', options = {}, pipelineData = null }) => {
+      const cache = pipelineData ? { pipelineData } : {};
+      const result = await reportsService.exportReportCSV(ownerIds, reportType, options, cache);
 
       // Trigger download
       const blob = new Blob([result.content], { type: result.mimeType });

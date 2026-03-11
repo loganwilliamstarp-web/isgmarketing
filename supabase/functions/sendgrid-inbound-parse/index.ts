@@ -566,6 +566,8 @@ interface InjectionParams {
   // This is the CORRECT email to display in "Reply from:" and use for Reply-To
   // When we sent the original email to contact@example.com, this should be contact@example.com
   originalRecipientEmail?: string
+  // The owner's inbox email (for setting toRecipients on injected messages)
+  ownerEmail?: string
 }
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
@@ -684,6 +686,9 @@ async function attemptInboxInjection(
     if (connection.provider === 'gmail') {
       result = await injectIntoGmail(accessToken, params)
     } else if (connection.provider === 'microsoft') {
+      // Pass ownerEmail so Microsoft injection can set toRecipients
+      // This fixes Outlook Reply not populating the "To" field
+      params.ownerEmail = ownerEmail
       result = await injectIntoMicrosoft(accessToken, params)
     } else {
       result = { success: false, error: 'unknown_provider' }
@@ -970,12 +975,25 @@ async function injectIntoMicrosoft(
       : `${replyHeader}<pre style="white-space: pre-wrap; font-family: inherit;">${params.bodyText || ''}</pre>`
 
     // Build message payload
-    // Note: We cannot set 'from' to external address, so we rely on replyTo and the header
-    const messagePayload = {
+    // Set from/sender to the contact so Outlook shows the correct sender
+    // Set toRecipients to the owner so Reply populates the "To" field correctly
+    const messagePayload: Record<string, any> = {
       subject: params.subject,
       body: {
         contentType: 'HTML',
         content: bodyContent
+      },
+      from: {
+        emailAddress: {
+          name: fromName,
+          address: contactEmail
+        }
+      },
+      sender: {
+        emailAddress: {
+          name: fromName,
+          address: contactEmail
+        }
       },
       receivedDateTime: params.receivedAt,
       isRead: false,
@@ -989,23 +1007,49 @@ async function injectIntoMicrosoft(
       }]
     }
 
-    // Create message directly in inbox folder
-    const createResponse = await fetch(
-      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(messagePayload)
-      }
-    )
+    // Add toRecipients if we have the owner's email
+    if (params.ownerEmail) {
+      messagePayload.toRecipients = [{
+        emailAddress: {
+          address: params.ownerEmail
+        }
+      }]
+    }
 
+    // Create message directly in inbox folder
+    const graphUrl = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages'
+    const graphHeaders = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+
+    let createResponse = await fetch(graphUrl, {
+      method: 'POST',
+      headers: graphHeaders,
+      body: JSON.stringify(messagePayload)
+    })
+
+    // If Graph API rejects external from/sender, retry without them
+    // but keep toRecipients so Reply still populates the "To" field
     if (!createResponse.ok) {
       const errorText = await createResponse.text()
-      console.error(`Microsoft Graph API error: ${createResponse.status} - ${errorText}`)
-      return { success: false, error: `Microsoft Graph API error: ${createResponse.status}` }
+      console.warn(`Microsoft Graph API error with from/sender: ${createResponse.status} - ${errorText}`)
+      console.log('Retrying without from/sender fields...')
+
+      delete messagePayload.from
+      delete messagePayload.sender
+
+      createResponse = await fetch(graphUrl, {
+        method: 'POST',
+        headers: graphHeaders,
+        body: JSON.stringify(messagePayload)
+      })
+
+      if (!createResponse.ok) {
+        const retryErrorText = await createResponse.text()
+        console.error(`Microsoft Graph API retry error: ${createResponse.status} - ${retryErrorText}`)
+        return { success: false, error: `Microsoft Graph API error: ${createResponse.status}` }
+      }
     }
 
     const message = await createResponse.json()
