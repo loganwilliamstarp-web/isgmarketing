@@ -376,6 +376,8 @@ const SettingsPage = ({ t }) => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
+            role="tab"
+            aria-selected={activeTab === tab.id}
             style={{
               padding: '10px 20px',
               backgroundColor: activeTab === tab.id ? t.bgCard : 'transparent',

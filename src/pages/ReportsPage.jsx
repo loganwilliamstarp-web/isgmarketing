@@ -1,7 +1,7 @@
 // src/pages/ReportsPage.jsx
 // Reports & Analytics Dashboard
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useReportsDashboard, useEmailPerformanceReport, useReportExport, usePipelineReport } from '../hooks/useReports';
 import { useCurrentNPS, useNPSTrend, useRecentSurveyResponses, useSurveyResponseRate } from '../hooks/useNPS';
 import { LineChart, NPSGauge, NPSBreakdownBar } from '../components/charts';
@@ -23,7 +23,7 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 );
 
 // Stat card component
-const StatCard = ({ label, value, subValue, icon, color, isLoading, theme: t }) => (
+const StatCard = React.memo(({ label, value, subValue, icon, color, isLoading, theme: t }) => (
   <div style={{
     padding: '20px',
     backgroundColor: t.bgCard,
@@ -47,10 +47,10 @@ const StatCard = ({ label, value, subValue, icon, color, isLoading, theme: t }) 
       </>
     )}
   </div>
-);
+));
 
 // Tab button component
-const TabButton = ({ active, onClick, children, theme: t }) => (
+const TabButton = React.memo(({ active, onClick, children, theme: t }) => (
   <button
     onClick={onClick}
     style={{
@@ -68,7 +68,7 @@ const TabButton = ({ active, onClick, children, theme: t }) => (
   >
     {children}
   </button>
-);
+));
 
 const ReportsPage = ({ t }) => {
   const [dateRange, setDateRange] = useState({ days: 30, label: 'Last 30 days' });
@@ -104,18 +104,18 @@ const ReportsPage = ({ t }) => {
   const formatPercent = (num) => `${Math.round(num || 0)}%`;
 
   // Chart theme based on current theme
-  const chartTheme = {
+  const chartTheme = useMemo(() => ({
     textColor: t.textSecondary,
     gridColor: t.border,
     tooltipBg: t.bgCard
-  };
+  }), [t]);
 
   // Email performance chart lines
-  const emailChartLines = [
+  const emailChartLines = useMemo(() => [
     { key: 'opens', color: '#3b82f6', name: 'Opens' },
     { key: 'clicks', color: '#22c55e', name: 'Clicks' },
     { key: 'replies', color: '#a78bfa', name: 'Replies' }
-  ];
+  ], []);
 
   // NPS trend line
   const npsTrendLines = [

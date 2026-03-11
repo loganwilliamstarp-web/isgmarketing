@@ -47,32 +47,36 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
 
   // Fetch settings for the account owner when modal opens
   useEffect(() => {
+    let cancelled = false;
+
     if (isOpen && account?.owner_id) {
       setLoadingSettings(true);
       userSettingsService.get(account.owner_id)
         .then(settings => {
-          setOwnerSettings(settings);
+          if (!cancelled) setOwnerSettings(settings);
         })
         .catch(err => {
           console.error('Failed to load owner settings:', err);
         })
         .finally(() => {
-          setLoadingSettings(false);
+          if (!cancelled) setLoadingSettings(false);
         });
 
       // Also fetch templates for this owner
       setLoadingTemplates(true);
       templatesService.getAll(account.owner_id)
         .then(data => {
-          setTemplates(data || []);
+          if (!cancelled) setTemplates(data || []);
         })
         .catch(err => {
           console.error('Failed to load templates:', err);
         })
         .finally(() => {
-          setLoadingTemplates(false);
+          if (!cancelled) setLoadingTemplates(false);
         });
     }
+
+    return () => { cancelled = true; };
   }, [isOpen, account?.owner_id]);
 
   // Reset form when modal opens
@@ -242,6 +246,7 @@ const ComposeEmailModal = ({ isOpen, onClose, account, theme: t, onSend, sending
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close email composer"
             style={{
               background: 'none',
               border: 'none',

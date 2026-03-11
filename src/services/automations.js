@@ -259,11 +259,18 @@ export const automationsService = {
       }).then(response => {
         if (response.error) {
           console.warn('Failed to generate automation schedule:', response.error);
-        } else {
-          console.log('Automation schedule generated:', response.data);
+          // Record the scheduling failure on the automation
+          supabase.from('automations').update({
+            last_error: `Schedule generation failed: ${response.error.message || response.error}`,
+            updated_at: new Date().toISOString()
+          }).eq('id', automationId).then(() => {});
         }
       }).catch(err => {
         console.warn('Failed to handle automation schedule:', err.message);
+        supabase.from('automations').update({
+          last_error: `Schedule generation failed: ${err.message}`,
+          updated_at: new Date().toISOString()
+        }).eq('id', automationId).then(() => {});
       });
     } else {
       // Use client-side cleanup for deactivation (cancel pending emails)

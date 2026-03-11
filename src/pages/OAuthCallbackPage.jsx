@@ -23,7 +23,7 @@ const OAuthCallbackPage = () => {
           type: 'oauth_complete',
           success: true,
           provider
-        }, '*');
+        }, window.location.origin);
 
         // Close popup after short delay
         setTimeout(() => {
@@ -45,7 +45,7 @@ const OAuthCallbackPage = () => {
           type: 'oauth_complete',
           success: false,
           error: error || 'Authentication failed'
-        }, '*');
+        }, window.location.origin);
 
         // Close popup after delay so user can see error
         setTimeout(() => {

@@ -66,8 +66,8 @@ export const enrollmentsService = {
       .from('automation_enrollments')
       .select(`
         *,
-        account:accounts(*),
-        automation:automations(*)
+        account:accounts(account_unique_id, name, person_email, account_status, owner_id),
+        automation:automations(id, name, status, owner_id)
       `)
       .eq('id', enrollmentId)
       .single();
@@ -138,8 +138,10 @@ export const enrollmentsService = {
       .select('nodes')
       .eq('id', automationId)
       .single();
-    
-    if (autoError) throw autoError;
+
+    if (autoError || !automation) {
+      throw new Error(`Automation ${automationId} not found`);
+    }
 
     const firstNode = automation.nodes?.[0];
 

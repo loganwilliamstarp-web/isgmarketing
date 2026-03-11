@@ -6,10 +6,21 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Dynamic CORS: only allow known frontend origins
+const ALLOWED_ORIGINS = [
+  Deno.env.get('APP_URL'),
+  Deno.env.get('FRONTEND_URL'),
+  'https://app.isgmarketing.com',
+].filter(Boolean) as string[]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*'
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
 
 // SendGrid Email Validation API endpoint
@@ -53,11 +64,17 @@ interface SendGridValidationResponse {
   }
 }
 
+// Timeout guard: Supabase edge functions have a 60s limit
+const FUNCTION_TIMEOUT_MS = 55000
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: getCorsHeaders(req) })
   }
+
+  const startTime = Date.now()
+  const isTimedOut = () => Date.now() - startTime > FUNCTION_TIMEOUT_MS
 
   try {
     const supabaseClient = createClient(
@@ -70,7 +87,7 @@ serve(async (req) => {
     if (!sendgridValidationKey) {
       return new Response(
         JSON.stringify({ error: 'SENDGRID_VALIDATION_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -114,7 +131,7 @@ serve(async (req) => {
           error: `Database schema error: ${schemaError.message}. Have you run the migration to add email_validation_status column?`,
           ...results
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -143,7 +160,7 @@ serve(async (req) => {
       results.errors.push(`Failed to fetch accounts: ${fetchError.message}`)
       return new Response(
         JSON.stringify({ success: false, ...results }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -156,7 +173,7 @@ serve(async (req) => {
           message: 'No accounts need validation',
           ...results
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -164,6 +181,11 @@ serve(async (req) => {
 
     // Process in batches
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+      // Check timeout before each batch to avoid exceeding Supabase's 60s limit
+      if (isTimedOut()) {
+        console.warn(`[Validation] Timeout approaching after ${Math.floor(i / BATCH_SIZE)} batches — stopping early`)
+        break
+      }
       const batch = accounts.slice(i, i + BATCH_SIZE)
       console.log(`[Validation] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(accounts.length / BATCH_SIZE)}`)
 
@@ -217,7 +239,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, ...results }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
 
   } catch (error: unknown) {
@@ -225,7 +247,7 @@ serve(async (req) => {
     console.error('Edge function error:', errorMessage, error)
     return new Response(
       JSON.stringify({ error: errorMessage || 'Unknown error occurred' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

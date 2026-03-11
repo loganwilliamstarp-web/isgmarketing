@@ -6,9 +6,20 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Dynamic CORS: only allow known frontend origins
+const ALLOWED_ORIGINS = [
+  Deno.env.get('APP_URL'),
+  Deno.env.get('FRONTEND_URL'),
+  'https://app.isgmarketing.com',
+].filter(Boolean) as string[]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*'
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // Field mappings from Salesforce to Supabase
@@ -176,7 +187,7 @@ function transformRow(
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   try {
@@ -282,7 +293,7 @@ serve(async (req) => {
       if (!file) {
         return new Response(
           JSON.stringify({ error: 'Missing file in form data' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
       csvContent = await file.text()
@@ -364,7 +375,7 @@ serve(async (req) => {
       } catch {
         return new Response(
           JSON.stringify({ error: 'Invalid request format. Send JSON with {csv, table, owner_id} or multipart/form-data' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -388,7 +399,7 @@ serve(async (req) => {
           acceptedReportNames: ['Account_Master.csv', 'Policy_Master.csv', 'Carrier_Master.csv', 'Producer_Master.csv'],
           acceptedTableTypes: ['accounts', 'policies', 'carriers', 'producers']
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -396,7 +407,7 @@ serve(async (req) => {
     if (!mappings) {
       return new Response(
         JSON.stringify({ error: `Unknown table type: ${tableType}. Valid types: accounts, policies, carriers, producers` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -406,7 +417,7 @@ serve(async (req) => {
     if (rows.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No data rows found in CSV' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -478,7 +489,7 @@ serve(async (req) => {
           },
           hint: `CSV must have "${sourceFieldForUniqueKey}" column that maps to "${uniqueKey}". Check if header name matches exactly.`
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -504,7 +515,7 @@ serve(async (req) => {
             batch: Math.floor(i / batchSize) + 1,
             rowsProcessedBeforeError: totalImported
           }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
       
@@ -533,14 +544,14 @@ serve(async (req) => {
         imported: validRows.length,
         skipped: rows.length - validRows.length,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Edge function error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

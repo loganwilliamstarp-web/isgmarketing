@@ -5,10 +5,21 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Dynamic CORS: only allow known frontend origins
+const ALLOWED_ORIGINS = [
+  Deno.env.get('APP_URL'),
+  Deno.env.get('FRONTEND_URL'),
+  'https://app.isgmarketing.com',
+].filter(Boolean) as string[]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*'
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
@@ -59,7 +70,7 @@ interface AnalyticsData {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: getCorsHeaders(req) })
   }
 
   try {
@@ -116,7 +127,7 @@ serve(async (req) => {
     if (recipients.length === 0) {
       return new Response(
         JSON.stringify({ success: true, message: 'No valid recipient emails found', sent: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -178,14 +189,14 @@ serve(async (req) => {
         testMode,
         analytics: testMode ? analytics : undefined
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
     console.error('Edge function error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

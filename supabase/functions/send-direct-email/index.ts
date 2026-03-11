@@ -4,10 +4,21 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Dynamic CORS: only allow known frontend origins
+const ALLOWED_ORIGINS = [
+  Deno.env.get('APP_URL'),
+  Deno.env.get('FRONTEND_URL'),
+  'https://app.isgmarketing.com',
+].filter(Boolean) as string[]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*'
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
@@ -15,7 +26,7 @@ const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders })
+    return new Response(null, { status: 200, headers: getCorsHeaders(req) })
   }
 
   try {
@@ -35,7 +46,7 @@ serve(async (req) => {
     if (!scheduledEmailId) {
       return new Response(
         JSON.stringify({ error: 'Missing scheduledEmailId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -52,7 +63,7 @@ serve(async (req) => {
     if (fetchError || !email) {
       return new Response(
         JSON.stringify({ error: 'Scheduled email not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -77,7 +88,7 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: false, error: 'Recipient is on suppression list - cannot send' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -112,7 +123,7 @@ serve(async (req) => {
 
           return new Response(
             JSON.stringify({ success: false, error: `Email validation failed: ${jitResult.status}` }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           )
         }
         console.log(`[JIT Validation] ${recipientEmail} validated successfully - proceeding with send`)
@@ -120,7 +131,7 @@ serve(async (req) => {
         // Not eligible for JIT validation and not valid - reject
         return new Response(
           JSON.stringify({ success: false, error: `Email validation status is '${currentStatus}' - cannot send` }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -264,7 +275,7 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, messageId: `dry-run-${Date.now()}`, dryRun: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -355,7 +366,7 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, messageId, emailLogId: emailLog.id }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     } else {
       const errorBody = await response.text()
@@ -380,7 +391,7 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: false, error: errorMessage }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -388,7 +399,7 @@ serve(async (req) => {
     console.error('Edge function error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

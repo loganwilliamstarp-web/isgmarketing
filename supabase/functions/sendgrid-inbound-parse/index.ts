@@ -42,6 +42,7 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes
 }
 
+// CORS: '*' is intentional — this endpoint receives webhooks from SendGrid servers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

@@ -8,7 +8,12 @@ export const accountsService = {
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs
    */
   async getAll(ownerIds, options = {}) {
-    const { status, search, limit = 25, offset = 0, expiring = false } = options;
+    const { status, expiring = false } = options;
+
+    // Validate pagination params
+    const limit = Math.min(Math.max(1, parseInt(options.limit) || 25), 1000);
+    const offset = Math.max(0, parseInt(options.offset) || 0);
+    const search = options.search ? String(options.search).slice(0, 200) : '';
 
     // First get total count (without pagination)
     let countQuery = supabase
@@ -105,7 +110,12 @@ export const accountsService = {
       }
     }
     
-    // If filtering by expiring, we need to filter client-side and adjust count
+    // TODO: Move expiring policy filter to database-level for accurate pagination.
+    // Currently has_expiring_policy is computed client-side from joined policy data,
+    // so filtering happens after pagination — this means page counts are inaccurate
+    // and pages may return fewer results than `limit`. To fix properly, add a
+    // materialized/computed `has_expiring_policy` column on the accounts table or
+    // use an RPC that filters at the DB level before applying LIMIT/OFFSET.
     if (expiring) {
       const expiringAccounts = accounts.filter(a => a.has_expiring_policy);
       return { accounts: expiringAccounts, total: expiringAccounts.length, isExpiringFilter: true };

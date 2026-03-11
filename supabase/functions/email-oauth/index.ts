@@ -6,9 +6,20 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Dynamic CORS: only allow known frontend origins
+const ALLOWED_ORIGINS = [
+  Deno.env.get('APP_URL'),
+  Deno.env.get('FRONTEND_URL'),
+  'https://app.isgmarketing.com',
+].filter(Boolean) as string[]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*'
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // OAuth Configuration
@@ -29,7 +40,7 @@ const MICROSOFT_SCOPES = [
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   try {
@@ -82,14 +93,14 @@ serve(async (req) => {
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action. Valid actions: initiate, callback, status, disconnect, refresh' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
     }
   } catch (error: any) {
     console.error('Email OAuth error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })
@@ -118,7 +129,7 @@ function handleInitiate(provider: string | null, url: URL): Response {
   if (!state) {
     return new Response(
       JSON.stringify({ error: 'Missing state parameter' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -128,7 +139,7 @@ function handleInitiate(provider: string | null, url: URL): Response {
     if (!clientId) {
       return new Response(
         JSON.stringify({ error: 'Google OAuth not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -152,7 +163,7 @@ function handleInitiate(provider: string | null, url: URL): Response {
     if (!clientId) {
       return new Response(
         JSON.stringify({ error: 'Microsoft OAuth not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -169,7 +180,7 @@ function handleInitiate(provider: string | null, url: URL): Response {
 
   return new Response(
     JSON.stringify({ error: 'Invalid provider. Use gmail or microsoft' }),
-    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
   )
 }
 
@@ -298,7 +309,7 @@ async function handleStatus(req: Request, supabase: any): Promise<Response> {
   if (!ownerId) {
     return new Response(
       JSON.stringify({ error: 'Missing owner_id parameter' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -310,7 +321,7 @@ async function handleStatus(req: Request, supabase: any): Promise<Response> {
   if (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -332,7 +343,7 @@ async function handleStatus(req: Request, supabase: any): Promise<Response> {
 
   return new Response(
     JSON.stringify({ connections }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
   )
 }
 
@@ -347,7 +358,7 @@ async function handleDisconnect(
   if (req.method !== 'POST') {
     return new Response(
       JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 405, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -357,7 +368,7 @@ async function handleDisconnect(
   if (!ownerId || !provider) {
     return new Response(
       JSON.stringify({ error: 'Missing owner_id or provider' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -397,13 +408,13 @@ async function handleDisconnect(
   if (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
   return new Response(
     JSON.stringify({ success: true }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
   )
 }
 
@@ -418,7 +429,7 @@ async function handleRefresh(
   if (req.method !== 'POST') {
     return new Response(
       JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 405, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -428,7 +439,7 @@ async function handleRefresh(
   if (!ownerId || !provider) {
     return new Response(
       JSON.stringify({ error: 'Missing owner_id or provider' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -443,7 +454,7 @@ async function handleRefresh(
   if (fetchError || !connection) {
     return new Response(
       JSON.stringify({ error: 'Connection not found' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -483,7 +494,7 @@ async function handleRefresh(
 
     return new Response(
       JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
 
   } catch (err: any) {
@@ -500,7 +511,7 @@ async function handleRefresh(
 
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 }

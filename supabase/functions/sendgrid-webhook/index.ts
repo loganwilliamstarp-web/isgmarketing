@@ -7,6 +7,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { decode as base64Decode } from 'https://deno.land/std@0.168.0/encoding/base64.ts'
 
+// CORS: '*' is intentional — this endpoint receives webhooks from SendGrid servers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-twilio-email-event-webhook-signature, x-twilio-email-event-webhook-timestamp',
@@ -196,19 +197,21 @@ serve(async (req) => {
     const timestamp = req.headers.get('X-Twilio-Email-Event-Webhook-Timestamp')
 
     if (!signature || !timestamp) {
-      console.error('Missing signature headers')
+      console.error('Missing signature headers — possible forged webhook attempt')
+      // Return 200 per webhook spec to prevent SendGrid from retrying bad requests
       return new Response(
         JSON.stringify({ error: 'Missing signature headers' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     const isValid = await verifySignature(sendgridPublicKey, rawBody, signature, timestamp)
     if (!isValid) {
-      console.error('Invalid webhook signature')
+      console.error('Invalid webhook signature — possible forged webhook attempt')
+      // Return 200 per webhook spec to prevent SendGrid from retrying bad requests
       return new Response(
         JSON.stringify({ error: 'Invalid signature' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
