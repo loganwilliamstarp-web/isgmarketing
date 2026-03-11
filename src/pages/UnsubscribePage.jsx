@@ -22,8 +22,6 @@ const UnsubscribePage = () => {
 
   useEffect(() => {
     const processUnsubscribe = async () => {
-      console.log('Unsubscribe processing:', { emailLogId, email });
-
       // Validate required params
       if (!emailLogId || !email) {
         setStatus('error');

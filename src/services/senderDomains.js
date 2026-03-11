@@ -70,7 +70,6 @@ export const senderDomainsService = {
       .single();
 
     if (userError || !userData?.email) {
-      console.log('getVerifiedDomains: No user email found for ownerId:', targetOwnerId);
       return [];
     }
 
@@ -78,11 +77,8 @@ export const senderDomainsService = {
     const userEmailDomain = userData.email.split('@')[1]?.toLowerCase();
 
     if (!userEmailDomain) {
-      console.log('getVerifiedDomains: Could not extract domain from email:', userData.email);
       return [];
     }
-
-    console.log('getVerifiedDomains: Looking for verified domains matching:', userEmailDomain);
 
     // Get verified domains that match the user's email domain
     // Match either exact domain OR subdomains (e.g., mail.isgdfw.com matches isgdfw.com)
@@ -98,7 +94,6 @@ export const senderDomainsService = {
       return [];
     }
 
-    console.log('getVerifiedDomains: Found domains:', data?.length || 0, data?.map(d => d.domain));
     return data || [];
   },
 

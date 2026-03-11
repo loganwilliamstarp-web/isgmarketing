@@ -51,8 +51,6 @@ export const reportsService = {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    console.log('[Reports] getEmailPerformanceReport called with:', { ownerIds, days, startDate: startDate.toISOString() });
-
     // Use RPC function for efficient multi-owner queries
     const ownerArray = Array.isArray(ownerIds) ? ownerIds : [ownerIds];
 
@@ -60,8 +58,6 @@ export const reportsService = {
       p_owner_ids: ownerArray,
       p_start_date: startDate.toISOString()
     });
-
-    console.log('[Reports] email_logs query result:', { rowCount: data?.length, error: error ? JSON.stringify(error) : null });
 
     if (error) {
       console.error('[Reports] Full error:', error);

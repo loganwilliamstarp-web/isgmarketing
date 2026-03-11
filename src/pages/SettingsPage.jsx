@@ -167,14 +167,6 @@ const SettingsPage = ({ t }) => {
   // Use a key based on settings to ensure this runs when settings data changes
   useEffect(() => {
     if (settings) {
-      // Debug: log settings to verify agency info is loaded
-      console.log('SettingsPage: Initializing form with settings:', {
-        agency_name: settings.agency_name,
-        agency_address: settings.agency_address,
-        agency_phone: settings.agency_phone,
-        agency_website: settings.agency_website
-      });
-
       // Determine default from email - use saved value, or construct from user email and verified domain
       let defaultFromEmail = settings.default_from_email || '';
 

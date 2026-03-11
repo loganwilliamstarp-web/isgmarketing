@@ -53,11 +53,8 @@ export const userSettingsService = {
       .single();
 
     if (userError || !userData?.profile_name) {
-      console.log('getAgencyInfoByUserId: No profile found for user', userId);
       return null;
     }
-
-    console.log('getAgencyInfoByUserId: Looking for agency info in profile', userData.profile_name);
 
     // Get all users in the same profile
     const { data: profileUsers, error: profileError } = await supabase
@@ -66,12 +63,10 @@ export const userSettingsService = {
       .eq('profile_name', userData.profile_name);
 
     if (profileError || !profileUsers || profileUsers.length === 0) {
-      console.log('getAgencyInfoByUserId: No users found in profile');
       return null;
     }
 
     const profileUserIds = profileUsers.map(u => u.user_unique_id);
-    console.log('getAgencyInfoByUserId: Found', profileUserIds.length, 'users in profile');
 
     // Get agency info from user_settings for any user in this profile that has agency_name set
     const { data: agencySettings, error: agencyError } = await supabase
@@ -83,16 +78,13 @@ export const userSettingsService = {
       .limit(1);
 
     if (agencyError) {
-      console.log('getAgencyInfoByUserId: Error fetching agency settings', agencyError);
       return null;
     }
 
     if (!agencySettings || agencySettings.length === 0) {
-      console.log('getAgencyInfoByUserId: No agency settings found for profile users');
       return null;
     }
 
-    console.log('getAgencyInfoByUserId: Found agency info', agencySettings[0]);
     return agencySettings[0];
   },
 

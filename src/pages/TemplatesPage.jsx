@@ -100,9 +100,6 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
         bodyText = body;
       }
 
-      console.log('Template save - editMode:', editMode);
-      console.log('Template save - body_html:', bodyHtml.substring(0, 200) + '...');
-
       await onSave({
         name,
         subject,

@@ -57,8 +57,6 @@ export const scheduledEmailsService = {
     query = applyOwnerFilter(query, ownerIds);
     const { data, error } = await query;
 
-    console.log('getUpcoming query result:', { data, error, ownerIds, startOfToday: startOfToday.toISOString() });
-
     if (error) throw error;
     return data;
   },

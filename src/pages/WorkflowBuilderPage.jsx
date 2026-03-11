@@ -75,8 +75,6 @@ const WorkflowBuilderPage = ({ t }) => {
   // Update local state when automation loads
   useEffect(() => {
     if (effectiveAutomation) {
-      console.log('Loading automation data:', effectiveAutomation);
-      console.log('filter_config from DB:', effectiveAutomation.filter_config);
       setAutomationData({
         name: effectiveAutomation.name || '',
         description: effectiveAutomation.description || '',

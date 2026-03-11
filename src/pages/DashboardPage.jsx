@@ -826,7 +826,6 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview, onSendNow, onC
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('Send Now clicked for email:', email.id);
             onSendNow(email.id);
           }}
           disabled={isSending}
