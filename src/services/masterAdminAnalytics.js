@@ -256,6 +256,7 @@ export const masterAdminAnalyticsService = {
     weekAgo.setDate(weekAgo.getDate() - 30); // Look at last 30 days for better data
 
     // Get emails with automation info + account status
+    // Use FK hints to avoid ambiguity: email_logs.owner_id and automations.owner_id both reference users
     const { data: emails, error } = await supabase
       .from('email_logs')
       .select(`
@@ -266,8 +267,8 @@ export const masterAdminAnalyticsService = {
         first_clicked_at,
         first_replied_at,
         automation:automations!inner(id, name, status, owner_id),
-        owner:users(first_name, last_name, profile_name),
-        account:accounts(account_status)
+        owner:users!email_logs_owner_id_fkey(first_name, last_name, profile_name),
+        account:accounts!email_logs_account_id_fkey(account_status)
       `)
       .not('automation_id', 'is', null)
       .gte('sent_at', weekAgo.toISOString());
