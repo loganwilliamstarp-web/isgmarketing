@@ -339,6 +339,30 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   );
 };
 
+// CSV export helper
+const exportToCSV = (data, filename) => {
+  if (!data || data.length === 0) return;
+
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row =>
+      headers.map(h => {
+        const val = row[h] ?? '';
+        const str = String(val).replace(/"/g, '""');
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+      }).join(',')
+    )
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
+
 // Main page component
 const EmailActivityPage = ({ t }) => {
   const { userId } = useParams();
@@ -354,6 +378,25 @@ const EmailActivityPage = ({ t }) => {
     typeFilter: activeTypeFilter
   });
 
+  const handleExport = () => {
+    if (!filteredActivities || filteredActivities.length === 0) return;
+
+    const exportData = filteredActivities.map(activity => ({
+      'Customer Name': activity.account?.name || activity.to_name || '',
+      'Email Address': activity.to_email || activity.account?.person_email || activity.account?.email || '',
+      'Phone': activity.account?.phone || '',
+      'Activity Type': activity.type || '',
+      'Subject': activity.subject || '',
+      'Date': activity.timestamp ? new Date(activity.timestamp).toLocaleString() : '',
+      'From Email': activity.from_email || '',
+      'From Name': activity.from_name || '',
+      'Opens': activity.open_count || '',
+      'Clicks': activity.click_count || ''
+    }));
+
+    exportToCSV(exportData, `email_activity_${typeFilter.toLowerCase()}`);
+  };
+
   const typeOptions = ['All', 'Sent', 'Opened', 'Clicked', 'Replied'];
 
   const typeConfig = {
@@ -368,13 +411,40 @@ const EmailActivityPage = ({ t }) => {
 
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
-          Email Activity
-        </h1>
-        <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
-          View all email sends, opens, clicks, and replies
-        </p>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
+            Email Activity
+          </h1>
+          <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
+            View all email sends, opens, clicks, and replies
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={!filteredActivities || filteredActivities.length === 0}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            backgroundColor: (!filteredActivities || filteredActivities.length === 0) ? t.bgHover : t.primary,
+            border: 'none',
+            borderRadius: '8px',
+            color: (!filteredActivities || filteredActivities.length === 0) ? t.textMuted : '#fff',
+            cursor: (!filteredActivities || filteredActivities.length === 0) ? 'not-allowed' : 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            opacity: (!filteredActivities || filteredActivities.length === 0) ? 0.6 : 1
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export CSV
+        </button>
       </div>
 
       {/* Filters */}

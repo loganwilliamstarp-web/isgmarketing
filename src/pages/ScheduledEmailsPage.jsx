@@ -287,6 +287,30 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
   );
 };
 
+// CSV export helper
+const exportToCSV = (data, filename) => {
+  if (!data || data.length === 0) return;
+
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row =>
+      headers.map(h => {
+        const val = row[h] ?? '';
+        const str = String(val).replace(/"/g, '""');
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+      }).join(',')
+    )
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
+
 // Main page component
 const ScheduledEmailsPage = ({ t }) => {
   const { userId } = useParams();
@@ -296,6 +320,25 @@ const ScheduledEmailsPage = ({ t }) => {
 
   const { data: emails, isLoading } = useScheduledEmails({ status: statusFilter === 'All' ? undefined : statusFilter });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
+
+  const handleExport = () => {
+    if (!emails || emails.length === 0) return;
+
+    const exportData = emails.map(email => ({
+      'Customer Name': email.to_name || email.account?.name || '',
+      'Email Address': email.to_email || email.account?.person_email || email.account?.email || '',
+      'Phone': email.account?.phone || '',
+      'Subject': email.subject || email.template?.name || '',
+      'Status': email.status || '',
+      'Scheduled Date': email.scheduled_for ? new Date(email.scheduled_for).toLocaleString() : '',
+      'Template': email.template?.name || '',
+      'Automation': email.automation?.name || '',
+      'From Name': email.from_name || '',
+      'From Email': email.from_email || ''
+    }));
+
+    exportToCSV(exportData, `scheduled_emails_${statusFilter.toLowerCase()}`);
+  };
 
   const handleSendNow = async (emailId) => {
     if (sendingEmailId) return;
@@ -324,13 +367,40 @@ const ScheduledEmailsPage = ({ t }) => {
 
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
-          Scheduled Emails
-        </h1>
-        <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
-          View and manage all scheduled emails
-        </p>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
+            Scheduled Emails
+          </h1>
+          <p style={{ color: t.textSecondary, fontSize: '14px', margin: 0 }}>
+            View and manage all scheduled emails
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={!emails || emails.length === 0}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            backgroundColor: (!emails || emails.length === 0) ? t.bgHover : t.primary,
+            border: 'none',
+            borderRadius: '8px',
+            color: (!emails || emails.length === 0) ? t.textMuted : '#fff',
+            cursor: (!emails || emails.length === 0) ? 'not-allowed' : 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            opacity: (!emails || emails.length === 0) ? 0.6 : 1
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export CSV
+        </button>
       </div>
 
       {/* Filters */}

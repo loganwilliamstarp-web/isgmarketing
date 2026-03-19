@@ -657,7 +657,7 @@ export const emailActivityService = {
           .select(`
             id, subject, to_email, to_name, from_email, from_name, status, sent_at, created_at,
             body_html, body_text,
-            account:accounts!email_logs_account_id_fkey(account_unique_id, name),
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email, email, phone),
             template:email_templates(body_html, body_text)
           `)
           .in('status', ['Sent', 'Delivered', 'Queued'])
@@ -691,7 +691,7 @@ export const emailActivityService = {
           .from('email_logs')
           .select(`
             id, subject, to_email, to_name, from_email, from_name, first_opened_at, open_count,
-            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email, email, phone)
           `)
           .not('first_opened_at', 'is', null)
           .order('first_opened_at', { ascending: false })
@@ -722,7 +722,7 @@ export const emailActivityService = {
           .from('email_logs')
           .select(`
             id, subject, to_email, to_name, from_email, from_name, first_clicked_at, click_count,
-            account:accounts!email_logs_account_id_fkey(account_unique_id, name)
+            account:accounts!email_logs_account_id_fkey(account_unique_id, name, person_email, email, phone)
           `)
           .not('first_clicked_at', 'is', null)
           .order('first_clicked_at', { ascending: false })

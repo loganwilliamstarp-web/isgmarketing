@@ -15,7 +15,8 @@ export const scheduledEmailsService = {
       .select(`
         *,
         template:email_templates(id, name),
-        automation:automations(id, name)
+        automation:automations(id, name),
+        account:accounts!scheduled_emails_account_id_fkey(name, person_email, email, phone)
       `)
       .order('scheduled_for', { ascending: true })
       .range(offset, offset + limit - 1);
