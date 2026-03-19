@@ -378,23 +378,55 @@ const EmailActivityPage = ({ t }) => {
     typeFilter: activeTypeFilter
   });
 
-  const handleExport = () => {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
     if (!filteredActivities || filteredActivities.length === 0) return;
+    setExporting(true);
 
-    const exportData = filteredActivities.map(activity => ({
-      'Customer Name': activity.account?.name || activity.to_name || '',
-      'Email Address': activity.to_email || activity.account?.person_email || activity.account?.email || '',
-      'Phone': activity.account?.phone || '',
-      'Activity Type': activity.type || '',
-      'Subject': activity.subject || '',
-      'Date': activity.timestamp ? new Date(activity.timestamp).toLocaleString() : '',
-      'From Email': activity.from_email || '',
-      'From Name': activity.from_name || '',
-      'Opens': activity.open_count || '',
-      'Clicks': activity.click_count || ''
-    }));
+    try {
+      // Fetch active policies for all accounts in the list
+      const accountIds = [...new Set(
+        filteredActivities.map(a => a.account?.account_unique_id).filter(Boolean)
+      )];
+      let policyMap = {};
+      if (accountIds.length > 0) {
+        const { supabase } = await import('../lib/supabase');
+        const { data: policies } = await supabase
+          .from('policies')
+          .select('account_id, policy_lob, policy_status')
+          .in('account_id', accountIds)
+          .eq('policy_status', 'Active');
+        if (policies) {
+          policies.forEach(p => {
+            if (!policyMap[p.account_id]) policyMap[p.account_id] = [];
+            if (p.policy_lob && !policyMap[p.account_id].includes(p.policy_lob)) {
+              policyMap[p.account_id].push(p.policy_lob);
+            }
+          });
+        }
+      }
 
-    exportToCSV(exportData, `email_activity_${typeFilter.toLowerCase()}`);
+      const exportData = filteredActivities.map(activity => ({
+        'Customer Name': activity.account?.name || activity.to_name || '',
+        'Email Address': activity.to_email || activity.account?.person_email || activity.account?.email || '',
+        'Phone': activity.account?.phone || '',
+        'Active Policy Types': (policyMap[activity.account?.account_unique_id] || []).join(', '),
+        'Activity Type': activity.type || '',
+        'Subject': activity.subject || '',
+        'Date': activity.timestamp ? new Date(activity.timestamp).toLocaleString() : '',
+        'From Email': activity.from_email || '',
+        'From Name': activity.from_name || '',
+        'Opens': activity.open_count || '',
+        'Clicks': activity.click_count || ''
+      }));
+
+      exportToCSV(exportData, `email_activity_${typeFilter.toLowerCase()}`);
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const typeOptions = ['All', 'Sent', 'Opened', 'Clicked', 'Replied'];
@@ -422,20 +454,20 @@ const EmailActivityPage = ({ t }) => {
         </div>
         <button
           onClick={handleExport}
-          disabled={!filteredActivities || filteredActivities.length === 0}
+          disabled={!filteredActivities || filteredActivities.length === 0 || exporting}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             padding: '8px 16px',
-            backgroundColor: (!filteredActivities || filteredActivities.length === 0) ? t.bgHover : t.primary,
+            backgroundColor: (!filteredActivities || filteredActivities.length === 0 || exporting) ? t.bgHover : t.primary,
             border: 'none',
             borderRadius: '8px',
-            color: (!filteredActivities || filteredActivities.length === 0) ? t.textMuted : '#fff',
-            cursor: (!filteredActivities || filteredActivities.length === 0) ? 'not-allowed' : 'pointer',
+            color: (!filteredActivities || filteredActivities.length === 0 || exporting) ? t.textMuted : '#fff',
+            cursor: (!filteredActivities || filteredActivities.length === 0 || exporting) ? 'not-allowed' : 'pointer',
             fontSize: '13px',
             fontWeight: '500',
-            opacity: (!filteredActivities || filteredActivities.length === 0) ? 0.6 : 1
+            opacity: (!filteredActivities || filteredActivities.length === 0 || exporting) ? 0.6 : 1
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -443,7 +475,7 @@ const EmailActivityPage = ({ t }) => {
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Export CSV
+          {exporting ? 'Exporting...' : 'Export CSV'}
         </button>
       </div>
 

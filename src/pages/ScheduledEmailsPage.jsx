@@ -321,23 +321,53 @@ const ScheduledEmailsPage = ({ t }) => {
   const { data: emails, isLoading } = useScheduledEmails({ status: statusFilter === 'All' ? undefined : statusFilter });
   const { sendNow, cancelScheduled } = useScheduledEmailMutations();
 
-  const handleExport = () => {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
     if (!emails || emails.length === 0) return;
+    setExporting(true);
 
-    const exportData = emails.map(email => ({
-      'Customer Name': email.to_name || email.account?.name || '',
-      'Email Address': email.to_email || email.account?.person_email || email.account?.email || '',
-      'Phone': email.account?.phone || '',
-      'Subject': email.subject || email.template?.name || '',
-      'Status': email.status || '',
-      'Scheduled Date': email.scheduled_for ? new Date(email.scheduled_for).toLocaleString() : '',
-      'Template': email.template?.name || '',
-      'Automation': email.automation?.name || '',
-      'From Name': email.from_name || '',
-      'From Email': email.from_email || ''
-    }));
+    try {
+      // Fetch active policies for all accounts in the list
+      const accountIds = [...new Set(emails.map(e => e.account_id).filter(Boolean))];
+      let policyMap = {};
+      if (accountIds.length > 0) {
+        const { supabase } = await import('../lib/supabase');
+        const { data: policies } = await supabase
+          .from('policies')
+          .select('account_id, policy_lob, policy_status')
+          .in('account_id', accountIds)
+          .eq('policy_status', 'Active');
+        if (policies) {
+          policies.forEach(p => {
+            if (!policyMap[p.account_id]) policyMap[p.account_id] = [];
+            if (p.policy_lob && !policyMap[p.account_id].includes(p.policy_lob)) {
+              policyMap[p.account_id].push(p.policy_lob);
+            }
+          });
+        }
+      }
 
-    exportToCSV(exportData, `scheduled_emails_${statusFilter.toLowerCase()}`);
+      const exportData = emails.map(email => ({
+        'Customer Name': email.to_name || email.account?.name || '',
+        'Email Address': email.to_email || email.account?.person_email || email.account?.email || '',
+        'Phone': email.account?.phone || '',
+        'Active Policy Types': (policyMap[email.account_id] || []).join(', '),
+        'Subject': email.subject || email.template?.name || '',
+        'Status': email.status || '',
+        'Scheduled Date': email.scheduled_for ? new Date(email.scheduled_for).toLocaleString() : '',
+        'Template': email.template?.name || '',
+        'Automation': email.automation?.name || '',
+        'From Name': email.from_name || '',
+        'From Email': email.from_email || ''
+      }));
+
+      exportToCSV(exportData, `scheduled_emails_${statusFilter.toLowerCase()}`);
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleSendNow = async (emailId) => {
@@ -378,20 +408,20 @@ const ScheduledEmailsPage = ({ t }) => {
         </div>
         <button
           onClick={handleExport}
-          disabled={!emails || emails.length === 0}
+          disabled={!emails || emails.length === 0 || exporting}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             padding: '8px 16px',
-            backgroundColor: (!emails || emails.length === 0) ? t.bgHover : t.primary,
+            backgroundColor: (!emails || emails.length === 0 || exporting) ? t.bgHover : t.primary,
             border: 'none',
             borderRadius: '8px',
-            color: (!emails || emails.length === 0) ? t.textMuted : '#fff',
-            cursor: (!emails || emails.length === 0) ? 'not-allowed' : 'pointer',
+            color: (!emails || emails.length === 0 || exporting) ? t.textMuted : '#fff',
+            cursor: (!emails || emails.length === 0 || exporting) ? 'not-allowed' : 'pointer',
             fontSize: '13px',
             fontWeight: '500',
-            opacity: (!emails || emails.length === 0) ? 0.6 : 1
+            opacity: (!emails || emails.length === 0 || exporting) ? 0.6 : 1
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -399,7 +429,7 @@ const ScheduledEmailsPage = ({ t }) => {
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Export CSV
+          {exporting ? 'Exporting...' : 'Export CSV'}
         </button>
       </div>
 
