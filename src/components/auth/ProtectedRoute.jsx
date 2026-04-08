@@ -1,12 +1,14 @@
 // src/components/auth/ProtectedRoute.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/auth';
 
 const ProtectedRoute = ({ children }) => {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, startTrial, user } = useAuth();
   const location = useLocation();
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialError, setTrialError] = useState(null);
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -46,7 +48,6 @@ const ProtectedRoute = ({ children }) => {
     const sfContext = authService.detectSalesforceContext();
     if (sfContext.isInIframe && sfContext.isSalesforceReferrer) {
       // In Salesforce but user not enabled - show trial/pricing page
-      const baseUrl = window.location.origin;
       const features = [
         'Automated email workflows',
         'Pre-built email templates',
@@ -118,19 +119,42 @@ const ProtectedRoute = ({ children }) => {
               }}>30-Day Free Trial</div>
             </div>
 
-            <a
-              href={`${baseUrl}/login`}
-              target="_blank"
-              rel="noopener noreferrer"
+            {trialError && (
+              <div style={{
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px',
+                padding: '16px', marginBottom: '16px', fontSize: '14px', color: '#dc2626',
+              }}>
+                {trialError}
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setTrialLoading(true);
+                setTrialError(null);
+                try {
+                  const result = await startTrial();
+                  if (result && !result.success) {
+                    setTrialError(result.error || 'Failed to start trial');
+                  }
+                } catch (err) {
+                  setTrialError(err.message || 'Failed to start trial');
+                } finally {
+                  setTrialLoading(false);
+                }
+              }}
+              disabled={trialLoading || !user}
               style={{
                 display: 'block', width: '100%', padding: '14px 24px', fontSize: '16px', fontWeight: '600',
-                color: '#ffffff', backgroundColor: '#3b82f6', border: 'none', borderRadius: '8px',
-                cursor: 'pointer', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box',
+                color: '#ffffff', backgroundColor: trialLoading || !user ? '#94a3b8' : '#3b82f6',
+                border: 'none', borderRadius: '8px',
+                cursor: trialLoading || !user ? 'not-allowed' : 'pointer',
+                textAlign: 'center', boxSizing: 'border-box',
                 marginBottom: '12px',
               }}
             >
-              Start Your 30-Day Free Trial
-            </a>
+              {trialLoading ? 'Starting Trial...' : 'Start Your 30-Day Free Trial'}
+            </button>
 
             <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
               Questions? Contact your ISG administrator.
