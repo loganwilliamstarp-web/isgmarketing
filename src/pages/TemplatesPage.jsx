@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   useTemplates,
@@ -84,6 +84,11 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
   const [category, setCategory] = useState(template?.category || 'general');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
+  const savedSelectionRef = useRef({ start: 0, end: 0 });
+  const bodyRef = useRef(null);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -144,6 +149,58 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
 
   const insertMergeField = (field) => {
     setBody(body + field);
+  };
+
+  const openLinkDialog = () => {
+    const textarea = bodyRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      savedSelectionRef.current = { start, end };
+      setLinkText(start !== end ? body.substring(start, end) : '');
+    } else {
+      savedSelectionRef.current = { start: body.length, end: body.length };
+      setLinkText('');
+    }
+    setLinkUrl('');
+    setShowLinkDialog(true);
+  };
+
+  const insertLink = () => {
+    if (!linkUrl.trim()) return;
+    let url = linkUrl.trim();
+    if (!/^(https?:\/\/|mailto:|tel:|#)/i.test(url)) {
+      url = `https://${url}`;
+    }
+    const text = (linkText.trim() || url)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const safeUrl = url.replace(/"/g, '&quot;');
+    const linkHtml = `<a href="${safeUrl}">${text}</a>`;
+
+    if (editMode === 'text') {
+      // Convert current plain text to HTML, switch modes, append link
+      const converted = plainTextToHtml(body);
+      setBody(converted + (converted ? '\n\n' : '') + `<p>${linkHtml}</p>`);
+      setEditMode('html');
+    } else {
+      const { start, end } = savedSelectionRef.current;
+      const newBody = body.substring(0, start) + linkHtml + body.substring(end);
+      setBody(newBody);
+      setTimeout(() => {
+        const textarea = bodyRef.current;
+        if (textarea) {
+          textarea.focus();
+          const cursor = start + linkHtml.length;
+          textarea.setSelectionRange(cursor, cursor);
+        }
+      }, 0);
+    }
+
+    setShowLinkDialog(false);
+    setLinkUrl('');
+    setLinkText('');
   };
 
   // Get HTML content for preview
@@ -288,6 +345,21 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
                   {field.label}
                 </button>
               ))}
+              <button
+                onClick={openLinkDialog}
+                style={{
+                  padding: '4px 10px',
+                  backgroundColor: `${t.primary}15`,
+                  border: `1px solid ${t.primary}40`,
+                  borderRadius: '6px',
+                  color: t.primary,
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '500'
+                }}
+              >
+                🔗 Insert Link
+              </button>
             </div>
           </div>
 
@@ -356,6 +428,7 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
               </div>
             )}
             <textarea
+              ref={bodyRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={editMode === 'html'
@@ -519,6 +592,145 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
           </div>
         </>
       )}
+
+      {/* Insert Link Dialog */}
+      {showLinkDialog && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 200 }}
+            onClick={() => setShowLinkDialog(false)}
+          />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '420px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            zIndex: 201,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{
+              padding: '14px 20px',
+              borderBottom: `1px solid ${t.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '600', color: t.text, margin: 0 }}>
+                Insert Link
+              </h3>
+              <button
+                onClick={() => setShowLinkDialog(false)}
+                style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                  URL
+                </label>
+                <input
+                  type="text"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') insertLink(); }}
+                  placeholder="https://example.com"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                  Display Text <span style={{ color: t.textMuted, fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') insertLink(); }}
+                  placeholder="Click here"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              {editMode === 'text' && (
+                <div style={{
+                  padding: '8px 12px',
+                  backgroundColor: `${t.warning}15`,
+                  border: `1px solid ${t.warning}30`,
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: t.text
+                }}>
+                  Inserting a link will switch the editor to HTML mode.
+                </div>
+              )}
+            </div>
+            <div style={{
+              padding: '12px 20px',
+              borderTop: `1px solid ${t.border}`,
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '8px'
+            }}>
+              <button
+                onClick={() => setShowLinkDialog(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: t.textSecondary,
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={insertLink}
+                disabled={!linkUrl.trim()}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: t.primary,
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  cursor: linkUrl.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  opacity: linkUrl.trim() ? 1 : 0.5
+                }}
+              >
+                Insert Link
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 };
@@ -531,6 +743,56 @@ const CreateMasterTemplateModal = ({ onSave, onClose, theme: t }) => {
   const [category, setCategory] = useState('general');
   const [body, setBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
+  const savedSelectionRef = useRef({ start: 0, end: 0 });
+  const bodyRef = useRef(null);
+
+  const openLinkDialog = () => {
+    const textarea = bodyRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      savedSelectionRef.current = { start, end };
+      setLinkText(start !== end ? body.substring(start, end) : '');
+    } else {
+      savedSelectionRef.current = { start: body.length, end: body.length };
+      setLinkText('');
+    }
+    setLinkUrl('');
+    setShowLinkDialog(true);
+  };
+
+  const insertLink = () => {
+    if (!linkUrl.trim()) return;
+    let url = linkUrl.trim();
+    if (!/^(https?:\/\/|mailto:|tel:|#)/i.test(url)) {
+      url = `https://${url}`;
+    }
+    const text = (linkText.trim() || url)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const safeUrl = url.replace(/"/g, '&quot;');
+    const linkHtml = `<a href="${safeUrl}">${text}</a>`;
+
+    const { start, end } = savedSelectionRef.current;
+    const newBody = body.substring(0, start) + linkHtml + body.substring(end);
+    setBody(newBody);
+    setTimeout(() => {
+      const textarea = bodyRef.current;
+      if (textarea) {
+        textarea.focus();
+        const cursor = start + linkHtml.length;
+        textarea.setSelectionRange(cursor, cursor);
+      }
+    }, 0);
+
+    setShowLinkDialog(false);
+    setLinkUrl('');
+    setLinkText('');
+  };
 
   const handleSubmit = async () => {
     if (!name || !defaultKey || !subject) return;
@@ -688,10 +950,28 @@ const CreateMasterTemplateModal = ({ onSave, onClose, theme: t }) => {
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
-              Email Body
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
+                Email Body
+              </label>
+              <button
+                onClick={openLinkDialog}
+                style={{
+                  padding: '4px 10px',
+                  backgroundColor: `${t.primary}15`,
+                  border: `1px solid ${t.primary}40`,
+                  borderRadius: '6px',
+                  color: t.primary,
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '500'
+                }}
+              >
+                🔗 Insert Link
+              </button>
+            </div>
             <textarea
+              ref={bodyRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your email content here. Use merge fields like {{first_name}} for personalization."
@@ -764,6 +1044,133 @@ const CreateMasterTemplateModal = ({ onSave, onClose, theme: t }) => {
           </button>
         </div>
       </div>
+
+      {/* Insert Link Dialog */}
+      {showLinkDialog && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 200 }}
+            onClick={() => setShowLinkDialog(false)}
+          />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '420px',
+            backgroundColor: t.bgCard,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            zIndex: 201,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{
+              padding: '14px 20px',
+              borderBottom: `1px solid ${t.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '600', color: t.text, margin: 0 }}>
+                Insert Link
+              </h3>
+              <button
+                onClick={() => setShowLinkDialog(false)}
+                style={{ background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: '20px' }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                  URL
+                </label>
+                <input
+                  type="text"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') insertLink(); }}
+                  placeholder="https://example.com"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '500', color: t.text, display: 'block', marginBottom: '6px' }}>
+                  Display Text <span style={{ color: t.textMuted, fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') insertLink(); }}
+                  placeholder="Click here"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: t.bgInput,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: '8px',
+                    color: t.text,
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{
+              padding: '12px 20px',
+              borderTop: `1px solid ${t.border}`,
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '8px'
+            }}>
+              <button
+                onClick={() => setShowLinkDialog(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: t.bgHover,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: '6px',
+                  color: t.textSecondary,
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={insertLink}
+                disabled={!linkUrl.trim()}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: t.primary,
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  cursor: linkUrl.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  opacity: linkUrl.trim() ? 1 : 0.5
+                }}
+              >
+                Insert Link
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 };
