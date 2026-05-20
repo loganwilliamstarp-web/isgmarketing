@@ -61,17 +61,13 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'OwnerId': 'owner_id',
   },
   carriers: {
-    'Id': 'carrier_unique_id',
+    'Id': 'id',
     'Name': 'name',
-    'Carrier_Code__c': 'carrier_code',
-    'Is_Active__c': 'is_active',
   },
   producers: {
     'Id': 'producer_unique_id',
     'Name': 'name',
-    'Email__c': 'email',
-    'Producer_Code__c': 'producer_code',
-    'Is_Active__c': 'is_active',
+    'OwnerId': 'owner_id',
   },
 }
 
@@ -81,8 +77,8 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
 const SYNC_OBJECTS = [
   { object: 'Account', table: 'accounts', uniqueKey: 'account_unique_id', mappings: FIELD_MAPPINGS.accounts },
   { object: 'Policy__c', table: 'policies', uniqueKey: 'policy_unique_id', mappings: FIELD_MAPPINGS.policies },
-  { object: 'Carrier__c', table: 'carriers', uniqueKey: 'carrier_unique_id', mappings: FIELD_MAPPINGS.carriers },
-  { object: 'Producer__c', table: 'producers', uniqueKey: 'producer_unique_id', mappings: FIELD_MAPPINGS.producers },
+  { object: 'Carrier__c', table: 'carriers', uniqueKey: 'id', mappings: FIELD_MAPPINGS.carriers },
+  { object: 'Producer_CSR__c', table: 'producers', uniqueKey: 'producer_unique_id', mappings: FIELD_MAPPINGS.producers },
 ]
 
 // OAuth 2.0 client-credentials token from the Salesforce connected app
