@@ -56,6 +56,10 @@ interface ScheduledEmail {
 // Timeout guard: Supabase edge functions have a 60s limit
 const FUNCTION_TIMEOUT_MS = 55000
 
+// Max time to spend on 24h verification per run. Verification can now trigger
+// SendGrid validation calls, so this caps it and leaves budget for the send step.
+const VERIFICATION_BUDGET_MS = 30000
+
 serve(async (req) => {
   // Handle CORS preflight - must return 200 with proper headers
   if (req.method === 'OPTIONS') {
@@ -124,7 +128,7 @@ serve(async (req) => {
 
     // Step 1: Run 24-hour verification for automation emails
     if (action === 'process' || action === 'verify' || action === 'daily') {
-      const verifyResult = await runVerification(supabaseClient)
+      const verifyResult = await runVerification(supabaseClient, startTime)
       results.verified = verifyResult.verified
       results.cancelled += verifyResult.cancelled
       results.errors.push(...verifyResult.errors)
@@ -241,7 +245,10 @@ async function runDailyRefresh(
         .from('accounts')
         .select('*', { count: 'exact' })
         .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
-        .eq('email_validation_status', 'valid')  // Only schedule for validated emails
+        // Schedule regardless of validation status - emails are validated ~24h
+        // before send (and again just-in-time at send). Only skip addresses
+        // already known to be invalid.
+        .or('email_validation_status.is.null,email_validation_status.neq.invalid')
         .order('account_unique_id')  // Consistent ordering for pagination
         .range(accountOffset, accountOffset + MAX_ACCOUNTS_PER_REFRESH - 1)
 
@@ -592,7 +599,7 @@ async function runDailyRefresh(
 // 24-HOUR VERIFICATION
 // ============================================================================
 
-async function runVerification(supabase: any): Promise<{ verified: number, cancelled: number, errors: string[] }> {
+async function runVerification(supabase: any, startTime: number): Promise<{ verified: number, cancelled: number, errors: string[] }> {
   const errors: string[] = []
   let verified = 0
   let cancelled = 0
@@ -621,6 +628,14 @@ async function runVerification(supabase: any): Promise<{ verified: number, cance
   }
 
   for (const email of (emails || [])) {
+    // Verification can trigger SendGrid validation calls; stop before the
+    // function times out. Unprocessed emails keep requires_verification=true
+    // and are retried on the next run.
+    if (Date.now() - startTime > VERIFICATION_BUDGET_MS) {
+      console.warn(`[Verification] Time budget reached after ${verified + cancelled} emails - remaining will be retried next run`)
+      break
+    }
+
     try {
       const qualifyResult = await verifyAccountQualifies(supabase, email)
 
@@ -671,20 +686,35 @@ async function verifyAccountQualifies(
     return { qualifies: false, reason: 'Account has opted out of email' }
   }
 
-  // Check email validation status - only send to validated emails
-  if (account.email_validation_status !== 'valid') {
-    const status = account.email_validation_status || 'unknown'
-    const reason = account.email_validation_reason
-    return {
-      qualifies: false,
-      reason: `Email validation status is '${status}'${reason ? ` (${reason})` : ''}`
-    }
-  }
-
-  // Check if email address is valid
+  // Check if email address is present
   const recipientEmail = email.to_email || account.person_email || account.email
   if (!recipientEmail || !recipientEmail.includes('@')) {
     return { qualifies: false, reason: 'Invalid or missing email address' }
+  }
+
+  // Validate the email ~24h before send - this is the primary validation gate.
+  // Addresses already known to be invalid/risky are dropped. Unknown or stale
+  // (>90 day) addresses are validated now; only a bad result blocks the send.
+  if (account.email_validation_status === 'invalid' || account.email_validation_status === 'risky') {
+    const reason = account.email_validation_reason
+    return {
+      qualifies: false,
+      reason: `Email validation status is '${account.email_validation_status}'${reason ? ` (${reason})` : ''}`
+    }
+  }
+
+  const validatedAt = account.email_validated_at ? new Date(account.email_validated_at) : null
+  const ninetyDaysAgo = new Date()
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  if (account.email_validation_status !== 'valid' || !validatedAt || validatedAt < ninetyDaysAgo) {
+    const jitResult = await performJITValidation(supabase, email.account_id, recipientEmail)
+    if (jitResult.status !== 'valid') {
+      return {
+        qualifies: false,
+        reason: `Email validation failed: '${jitResult.status}'${jitResult.reason ? ` (${jitResult.reason})` : ''}`
+      }
+    }
+    account.email_validation_status = 'valid'
   }
 
   // Check unsubscribe list

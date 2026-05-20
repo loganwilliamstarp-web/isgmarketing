@@ -28,7 +28,7 @@ const SENDGRID_VALIDATION_URL = 'https://api.sendgrid.com/v3/validations/email'
 
 // Rate limits and batch sizes
 const MAX_VALIDATIONS_PER_RUN = 5000  // Limit per cron run to control costs
-const BATCH_SIZE = 50                 // Process in smaller batches for reliability
+const BATCH_SIZE = 20                 // Accounts validated concurrently per batch (bounded parallelism)
 const VALIDATION_EXPIRY_DAYS = 90     // Re-validate after 90 days
 
 interface ValidationResult {
@@ -189,9 +189,10 @@ serve(async (req) => {
       const batch = accounts.slice(i, i + BATCH_SIZE)
       console.log(`[Validation] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(accounts.length / BATCH_SIZE)}`)
 
-      for (const account of batch) {
+      // Validate the batch concurrently for throughput; BATCH_SIZE bounds parallelism
+      await Promise.all(batch.map(async (account) => {
         const email = account.person_email || account.email
-        if (!email) continue
+        if (!email) return
 
         try {
           const validationResult = await validateEmail(email, sendgridValidationKey, dryRun)
@@ -199,7 +200,7 @@ serve(async (req) => {
           if (dryRun) {
             console.log(`[DRY RUN] Would validate ${email} for account ${account.name}`)
             results.processed++
-            continue
+            return
           }
 
           // Update account with validation result
@@ -216,7 +217,7 @@ serve(async (req) => {
 
           if (updateError) {
             results.errors.push(`Failed to update account ${account.account_unique_id}: ${updateError.message}`)
-            continue
+            return
           }
 
           results.processed++
@@ -229,7 +230,7 @@ serve(async (req) => {
         } catch (err: any) {
           results.errors.push(`Error validating ${email}: ${err.message}`)
         }
-      }
+      }))
 
       // Small delay between batches to avoid rate limiting
       if (i + BATCH_SIZE < accounts.length) {
