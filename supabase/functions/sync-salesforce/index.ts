@@ -6,6 +6,11 @@
 // salesforce_sync_state). The first runs - with the cursor at the epoch -
 // backfill the full history; once caught up it only pulls hourly deltas.
 //
+// Schema-adaptive: it calls the Salesforce describe API and only queries
+// fields that actually exist, skips objects that don't exist, and drops any
+// Supabase column that isn't in the table. So a renamed/missing field never
+// breaks the sync - that field just doesn't populate.
+//
 // Replaces the push-based sync-salesforce-data CSV upload (and its CSV
 // parsing bug). Keep that function until this one is verified, then retire it.
 
@@ -18,7 +23,8 @@ const UPSERT_BATCH_SIZE = 500
 const SF_PAGE_SIZE = 2000
 
 // Field mappings: Salesforce field API name -> Supabase column.
-// Copied verbatim from the legacy sync-salesforce-data function.
+// This is the "wish list" - the describe call filters it down to fields that
+// actually exist on the object, and the upsert drops columns the table lacks.
 const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
   accounts: {
     'Id': 'account_unique_id',
@@ -36,8 +42,6 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'Primary_Contact_First_Name__c': 'primary_contact_first_name',
     'Primary_Contact_Last_Name__c': 'primary_contact_last_name',
     'OwnerId': 'owner_id',
-    'CreatedDate': 'salesforce_created_at',
-    'LastModifiedDate': 'salesforce_updated_at',
   },
   policies: {
     'Id': 'policy_unique_id',
@@ -55,8 +59,6 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'Carrier__c': 'carrier_id',
     'Producer__c': 'producer_id',
     'OwnerId': 'owner_id',
-    'CreatedDate': 'salesforce_created_at',
-    'LastModifiedDate': 'salesforce_updated_at',
   },
   carriers: {
     'Id': 'carrier_unique_id',
@@ -73,11 +75,9 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
   },
 }
 
-// Objects to sync. `table` is the Supabase table (stable). `object` is the
-// Salesforce object API name.
-// NOTE: the custom object API names below (Policy__c / Carrier__c /
-// Producer__c) are best guesses - confirm them against your Salesforce org
-// and correct here if they differ. `Account` is the standard object.
+// Objects to sync. `table` is the Supabase table. `object` is the Salesforce
+// object API name. An object that doesn't exist is skipped (not fatal), so a
+// wrong name here just means that table doesn't sync - correct it if needed.
 const SYNC_OBJECTS = [
   { object: 'Account', table: 'accounts', uniqueKey: 'account_unique_id', mappings: FIELD_MAPPINGS.accounts },
   { object: 'Policy__c', table: 'policies', uniqueKey: 'policy_unique_id', mappings: FIELD_MAPPINGS.policies },
@@ -111,6 +111,25 @@ async function getSalesforceToken(): Promise<{ accessToken: string, instanceUrl:
   return { accessToken: data.access_token, instanceUrl: data.instance_url }
 }
 
+// Returns the set of field API names on a Salesforce object (lower-cased),
+// or null if the object doesn't exist in this org.
+async function getObjectFields(
+  instanceUrl: string,
+  accessToken: string,
+  object: string,
+): Promise<Set<string> | null> {
+  const res = await fetch(
+    `${instanceUrl}/services/data/${SF_API_VERSION}/sobjects/${object}/describe`,
+    { headers: { 'Authorization': `Bearer ${accessToken}` } },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`describe ${object} failed ${res.status}: ${await res.text()}`)
+  }
+  const data = await res.json()
+  return new Set((data.fields || []).map((f: any) => String(f.name).toLowerCase()))
+}
+
 // Convert a SF record (JSON) to a DB row using the field mappings
 function transformRecord(record: any, mappings: Record<string, string>): Record<string, any> {
   const row: Record<string, any> = {}
@@ -136,6 +155,35 @@ function transformRecord(record: any, mappings: Record<string, string>): Record<
 // SOQL datetime literal: unquoted, no milliseconds (e.g. 2026-01-15T10:30:00Z)
 function soqlDateTime(iso: string): string {
   return new Date(iso).toISOString().slice(0, 19) + 'Z'
+}
+
+// Upsert a batch, self-healing around Supabase columns the table doesn't have.
+// Discovered missing columns are collected in `missingCols` so later batches
+// skip them up front.
+async function upsertBatch(
+  supabase: any,
+  table: string,
+  rows: Record<string, any>[],
+  uniqueKey: string,
+  missingCols: Set<string>,
+): Promise<void> {
+  const strip = (rs: Record<string, any>[]) =>
+    missingCols.size === 0 ? rs : rs.map((r) => {
+      const c = { ...r }
+      for (const m of missingCols) delete c[m]
+      return c
+    })
+
+  let payload = strip(rows)
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const { error } = await supabase.from(table).upsert(payload, { onConflict: uniqueKey })
+    if (!error) return
+    const match = error.message?.match(/Could not find the '([^']+)' column/)
+    if (!match) throw new Error(`upsert ${table}: ${error.message}`)
+    missingCols.add(match[1])
+    payload = strip(rows)
+  }
+  throw new Error(`upsert ${table}: unresolved schema mismatch`)
 }
 
 serve(async (req) => {
@@ -173,9 +221,22 @@ serve(async (req) => {
       let cursor = startCursor
       let recordsThisRun = 0
       let objError: string | null = null
+      const missingCols = new Set<string>()
 
       try {
-        const fields = [...new Set(['Id', ...Object.keys(obj.mappings), 'SystemModstamp'])]
+        // Describe the object so we only query fields that actually exist.
+        const sfFields = await getObjectFields(instanceUrl, accessToken, obj.object)
+        if (sfFields === null) {
+          throw new Error(`object ${obj.object} does not exist in this Salesforce org - skipped`)
+        }
+
+        const mappedFields = Object.keys(obj.mappings).filter((k) => sfFields.has(k.toLowerCase()))
+        const skipped = Object.keys(obj.mappings).filter((k) => !sfFields.has(k.toLowerCase()))
+        if (skipped.length > 0) {
+          console.log(`[${obj.object}] skipping fields not on the object: ${skipped.join(', ')}`)
+        }
+        const fields = [...new Set(['Id', 'SystemModstamp', ...mappedFields])]
+
         const soql = `SELECT ${fields.join(', ')} FROM ${obj.object} ` +
           `WHERE SystemModstamp >= ${soqlDateTime(startCursor)} ORDER BY SystemModstamp`
         let url: string | null = `${instanceUrl}/services/data/${SF_API_VERSION}/query?q=${encodeURIComponent(soql)}`
@@ -199,11 +260,9 @@ serve(async (req) => {
               .filter((r) => r[obj.uniqueKey])
 
             for (let i = 0; i < rows.length; i += UPSERT_BATCH_SIZE) {
-              const batch = rows.slice(i, i + UPSERT_BATCH_SIZE)
-              const { error } = await supabase
-                .from(obj.table)
-                .upsert(batch, { onConflict: obj.uniqueKey })
-              if (error) throw new Error(`upsert ${obj.table}: ${error.message}`)
+              await upsertBatch(
+                supabase, obj.table, rows.slice(i, i + UPSERT_BATCH_SIZE), obj.uniqueKey, missingCols,
+              )
             }
             recordsThisRun += rows.length
 
