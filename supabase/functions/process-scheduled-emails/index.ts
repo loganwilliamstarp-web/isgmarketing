@@ -324,7 +324,15 @@ async function runDailyRefresh(
       }
 
       // Build email schedule from workflow nodes (with templateKey resolution)
-      const emailSchedule = buildEmailSchedule(nodes, templateIdMap)
+      const { schedule: emailSchedule, skipped: skippedEmailSteps } = buildEmailSchedule(nodes, templateIdMap)
+
+      // Surface any email steps dropped because their template doesn't exist
+      // for this user - otherwise the step silently never sends.
+      if (skippedEmailSteps.length > 0) {
+        const skipMsg = `[${automation.name}] ${skippedEmailSteps.length} email step(s) skipped — ${skippedEmailSteps.map((s) => s.reason).join('; ')}`
+        console.warn(skipMsg)
+        errors.push(skipMsg)
+      }
 
       // Debug logging (before filteredAccounts is defined)
       console.log(`[${automation.name}] Nodes:`, JSON.stringify(nodes?.map((n: any) => ({ id: n.id, type: n.type, config: n.config }))))
@@ -1611,8 +1619,12 @@ function extractDateTriggerRules(filterConfig: any): any[] {
   return rules
 }
 
-function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> = {}): { nodeId: string, templateId: string, daysOffset: number }[] {
+function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> = {}): {
+  schedule: { nodeId: string, templateId: string, daysOffset: number }[],
+  skipped: { nodeId: string, reason: string }[]
+} {
   const schedule: { nodeId: string, templateId: string, daysOffset: number }[] = []
+  const skipped: { nodeId: string, reason: string }[] = []
   let currentDelay = 0
 
   const processNodes = (nodeList: any[]) => {
@@ -1629,6 +1641,15 @@ function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> 
           nodeId: node.id,
           templateId: templateId,
           daysOffset: currentDelay
+        })
+      } else if (node.type === 'send_email') {
+        // Template didn't resolve - record the dropped step so it's visible
+        // instead of the email type silently never being scheduled.
+        skipped.push({
+          nodeId: node.id,
+          reason: node.config?.templateKey
+            ? `template not found for templateKey "${node.config.templateKey}"`
+            : 'send_email node has no template or templateKey configured'
         })
       } else if (node.type === 'delay') {
         const duration = node.config?.duration || 0
@@ -1651,7 +1672,7 @@ function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> 
   const workflowNodes = nodes.filter((n: any) => n.type !== 'entry_criteria' && n.type !== 'trigger')
   processNodes(workflowNodes)
 
-  return schedule
+  return { schedule, skipped }
 }
 
 /**
