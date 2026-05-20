@@ -29,3 +29,7 @@ verify_jwt = false
 # Submit feedback - called from star-rating thank you page
 [functions.submit-feedback]
 verify_jwt = false
+
+# Salesforce sync - called by pg_cron and self-invokes to drain backfill
+[functions.sync-salesforce]
+verify_jwt = false
