@@ -32,10 +32,12 @@ const CreateMasterAutomationModal = ({ onSave, onClose, theme: t }) => {
   const [category, setCategory] = useState('welcome');
   const [sendTime, setSendTime] = useState('09:00');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async () => {
     if (!name || !defaultKey) return;
     setIsSubmitting(true);
+    setError('');
     try {
       await onSave({
         name,
@@ -52,6 +54,7 @@ const CreateMasterAutomationModal = ({ onSave, onClose, theme: t }) => {
       onClose();
     } catch (err) {
       console.error('Failed to create master automation:', err);
+      setError(err?.message || 'Failed to create master automation. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -217,6 +220,20 @@ const CreateMasterAutomationModal = ({ onSave, onClose, theme: t }) => {
             <strong>Note:</strong> This creates the master automation. You can edit the workflow after creation,
             then use "Sync to Users" to push it to all user accounts.
           </div>
+
+          {error && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              backgroundColor: `${t.danger}15`,
+              border: `1px solid ${t.danger}30`,
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: t.danger
+            }}>
+              {error}
+            </div>
+          )}
         </div>
 
         <div style={{
@@ -537,7 +554,7 @@ const AutomationsPage = ({ t }) => {
 
   // Handler for creating master automation
   const handleCreateMasterAutomation = async (automationData) => {
-    await createMasterAutomation.mutateAsync(automationData);
+    await createMasterAutomation.mutateAsync({ automation: automationData, userId: user?.id });
   };
 
   // Navigation handlers

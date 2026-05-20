@@ -231,13 +231,14 @@ export const adminService = {
 
   /**
    * Create a new master automation
+   * Writes go through a SECURITY DEFINER RPC because RLS blocks direct writes
+   * to master_automations for the app role (see 20260520000001 migration).
    */
-  async createMasterAutomation(automation) {
-    const { data, error } = await supabase
-      .from('master_automations')
-      .insert(automation)
-      .select()
-      .single();
+  async createMasterAutomation(automation, userId) {
+    const { data, error } = await supabase.rpc('admin_create_master_automation', {
+      p_user_id: userId,
+      p_automation: automation,
+    });
 
     if (error) throw error;
     return data;
@@ -245,56 +246,17 @@ export const adminService = {
 
   /**
    * Update a master automation and sync to all users
-   * If the master automation doesn't exist, create it first
+   * If the master automation doesn't exist, the RPC creates it. The RPC also
+   * pushes the changes down to every user's copy.
    */
-  async updateMasterAutomation(defaultKey, updates) {
-    // First check if master automation exists (use maybeSingle to avoid error on 0 rows)
-    const { data: existing, error: checkError } = await supabase
-      .from('master_automations')
-      .select('id')
-      .eq('default_key', defaultKey)
-      .maybeSingle();
-
-    if (checkError) throw checkError;
-
-    let data;
-    let error;
-
-    if (existing) {
-      // Update existing master automation
-      const result = await supabase
-        .from('master_automations')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('default_key', defaultKey)
-        .select();
-
-      data = result.data?.[0];
-      error = result.error;
-    } else {
-      // Create new master automation from the updates
-      const result = await supabase
-        .from('master_automations')
-        .insert({
-          default_key: defaultKey,
-          ...updates,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select();
-
-      data = result.data?.[0];
-      error = result.error;
-    }
+  async updateMasterAutomation(defaultKey, updates, userId) {
+    const { data, error } = await supabase.rpc('admin_update_master_automation', {
+      p_user_id: userId,
+      p_default_key: defaultKey,
+      p_updates: updates,
+    });
 
     if (error) throw error;
-
-    // Explicitly sync to all users
-    const syncResult = await supabase.rpc('sync_master_automation_to_users', { p_default_key: defaultKey });
-    if (syncResult.error) throw syncResult.error;
-
     return data;
   },
 
@@ -366,28 +328,28 @@ export const adminService = {
 
   /**
    * Create a new master template
+   * Writes go through a SECURITY DEFINER RPC because RLS blocks direct writes
+   * to master_templates for the app role (see 20260520000001 migration).
    */
-  async createMasterTemplate(template) {
-    const { data, error } = await supabase
-      .from('master_templates')
-      .insert(template)
-      .select()
-      .single();
+  async createMasterTemplate(template, userId) {
+    const { data, error } = await supabase.rpc('admin_create_master_template', {
+      p_user_id: userId,
+      p_template: template,
+    });
 
     if (error) throw error;
     return data;
   },
 
   /**
-   * Update a master template (triggers sync to all users)
+   * Update a master template
    */
-  async updateMasterTemplate(defaultKey, updates) {
-    const { data, error } = await supabase
-      .from('master_templates')
-      .update(updates)
-      .eq('default_key', defaultKey)
-      .select()
-      .single();
+  async updateMasterTemplate(defaultKey, updates, userId) {
+    const { data, error } = await supabase.rpc('admin_update_master_template', {
+      p_user_id: userId,
+      p_default_key: defaultKey,
+      p_updates: updates,
+    });
 
     if (error) throw error;
     return data;

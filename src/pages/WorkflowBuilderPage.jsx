@@ -106,6 +106,7 @@ const WorkflowBuilderPage = ({ t }) => {
         // Admin editing a master automation directly via /automations/master/:defaultKey
         await updateMasterAutomation.mutateAsync({
           defaultKey: defaultKey,
+          userId: userId,
           updates: {
             name: data.name,
             description: data.description,
@@ -119,9 +120,10 @@ const WorkflowBuilderPage = ({ t }) => {
         });
       } else if (isAdmin && isDefaultAutomation && effectiveAutomation?.default_key) {
         // Admin editing a default automation via user's automation ID - save to master_automations table
-        // This will trigger sync to all users via database trigger
+        // The RPC syncs the changes to all user copies
         await updateMasterAutomation.mutateAsync({
           defaultKey: effectiveAutomation.default_key,
+          userId: userId,
           updates: {
             name: data.name,
             description: data.description,

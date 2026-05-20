@@ -98,12 +98,12 @@ export function useMasterAutomationMutations() {
   };
 
   const createMasterAutomation = useMutation({
-    mutationFn: (automation) => adminService.createMasterAutomation(automation),
+    mutationFn: ({ automation, userId }) => adminService.createMasterAutomation(automation, userId),
     onSuccess: invalidateMasterAutomations,
   });
 
   const updateMasterAutomation = useMutation({
-    mutationFn: ({ defaultKey, updates }) => adminService.updateMasterAutomation(defaultKey, updates),
+    mutationFn: ({ defaultKey, updates, userId }) => adminService.updateMasterAutomation(defaultKey, updates, userId),
     onSuccess: invalidateMasterAutomations,
   });
 
@@ -177,12 +177,12 @@ export function useMasterTemplateMutations() {
   };
 
   const createMasterTemplate = useMutation({
-    mutationFn: (template) => adminService.createMasterTemplate(template),
+    mutationFn: ({ template, userId }) => adminService.createMasterTemplate(template, userId),
     onSuccess: invalidateMasterTemplates,
   });
 
   const updateMasterTemplate = useMutation({
-    mutationFn: ({ defaultKey, updates }) => adminService.updateMasterTemplate(defaultKey, updates),
+    mutationFn: ({ defaultKey, updates, userId }) => adminService.updateMasterTemplate(defaultKey, updates, userId),
     onSuccess: invalidateMasterTemplates,
   });
 

@@ -1542,7 +1542,8 @@ const TemplatesPage = ({ t }) => {
       // Saving master template
       await updateMasterTemplate.mutateAsync({
         defaultKey: editingTemplate.default_key,
-        updates: data
+        updates: data,
+        userId: user?.id
       });
     } else if (editingTemplate) {
       await updateTemplate.mutateAsync({ templateId: editingTemplate.id, updates: data });
@@ -1564,7 +1565,7 @@ const TemplatesPage = ({ t }) => {
 
   const handleCreateMasterTemplate = async (templateData) => {
     try {
-      await createMasterTemplate.mutateAsync(templateData);
+      await createMasterTemplate.mutateAsync({ template: templateData, userId: user?.id });
       setShowCreateModal(false);
     } catch (err) {
       console.error('Failed to create master template:', err);
