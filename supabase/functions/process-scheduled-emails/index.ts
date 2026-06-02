@@ -281,7 +281,7 @@ async function runDailyRefresh(
         const batchIds = accountIds.slice(i, i + POLICY_BATCH_SIZE)
         const { data: batchPolicies, error: batchError } = await supabase
           .from('policies')
-          .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term')
+          .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term, policy_class')
           .in('account_id', batchIds)
           .eq('policy_status', 'Active')
 
@@ -345,9 +345,31 @@ async function runDailyRefresh(
       // Fetch template details for admin review
       const templateIds = [...new Set(emailSchedule.map(e => e.templateId).filter(Boolean))]
       if (templateIds.length === 0) {
-        // No valid templates found, skip this automation
-        errors.push(`No templates found for automation ${automation.name} - check templateKey mappings`)
+        // No valid templates found, skip this automation. The most common cause
+        // is a master template that was never synced to this user's
+        // email_templates, so its templateKey resolves to nothing. Persist the
+        // reason on the automation so it is visible in the UI rather than only
+        // living in this response payload.
+        const unresolved = templateKeys.filter((k) => !templateIdMap[k])
+        const reason = unresolved.length > 0
+          ? `No emails scheduled — template(s) not found for this user: ${unresolved.join(', ')}. Sync the master template to users, then re-activate.`
+          : `No emails scheduled — automation has no usable email template. Check the send_email steps.`
+        console.warn(`[${automation.name}] ${reason}`)
+        errors.push(`${automation.name}: ${reason}`)
+        await supabase
+          .from('automations')
+          .update({ last_error: reason, updated_at: new Date().toISOString() })
+          .eq('id', automation.id)
         continue
+      }
+
+      // Templates resolved — clear any stale scheduling error from a prior run
+      // (e.g. the template has since been synced to this user).
+      if (automation.last_error) {
+        await supabase
+          .from('automations')
+          .update({ last_error: null, updated_at: new Date().toISOString() })
+          .eq('id', automation.id)
       }
 
       const { data: templates } = await supabase
@@ -369,8 +391,49 @@ async function runDailyRefresh(
       const oneYearFromNow = new Date(today)
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
 
+      // If the filter uses last_email_sent, build account -> most-recent-send map.
+      // Scope is THIS automation only: an account that this automation has never
+      // emailed has no entry and qualifies as "more than N days ago".
+      const usesLastEmailSent = (filterConfig?.groups || []).some((g: any) =>
+        (g.rules || []).some((r: any) => r.field === 'last_email_sent'))
+      const lastSentByAccount: Record<string, string> = {}
+      if (usesLastEmailSent) {
+        const { data: sentRows } = await supabase
+          .from('scheduled_emails')
+          .select('account_id, updated_at')
+          .eq('automation_id', automation.id)
+          .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+        for (const row of sentRows || []) {
+          const prev = lastSentByAccount[row.account_id]
+          if (!prev || row.updated_at > prev) lastSentByAccount[row.account_id] = row.updated_at
+        }
+        console.log(`[${automation.name}] last_email_sent map: ${Object.keys(lastSentByAccount).length} account(s) previously emailed by this automation`)
+      }
+
+      // policy_status filter needs ALL statuses; the main policies query above is
+      // Active-only (to keep active_policy_type / date triggers correct), so fetch
+      // the distinct statuses per account separately when the filter uses it.
+      const usesPolicyStatus = (filterConfig?.groups || []).some((g: any) =>
+        (g.rules || []).some((r: any) => r.field === 'policy_status'))
+      const policyStatusByAccount: Record<string, string[]> = {}
+      if (usesPolicyStatus) {
+        for (let i = 0; i < accountIds.length; i += POLICY_BATCH_SIZE) {
+          const batchIds = accountIds.slice(i, i + POLICY_BATCH_SIZE)
+          const { data: rows } = await supabase
+            .from('policies')
+            .select('account_id, policy_status')
+            .in('account_id', batchIds)
+          for (const r of rows || []) {
+            const s = (r.policy_status || '').toLowerCase()
+            if (!s) continue
+            if (!policyStatusByAccount[r.account_id]) policyStatusByAccount[r.account_id] = []
+            if (!policyStatusByAccount[r.account_id].includes(s)) policyStatusByAccount[r.account_id].push(s)
+          }
+        }
+      }
+
       // Filter accounts based on non-date filter rules (policy type, etc.)
-      const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig)
+      const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig, lastSentByAccount, policyStatusByAccount)
       console.log(`[${automation.name}] Filtered accounts:`, filteredAccounts?.length || 0)
       console.log(`[${automation.name}] Date trigger rules:`, dateTriggerRules?.length || 0)
       console.log(`[${automation.name}] Date trigger rules detail:`, JSON.stringify(dateTriggerRules))
@@ -1679,7 +1742,7 @@ function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> 
  * Filter accounts based on non-date filter rules in the filter config
  * Handles filters like customer_status, policy_type, etc.
  */
-function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: any): any[] {
+function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: any, lastSentByAccount: Record<string, string> = {}, policyStatusByAccount: Record<string, string[]> = {}): any[] {
   const groups = filterConfig?.groups || []
 
   if (groups.length === 0) {
@@ -1757,6 +1820,62 @@ function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: 
             const wantsSurvey = value === 'true'
             return rule.operator === 'is' ? hasSurvey === wantsSurvey : hasSurvey !== wantsSurvey
 
+          case 'last_email_sent': {
+            // Date this automation last emailed the account (scope: this automation).
+            // Never-emailed accounts have no entry → treated as "infinitely long ago".
+            const lastSent = lastSentByAccount[account.account_unique_id]
+            if (!lastSent) {
+              return ['more_than_days_ago', 'before', 'is_empty'].includes(rule.operator)
+            }
+            return matchDate(lastSent, rule)
+          }
+
+          case 'policy_status': {
+            // Distinct statuses across ALL of the account's policies.
+            const statuses = policyStatusByAccount[account.account_unique_id] || []
+            if (statuses.length === 0) {
+              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
+            }
+            return matchValue(statuses.join(','), value, rule.operator)
+          }
+
+          case 'policy_class': {
+            // Personal / Commercial across the account's active policies.
+            const classes = accountPolicies.map((p: any) => (p.policy_class || '').toLowerCase()).filter(Boolean)
+            if (classes.length === 0) {
+              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
+            }
+            return matchValue(classes.join(','), value, rule.operator)
+          }
+
+          case 'policy_count': {
+            // Number of active policies on the account.
+            return matchNumber(accountPolicies.length, rule)
+          }
+
+          case 'email_domain': {
+            const em = (account.person_email || account.email || '').toLowerCase()
+            const domain = em.includes('@') ? em.split('@').pop() || '' : ''
+            return matchValue(domain, value, rule.operator)
+          }
+
+          case 'zip_code': {
+            const zip = (account.billing_postal_code || account.zip_code || '').toString().toLowerCase()
+            return matchValue(zip, value, rule.operator)
+          }
+
+          case 'account_created':
+            // Date-trigger operators (in_next_days, etc.) are skipped above and
+            // handled by the scheduling engine; the rest are base-filter dates.
+            return matchDate(account.created_at, rule)
+
+          case 'policy_effective':
+          case 'policy_expiration': {
+            const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
+            // Match if ANY active policy's date satisfies the rule.
+            return accountPolicies.some((p: any) => matchDate(p[dateField], rule))
+          }
+
           default:
             // For unknown fields, try to match against account properties
             const fieldValue = (account[rule.field] || '').toString().toLowerCase()
@@ -1825,6 +1944,71 @@ function matchValue(actualValue: string, filterValue: string, operator: string):
       return !actualValues.some(av => filterValues.includes(av))
     default:
       return actualValues.some(av => filterValues.some(fv => av === fv))
+  }
+}
+
+/**
+ * Numeric comparison for number fields (e.g. policy_count).
+ * 'between' uses rule.value (low) and rule.value2 (high).
+ */
+function matchNumber(actual: number, rule: any): boolean {
+  const a = Number(rule.value)
+  if (isNaN(a)) return false
+  switch (rule.operator) {
+    case 'equals': return actual === a
+    case 'greater_than': return actual > a
+    case 'less_than': return actual < a
+    case 'at_least': return actual >= a
+    case 'at_most': return actual <= a
+    case 'between': {
+      const b = Number(rule.value2)
+      if (isNaN(b)) return false
+      return actual >= Math.min(a, b) && actual <= Math.max(a, b)
+    }
+    default: return false
+  }
+}
+
+/**
+ * Date comparison for date fields used as base filters. Handles absolute-date
+ * operators (before/after/between) and relative day-offset operators. The
+ * date-trigger operators (in_next_days, in_last_days, more/less_than_days_future)
+ * on policy and account_created fields are intercepted earlier for the scheduling
+ * engine, but are implemented here too so date fields that aren't scheduling
+ * triggers (e.g. last_email_sent) behave correctly.
+ */
+function matchDate(dateValue: any, rule: any): boolean {
+  if (rule.operator === 'is_empty') return !dateValue
+  if (rule.operator === 'is_not_empty') return !!dateValue
+  if (!dateValue) return false
+  const t = new Date(dateValue).getTime()
+  if (isNaN(t)) return false
+  const dayMs = 1000 * 60 * 60 * 24
+
+  // Absolute-date operators
+  if (rule.operator === 'before') return t < new Date(rule.value).getTime()
+  if (rule.operator === 'after') return t > new Date(rule.value).getTime()
+  if (rule.operator === 'between') {
+    const lo = new Date(rule.value).getTime()
+    const hi = new Date(rule.value2).getTime()
+    if (isNaN(lo) || isNaN(hi)) return false
+    return t >= Math.min(lo, hi) && t <= Math.max(lo, hi)
+  }
+
+  // Relative day-offset operators (positive diffDays = future, negative = past)
+  const days = parseInt(rule.value, 10)
+  if (isNaN(days)) return false
+  const diffDays = (t - Date.now()) / dayMs
+  switch (rule.operator) {
+    case 'more_than_days_ago': return diffDays < -days
+    case 'less_than_days_ago': return diffDays < 0 && diffDays > -days
+    case 'exactly_days_ago': return Math.floor(-diffDays) === days
+    case 'more_than_days_future': return diffDays > days
+    case 'less_than_days_future': return diffDays > 0 && diffDays < days
+    case 'exactly_days_future': return Math.floor(diffDays) === days
+    case 'in_next_days': return diffDays >= 0 && diffDays <= days
+    case 'in_last_days': return diffDays <= 0 && diffDays >= -days
+    default: return false
   }
 }
 
