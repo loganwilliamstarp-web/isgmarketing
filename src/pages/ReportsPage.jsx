@@ -220,8 +220,10 @@ const ReportsPage = ({ t }) => {
             />
             <StatCard
               label="Sold (Email-Driven)"
-              value={formatNumber(pipelineData?.totalSold)}
-              subValue={pipelineData?.totalCustomers ? `${Math.round((pipelineData.totalSold / pipelineData.totalCustomers) * 100)}% of customers` : ''}
+              value={formatNumber(pipelineData?.emailDrivenPeople)}
+              subValue={pipelineData?.newBusinessPeople
+                ? `${Math.round((pipelineData.emailDrivenPeople / pipelineData.newBusinessPeople) * 100)}% of new business · ${dateRange.label}`
+                : dateRange.label}
               icon="🎯"
               color="#22c55e"
               isLoading={pipelineLoading}
@@ -587,8 +589,8 @@ const ReportsPage = ({ t }) => {
             />
             <StatCard
               label="Sold (Email-Driven)"
-              value={formatNumber(pipelineData?.totalSold)}
-              subValue={`of ${pipelineData?.totalCustomers || 0} customers`}
+              value={formatNumber(pipelineData?.emailDrivenPeople)}
+              subValue={`of ${pipelineData?.newBusinessPeople || 0} new-business clients`}
               icon="🎯"
               color="#22c55e"
               isLoading={pipelineLoading}
@@ -765,7 +767,7 @@ const ReportsPage = ({ t }) => {
                 alignItems: 'center'
               }}>
                 <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: t.text }}>Sold Accounts</h3>
-                <span style={{ fontSize: '12px', color: t.textMuted }}>Emailed → Customer</span>
+                <span style={{ fontSize: '12px', color: t.textMuted }}>Emailed → New policy · {dateRange.label}</span>
               </div>
               <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
                 {pipelineLoading ? (
@@ -800,6 +802,9 @@ const ReportsPage = ({ t }) => {
                         </div>
                         {item.email && (
                           <div style={{ fontSize: '11px', color: t.textMuted }}>{item.email}</div>
+                        )}
+                        {item.policyNumber && (
+                          <div style={{ fontSize: '11px', color: t.textMuted }}>Policy #{item.policyNumber}</div>
                         )}
                       </div>
                       <span style={{ fontSize: '11px', color: t.textMuted }}>

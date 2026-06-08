@@ -788,7 +788,7 @@ const MasterAdminDashboardPage = ({ t }) => {
   const { data: recentActivity, isLoading: activityLoading } = useRecentActivity(20);
   const { data: emailReplyAnalytics, isLoading: repliesAnalyticsLoading } = useEmailReplyAnalytics(timeRange);
   const { data: quoteOpportunities, isLoading: quotesLoading } = useQuoteOpportunities();
-  const { data: soldAccounts, isLoading: soldLoading } = useSoldAccounts();
+  const { data: soldAccounts, isLoading: soldLoading } = useSoldAccounts(timeRange);
 
   // Redirect non-admins
   if (!isAdmin) {
@@ -1436,8 +1436,8 @@ const MasterAdminDashboardPage = ({ t }) => {
           />
           <StatCard
             label="Sold (Email-Driven)"
-            value={formatNumber(soldAccounts?.totalSold)}
-            subValue={`of ${formatNumber(soldAccounts?.totalCustomers)} total customers`}
+            value={formatNumber(soldAccounts?.emailDrivenPeople)}
+            subValue={`of ${formatNumber(soldAccounts?.newBusinessPeople)} new-business clients · Last ${timeRange} days`}
             icon="🎯"
             color="#22c55e"
             isLoading={soldLoading}
@@ -1675,7 +1675,7 @@ const MasterAdminDashboardPage = ({ t }) => {
             justifyContent: 'space-between'
           }}>
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Sold Accounts</h3>
-            <span style={{ fontSize: '12px', color: t.textMuted }}>Emailed → Customer</span>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Email → New Business · Last {timeRange} days</span>
           </div>
 
           {/* Sold by Agency */}
@@ -1736,7 +1736,7 @@ const MasterAdminDashboardPage = ({ t }) => {
                       </span>
                     </div>
                     <div style={{ fontSize: '11px', color: t.textMuted }}>
-                      {item.ownerName}{item.agency ? ` - ${item.agency}` : ''}
+                      {item.agency || 'Unknown'}{item.policyNumber ? ` · ${item.policyNumber}` : ''}
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', color: t.textMuted }}>

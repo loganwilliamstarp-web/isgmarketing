@@ -286,9 +286,11 @@ export const reportsService = {
       csvContent += `Unique Accounts Replied,${pipelineData.uniqueAccountsReplied || 0}\n`;
       csvContent += `Change vs Previous Period,${pipelineData.replyChange || 0}%\n\n`;
 
-      csvContent += 'Conversion Metrics\n';
-      csvContent += `Email-Driven Sold,${pipelineData.totalSold || 0}\n`;
-      csvContent += `Total Customers,${pipelineData.totalCustomers || 0}\n`;
+      csvContent += `Conversion Metrics (last ${days} days)\n`;
+      csvContent += `Email-Driven Sales (clients),${pipelineData.emailDrivenPeople ?? pipelineData.totalSold ?? 0}\n`;
+      csvContent += `New-Business Clients,${pipelineData.newBusinessPeople ?? pipelineData.totalCustomers ?? 0}\n`;
+      csvContent += `Email-Driven Policies,${pipelineData.emailDrivenPolicies ?? 0}\n`;
+      csvContent += `New-Business Policies,${pipelineData.newBusinessPolicies ?? 0}\n`;
       csvContent += `Quote Opportunities,${pipelineData.totalOpportunities || 0}\n`;
       csvContent += `Prior Customers (Win-Back),${pipelineData.totalPriorCustomers || 0}\n\n`;
 
@@ -410,6 +412,7 @@ export const reportsService = {
     const { days = 30 } = options;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    const endDate = new Date();
 
     const prevStartDate = new Date();
     prevStartDate.setDate(prevStartDate.getDate() - days * 2);
@@ -426,8 +429,8 @@ export const reportsService = {
       repliedEmails,
       prevRepliedEmails,
       recentReplies,
-      soldQuery,
-      emailedAccountIds
+      salesAgg,
+      recentSales
     ] = await Promise.all([
       // Account status counts (head-only, no row data transferred)
       supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'customer'),
@@ -480,21 +483,22 @@ export const reportsService = {
         return applyOwnerFilter(q, ownerIds);
       })(),
 
-      // Customer accounts (potential sold)
-      supabase
-        .from('accounts')
-        .select('account_unique_id, name, person_email, account_status, created_at')
-        .in('owner_id', ownerArray)
-        .ilike('account_status', 'customer'),
+      // Email-driven new-business sales for this period (server-side, date-bounded).
+      // Counts people whose new policy became effective in-window AND was preceded
+      // by a marketing email. Computed in an RPC to avoid PostgREST's 1000-row cap.
+      supabase.rpc('get_email_driven_sales', {
+        p_owner_ids: ownerArray,
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString()
+      }),
 
-      // All email_logs account_ids for this user (to find email-driven conversions)
-      (() => {
-        let q = supabase
-          .from('email_logs')
-          .select('account_id')
-          .not('account_id', 'is', null);
-        return applyOwnerFilter(q, ownerIds);
-      })()
+      // Recent email-driven sales for the list (newest first)
+      supabase.rpc('get_recent_email_driven_sales', {
+        p_owner_ids: ownerArray,
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString(),
+        p_limit: 10
+      })
     ]);
 
     // Account status breakdown (from count queries, no row data)
@@ -527,20 +531,20 @@ export const reportsService = {
       repliedAt: r.first_replied_at
     }));
 
-    // Sold accounts (customers that received emails)
-    // email_logs.account_id references accounts(account_unique_id) per FK
-    const emailedIds = new Set((emailedAccountIds.data || []).map(e => e.account_id));
-    const customerData = soldQuery.data || [];
-    const soldAccounts = customerData.filter(c => emailedIds.has(c.account_unique_id));
+    // Email-driven sales (date-bounded, computed server-side via RPC).
+    // get_email_driven_sales returns a single aggregate row.
+    const sales = salesAgg.data?.[0] || {};
+    const emailDrivenPeople = Number(sales.email_driven_people) || 0;
+    const newBusinessPeople = Number(sales.new_business_people) || 0;
+    const emailDrivenPolicies = Number(sales.email_driven_policies) || 0;
+    const newBusinessPolicies = Number(sales.new_business_policies) || 0;
 
-    const recentSold = soldAccounts
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 10)
-      .map(c => ({
-        name: c.name,
-        email: c.person_email,
-        createdAt: c.created_at
-      }));
+    const recentSold = (recentSales.data || []).map(c => ({
+      name: c.name,
+      email: c.person_email,
+      policyNumber: c.policy_number,
+      createdAt: c.effective_date
+    }));
 
     // Replies by day for chart
     const dailyReplies = {};
@@ -571,9 +575,14 @@ export const reportsService = {
       recentReplies: recentReplyList,
       replyTimeSeries,
 
-      // Sold metrics
-      totalCustomers: customerData.length,
-      totalSold: soldAccounts.length,
+      // Sold metrics (email-driven new business in the selected period)
+      // totalSold / totalCustomers kept for backward compatibility with the CSV export.
+      totalCustomers: newBusinessPeople,   // new-business clients in period (denominator)
+      totalSold: emailDrivenPeople,        // of those, marketing-touched before purchase
+      emailDrivenPeople,
+      newBusinessPeople,
+      emailDrivenPolicies,
+      newBusinessPolicies,
       recentSold,
 
       // Quote opportunities
