@@ -421,10 +421,6 @@ export const reportsService = {
     const now = new Date();
     const startDateOnly = startDate.toISOString().split('T')[0];
     const nowDateOnly = now.toISOString().split('T')[0];
-    // Emails are looked back an extra attribution window before the report
-    // range so a policy effective near startDate can still match its email.
-    const soldEmailLookback = new Date(startDate);
-    soldEmailLookback.setDate(soldEmailLookback.getDate() - SOLD_ATTRIBUTION_DAYS);
 
     const ownerArray = Array.isArray(ownerIds) ? ownerIds : [ownerIds];
 
@@ -438,8 +434,7 @@ export const reportsService = {
       repliedEmails,
       prevRepliedEmails,
       recentReplies,
-      newBusinessPolicies,
-      emailedAccounts
+      soldResult
     ] = await Promise.all([
       // Account status counts (head-only, no row data transferred)
       supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'customer'),
@@ -492,36 +487,18 @@ export const reportsService = {
         return applyOwnerFilter(q, ownerIds);
       })(),
 
-      // New-business policies with an effective_date inside the report range.
-      // policy_type carries the transaction type ("New Business" vs "Renewal"),
-      // so we keep only new business. The date range filter applies here (the
-      // sale event), so the sold count responds to the selected period like the
-      // other pipeline metrics. Scalar select only (no embedded account join);
-      // account names are looked up separately below, matching the rest of the
-      // codebase, so a PostgREST relationship miss can't zero out the count.
-      (() => {
-        let q = supabase
-          .from('policies')
-          .select('account_id, effective_date, policy_type')
-          .not('account_id', 'is', null)
-          .ilike('policy_type', 'new business')
-          .gte('effective_date', startDateOnly)
-          .lte('effective_date', nowDateOnly);
-        return applyOwnerFilter(q, ownerIds);
-      })(),
-
-      // Emails sent to accounts, looking back an extra attribution window
-      // before the report range so each policy can be matched to an email
-      // sent within 90 days before its effective date.
-      (() => {
-        let q = supabase
-          .from('email_logs')
-          .select('account_id, sent_at')
-          .not('account_id', 'is', null)
-          .not('sent_at', 'is', null)
-          .gte('sent_at', soldEmailLookback.toISOString());
-        return applyOwnerFilter(q, ownerIds);
-      })()
+      // Email-driven sold (new-business policies attributed to an email).
+      // Computed in the database via RPC: a client-side join of policies x
+      // email_logs can't work here -- it would be truncated by PostgREST's
+      // 1000-row cap and broken by policies.owner_id not being a reliable
+      // owner key. The RPC joins, scopes by the email owner, applies the
+      // 90-day attribution window, and returns an exact count + recent list.
+      supabase.rpc('get_email_driven_sold', {
+        p_owner_ids: ownerArray,
+        p_start_date: startDateOnly,
+        p_end_date: nowDateOnly,
+        p_attribution_days: SOLD_ATTRIBUTION_DAYS
+      })
     ]);
 
     // Account status breakdown (from count queries, no row data)
@@ -555,55 +532,19 @@ export const reportsService = {
     }));
 
     // Email-driven sold: new-business policies (effective in the report range)
-    // that were preceded by a tracked email to the same account within the
-    // 90-day attribution window. Every qualifying policy counts, not distinct
-    // accounts. email_logs.account_id references accounts(account_unique_id).
-    const sendsByAccount = new Map();
-    for (const e of (emailedAccounts.data || [])) {
-      if (!e.account_id || !e.sent_at) continue;
-      const list = sendsByAccount.get(e.account_id);
-      if (list) list.push(e.sent_at);
-      else sendsByAccount.set(e.account_id, [e.sent_at]);
+    // preceded by a tracked email to the account within the 90-day attribution
+    // window. Computed by the get_email_driven_sold RPC (see migration); it
+    // returns one row with an exact count and the 10 most recent.
+    if (soldResult.error) {
+      console.error('get_email_driven_sold RPC failed:', soldResult.error);
     }
-
-    const attributionMs = SOLD_ATTRIBUTION_DAYS * 24 * 60 * 60 * 1000;
-    const soldPolicies = (newBusinessPolicies.data || []).filter(p => {
-      if (!p.effective_date) return false;
-      const sends = sendsByAccount.get(p.account_id);
-      if (!sends) return false;
-      const effTime = new Date(p.effective_date).getTime();
-      // Email sent on/before the policy's effective date, within 90 days prior.
-      return sends.some(s => {
-        const sentTime = new Date(s).getTime();
-        return sentTime <= effTime && (effTime - sentTime) <= attributionMs;
-      });
-    });
-
-    const recentSoldPolicies = soldPolicies
-      .slice()
-      .sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date))
-      .slice(0, 10);
-
-    // Look up account names/emails for the recent sold list (separate query so
-    // the count above never depends on a PostgREST relationship being present).
-    const recentSoldAccountIds = [...new Set(recentSoldPolicies.map(p => p.account_id))];
-    const soldAccountInfo = new Map();
-    if (recentSoldAccountIds.length > 0) {
-      const { data: soldAccountRows } = await supabase
-        .from('accounts')
-        .select('account_unique_id, name, person_email')
-        .in('account_unique_id', recentSoldAccountIds);
-      for (const a of (soldAccountRows || [])) soldAccountInfo.set(a.account_unique_id, a);
-    }
-
-    const recentSold = recentSoldPolicies.map(p => {
-      const acct = soldAccountInfo.get(p.account_id);
-      return {
-        name: acct?.name || '—',
-        email: acct?.person_email || null,
-        createdAt: p.effective_date
-      };
-    });
+    const soldRow = (soldResult.data && soldResult.data[0]) || { total_sold: 0, recent: [] };
+    const totalSold = Number(soldRow.total_sold) || 0;
+    const recentSold = (soldRow.recent || []).map(r => ({
+      name: r.name || '—',
+      email: r.email || null,
+      createdAt: r.createdAt
+    }));
 
     // Replies by day for chart
     const dailyReplies = {};
@@ -635,7 +576,7 @@ export const reportsService = {
 
       // Sold metrics
       totalCustomers: statusCounts.customer,
-      totalSold: soldPolicies.length,
+      totalSold,
       recentSold,
 
       // Quote opportunities
