@@ -493,7 +493,7 @@ export const reportsService = {
       })(),
 
       // New-business policies with an effective_date inside the report range.
-      // policy_term carries the transaction type ("New Business" vs "Renewal"),
+      // policy_type carries the transaction type ("New Business" vs "Renewal"),
       // so we keep only new business. The date range filter applies here (the
       // sale event), so the sold count responds to the selected period like the
       // other pipeline metrics. Scalar select only (no embedded account join);
@@ -502,9 +502,9 @@ export const reportsService = {
       (() => {
         let q = supabase
           .from('policies')
-          .select('account_id, effective_date, policy_term')
+          .select('account_id, effective_date, policy_type')
           .not('account_id', 'is', null)
-          .ilike('policy_term', 'new business')
+          .ilike('policy_type', 'new business')
           .gte('effective_date', startDateOnly)
           .lte('effective_date', nowDateOnly);
         return applyOwnerFilter(q, ownerIds);
