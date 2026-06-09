@@ -414,10 +414,6 @@ export const reportsService = {
     const prevStartDate = new Date();
     prevStartDate.setDate(prevStartDate.getDate() - days * 2);
 
-    // Email-driven sold attribution: a new-business policy counts as
-    // email-driven when a tracked email was sent to the account within this
-    // many days BEFORE the policy's effective (new-business) date.
-    const SOLD_ATTRIBUTION_DAYS = 90;
     const now = new Date();
     const startDateOnly = startDate.toISOString().split('T')[0];
     const nowDateOnly = now.toISOString().split('T')[0];
@@ -487,17 +483,16 @@ export const reportsService = {
         return applyOwnerFilter(q, ownerIds);
       })(),
 
-      // Email-driven sold (new-business policies attributed to an email).
-      // Computed in the database via RPC: a client-side join of policies x
-      // email_logs can't work here -- it would be truncated by PostgREST's
-      // 1000-row cap and broken by policies.owner_id not being a reliable
-      // owner key. The RPC joins, scopes by the email owner, applies the
-      // 90-day attribution window, and returns an exact count + recent list.
+      // Sold = new-business policies (policy_type = 'New Business') effective in
+      // the report window, scoped to the owner's accounts. Computed in the
+      // database via RPC so owner scoping joins through accounts (policies.owner_id
+      // is not a reliable owner key) and the count isn't capped at 1000 rows.
+      // No email condition: emails in this data are only sent after a policy is
+      // written, so pre-sale email attribution is always zero.
       supabase.rpc('get_email_driven_sold', {
         p_owner_ids: ownerArray,
         p_start_date: startDateOnly,
-        p_end_date: nowDateOnly,
-        p_attribution_days: SOLD_ATTRIBUTION_DAYS
+        p_end_date: nowDateOnly
       })
     ]);
 

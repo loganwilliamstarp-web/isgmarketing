@@ -1,22 +1,27 @@
--- Migration: Email-driven sold RPC for the Pipeline report
+-- Migration: Sold RPC for the Pipeline report
 --
--- "Sold (Email-Driven)" = new-business policies (policies.policy_type = 'New
--- Business') whose effective_date falls within the selected report window AND
--- whose account received a tracked email within p_attribution_days before the
--- effective date. Owner scoping is done through email_logs.owner_id (the email
--- that drove the sale), consistent with the other pipeline metrics.
+-- "Sold" on the Pipeline report = new-business policies (policies.policy_type =
+-- 'New Business') whose effective_date falls within the selected report window,
+-- scoped to the owner's accounts (accounts.owner_id). No email condition: in
+-- this data emails are only ever sent AFTER a policy is written, so a pre-sale
+-- "email-driven" attribution is always zero and not meaningful. The metric is
+-- therefore a straight new-business count for the period.
 --
--- Done in the database (not client-side) so the join isn't truncated by
--- PostgREST's default 1000-row limit and isn't broken by policies.owner_id,
--- which is not a reliable owner key in this schema.
+-- Done in the database (not client-side) so owner scoping joins through
+-- accounts (policies.owner_id is not a reliable owner key) and the count isn't
+-- affected by PostgREST's default 1000-row limit.
+--
+-- NOTE: policy_type is currently null for policies written after ~Feb 2026
+-- (the field is not populated by the active sync). Recent-period counts stay
+-- low until that classification is backfilled by the SF cron sync.
 
 DROP FUNCTION IF EXISTS get_email_driven_sold(TEXT[], DATE, DATE, INT);
+DROP FUNCTION IF EXISTS get_email_driven_sold(TEXT[], DATE, DATE);
 
 CREATE OR REPLACE FUNCTION get_email_driven_sold(
   p_owner_ids TEXT[],
   p_start_date DATE,
-  p_end_date DATE,
-  p_attribution_days INT DEFAULT 90
+  p_end_date DATE
 )
 RETURNS TABLE (
   total_sold BIGINT,
@@ -34,20 +39,12 @@ BEGIN
       a.person_email   AS person_email,
       p.effective_date AS effective_date
     FROM policies p
-    LEFT JOIN accounts a ON a.account_unique_id = p.account_id
+    JOIN accounts a ON a.account_unique_id = p.account_id
     WHERE p.policy_type ILIKE 'new business'
       AND p.account_id IS NOT NULL
       AND p.effective_date >= p_start_date
       AND p.effective_date <= p_end_date
-      AND EXISTS (
-        SELECT 1
-        FROM email_logs e
-        WHERE e.account_id = p.account_id
-          AND e.owner_id = ANY(p_owner_ids)
-          AND e.sent_at IS NOT NULL
-          AND e.sent_at <  (p.effective_date + INTERVAL '1 day')
-          AND e.sent_at >= (p.effective_date::timestamptz - make_interval(days => p_attribution_days))
-      )
+      AND a.owner_id = ANY(p_owner_ids)
   )
   SELECT
     (SELECT COUNT(*) FROM sold) AS total_sold,
@@ -66,8 +63,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION get_email_driven_sold(TEXT[], DATE, DATE, INT)
+GRANT EXECUTE ON FUNCTION get_email_driven_sold(TEXT[], DATE, DATE)
   TO anon, authenticated, service_role;
 
 COMMENT ON FUNCTION get_email_driven_sold IS
-  'Pipeline report: count + recent list of new-business policies (policy_type = New Business) effective within [p_start_date, p_end_date] whose account received an owner email within p_attribution_days before the effective date.';
+  'Pipeline report: count + recent list of new-business policies (policy_type = New Business) effective within [p_start_date, p_end_date], scoped to the owner''s accounts.';
