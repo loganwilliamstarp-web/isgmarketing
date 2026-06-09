@@ -414,6 +414,18 @@ export const reportsService = {
     const prevStartDate = new Date();
     prevStartDate.setDate(prevStartDate.getDate() - days * 2);
 
+    // Email-driven sold attribution: a new-business policy counts as
+    // email-driven when a tracked email was sent to the account within this
+    // many days BEFORE the policy's effective (new-business) date.
+    const SOLD_ATTRIBUTION_DAYS = 90;
+    const now = new Date();
+    const startDateOnly = startDate.toISOString().split('T')[0];
+    const nowDateOnly = now.toISOString().split('T')[0];
+    // Emails are looked back an extra attribution window before the report
+    // range so a policy effective near startDate can still match its email.
+    const soldEmailLookback = new Date(startDate);
+    soldEmailLookback.setDate(soldEmailLookback.getDate() - SOLD_ATTRIBUTION_DAYS);
+
     const ownerArray = Array.isArray(ownerIds) ? ownerIds : [ownerIds];
 
     // Parallel fetch all pipeline data
@@ -426,8 +438,8 @@ export const reportsService = {
       repliedEmails,
       prevRepliedEmails,
       recentReplies,
-      soldQuery,
-      emailedAccountIds
+      newBusinessPolicies,
+      emailedAccounts
     ] = await Promise.all([
       // Account status counts (head-only, no row data transferred)
       supabase.from('accounts').select('*', { count: 'exact', head: true }).in('owner_id', ownerArray).ilike('account_status', 'customer'),
@@ -480,19 +492,32 @@ export const reportsService = {
         return applyOwnerFilter(q, ownerIds);
       })(),
 
-      // Customer accounts (potential sold)
-      supabase
-        .from('accounts')
-        .select('account_unique_id, name, person_email, account_status, created_at')
-        .in('owner_id', ownerArray)
-        .ilike('account_status', 'customer'),
+      // New-business policies with an effective_date inside the report range.
+      // policy_term carries the transaction type ("New Business" vs "Renewal"),
+      // so we keep only new business. The date range filter applies here (the
+      // sale event), so the sold count responds to the selected period like the
+      // other pipeline metrics.
+      (() => {
+        let q = supabase
+          .from('policies')
+          .select('account_id, effective_date, account:accounts(name, person_email)')
+          .not('account_id', 'is', null)
+          .ilike('policy_term', 'new business')
+          .gte('effective_date', startDateOnly)
+          .lte('effective_date', nowDateOnly);
+        return applyOwnerFilter(q, ownerIds);
+      })(),
 
-      // All email_logs account_ids for this user (to find email-driven conversions)
+      // Emails sent to accounts, looking back an extra attribution window
+      // before the report range so each policy can be matched to an email
+      // sent within 90 days before its effective date.
       (() => {
         let q = supabase
           .from('email_logs')
-          .select('account_id')
-          .not('account_id', 'is', null);
+          .select('account_id, sent_at')
+          .not('account_id', 'is', null)
+          .not('sent_at', 'is', null)
+          .gte('sent_at', soldEmailLookback.toISOString());
         return applyOwnerFilter(q, ownerIds);
       })()
     ]);
@@ -527,19 +552,39 @@ export const reportsService = {
       repliedAt: r.first_replied_at
     }));
 
-    // Sold accounts (customers that received emails)
-    // email_logs.account_id references accounts(account_unique_id) per FK
-    const emailedIds = new Set((emailedAccountIds.data || []).map(e => e.account_id));
-    const customerData = soldQuery.data || [];
-    const soldAccounts = customerData.filter(c => emailedIds.has(c.account_unique_id));
+    // Email-driven sold: new-business policies (effective in the report range)
+    // that were preceded by a tracked email to the same account within the
+    // 90-day attribution window. Every qualifying policy counts, not distinct
+    // accounts. email_logs.account_id references accounts(account_unique_id).
+    const sendsByAccount = new Map();
+    for (const e of (emailedAccounts.data || [])) {
+      if (!e.account_id || !e.sent_at) continue;
+      const list = sendsByAccount.get(e.account_id);
+      if (list) list.push(e.sent_at);
+      else sendsByAccount.set(e.account_id, [e.sent_at]);
+    }
 
-    const recentSold = soldAccounts
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    const attributionMs = SOLD_ATTRIBUTION_DAYS * 24 * 60 * 60 * 1000;
+    const soldPolicies = (newBusinessPolicies.data || []).filter(p => {
+      if (!p.effective_date) return false;
+      const sends = sendsByAccount.get(p.account_id);
+      if (!sends) return false;
+      const effTime = new Date(p.effective_date).getTime();
+      // Email sent on/before the policy's effective date, within 90 days prior.
+      return sends.some(s => {
+        const sentTime = new Date(s).getTime();
+        return sentTime <= effTime && (effTime - sentTime) <= attributionMs;
+      });
+    });
+
+    const recentSold = soldPolicies
+      .slice()
+      .sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date))
       .slice(0, 10)
-      .map(c => ({
-        name: c.name,
-        email: c.person_email,
-        createdAt: c.created_at
+      .map(p => ({
+        name: p.account?.name || '—',
+        email: p.account?.person_email || null,
+        createdAt: p.effective_date
       }));
 
     // Replies by day for chart
@@ -552,7 +597,6 @@ export const reportsService = {
     // Fill in missing dates
     const replyTimeSeries = [];
     const current = new Date(startDate);
-    const now = new Date();
     while (current <= now) {
       const dateStr = current.toISOString().split('T')[0];
       replyTimeSeries.push({ date: dateStr, replies: dailyReplies[dateStr] || 0 });
@@ -572,8 +616,8 @@ export const reportsService = {
       replyTimeSeries,
 
       // Sold metrics
-      totalCustomers: customerData.length,
-      totalSold: soldAccounts.length,
+      totalCustomers: statusCounts.customer,
+      totalSold: soldPolicies.length,
       recentSold,
 
       // Quote opportunities
