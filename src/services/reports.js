@@ -496,11 +496,13 @@ export const reportsService = {
       // policy_term carries the transaction type ("New Business" vs "Renewal"),
       // so we keep only new business. The date range filter applies here (the
       // sale event), so the sold count responds to the selected period like the
-      // other pipeline metrics.
+      // other pipeline metrics. Scalar select only (no embedded account join);
+      // account names are looked up separately below, matching the rest of the
+      // codebase, so a PostgREST relationship miss can't zero out the count.
       (() => {
         let q = supabase
           .from('policies')
-          .select('account_id, effective_date, account:accounts(name, person_email)')
+          .select('account_id, effective_date, policy_term')
           .not('account_id', 'is', null)
           .ilike('policy_term', 'new business')
           .gte('effective_date', startDateOnly)
@@ -577,15 +579,31 @@ export const reportsService = {
       });
     });
 
-    const recentSold = soldPolicies
+    const recentSoldPolicies = soldPolicies
       .slice()
       .sort((a, b) => new Date(b.effective_date) - new Date(a.effective_date))
-      .slice(0, 10)
-      .map(p => ({
-        name: p.account?.name || '—',
-        email: p.account?.person_email || null,
+      .slice(0, 10);
+
+    // Look up account names/emails for the recent sold list (separate query so
+    // the count above never depends on a PostgREST relationship being present).
+    const recentSoldAccountIds = [...new Set(recentSoldPolicies.map(p => p.account_id))];
+    const soldAccountInfo = new Map();
+    if (recentSoldAccountIds.length > 0) {
+      const { data: soldAccountRows } = await supabase
+        .from('accounts')
+        .select('account_unique_id, name, person_email')
+        .in('account_unique_id', recentSoldAccountIds);
+      for (const a of (soldAccountRows || [])) soldAccountInfo.set(a.account_unique_id, a);
+    }
+
+    const recentSold = recentSoldPolicies.map(p => {
+      const acct = soldAccountInfo.get(p.account_id);
+      return {
+        name: acct?.name || '—',
+        email: acct?.person_email || null,
         createdAt: p.effective_date
-      }));
+      };
+    });
 
     // Replies by day for chart
     const dailyReplies = {};
