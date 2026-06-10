@@ -43,6 +43,9 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'Primary_Contact_First_Name__c': 'primary_contact_first_name',
     'Primary_Contact_Last_Name__c': 'primary_contact_last_name',
     'OwnerId': 'owner_id',
+    // SF creation date, not row-insert time - the "account created" automation
+    // filters and "new customers" presets key off accounts.created_at
+    'CreatedDate': 'created_at',
   },
   policies: {
     'Id': 'policy_unique_id',
@@ -71,12 +74,23 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'Name': 'name',
     'OwnerId': 'owner_id',
   },
+  users: {
+    'Id': 'user_unique_id',
+    'Email': 'email',
+    'FirstName': 'first_name',
+    'LastName': 'last_name',
+    'Profile_Name__c': 'profile_name',
+    'Role_Name__c': 'role_name',
+    'Marketing_Cloud_Engagement__c': 'marketing_cloud_engagement',
+    'Marketing_Cloud_Engagement_Agency_Admin__c': 'marketing_cloud_agency_admin',
+  },
 }
 
 // Objects to sync. `table` is the Supabase table. `object` is the Salesforce
 // object API name. An object that doesn't exist is skipped (not fatal), so a
 // wrong name here just means that table doesn't sync - correct it if needed.
 const SYNC_OBJECTS = [
+  { object: 'User', table: 'users', uniqueKey: 'user_unique_id', mappings: FIELD_MAPPINGS.users },
   { object: 'Account', table: 'accounts', uniqueKey: 'account_unique_id', mappings: FIELD_MAPPINGS.accounts },
   { object: 'Policy__c', table: 'policies', uniqueKey: 'policy_unique_id', mappings: FIELD_MAPPINGS.policies },
   { object: 'Carrier__c', table: 'carriers', uniqueKey: 'id', mappings: FIELD_MAPPINGS.carriers },
