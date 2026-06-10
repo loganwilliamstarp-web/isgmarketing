@@ -49,6 +49,7 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     'Account__c': 'account_id',
     'Policy_Number__c': 'policy_number',
     'Policy_LOB__c': 'policy_lob',
+    'Policy_Type__c': 'policy_type', // picklist: New Business / Renewal — drives the Pipeline report's Sold count
     'Policy_Status__c': 'policy_status',
     'Policy_Class__c': 'policy_class',
     'Policy_Term__c': 'policy_term',
