@@ -865,79 +865,38 @@ export const masterAdminAnalyticsService = {
   },
 
   /**
-   * Get sold account analytics — accounts that received marketing emails
-   * and converted to "customer" status (from prospect/prior_customer).
-   * A "sold" account = has email_logs AND current status is "customer".
+   * Get sold account analytics — email-driven sales platform-wide.
+   * Sold = a new-business policy effective in the last 30 days where the
+   * customer received a (non-bounced) email in the 90 days up to the policy
+   * start. Same definition as the per-user Pipeline report; computed by the
+   * get_email_driven_sold_master RPC so it isn't capped at 1000 rows.
    */
   async getSoldAccounts() {
+    const now = new Date();
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Step 1: Get all customer accounts
-    const { data: customers, count: totalCustomers } = await supabase
-      .from('accounts')
-      .select('account_unique_id, name, person_email, account_status, created_at, owner_id, owner:users(first_name, last_name, profile_name)', { count: 'exact' })
-      .ilike('account_status', 'customer');
+    const [soldResult, customerCount, priorCustomerCount] = await Promise.all([
+      supabase.rpc('get_email_driven_sold_master', {
+        p_start_date: thirtyDaysAgo.toISOString().split('T')[0],
+        p_end_date: now.toISOString().split('T')[0]
+      }),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'customer'),
+      supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'prior_customer')
+    ]);
 
-    const customerData = customers || [];
-    const customerIds = customerData.map(c => c.account_unique_id);
-
-    // Step 2: Find which customer accounts were actually emailed (marketing-driven conversions)
-    let soldAccounts = [];
-    let emailedCustomerIds = new Set();
-    if (customerIds.length > 0) {
-      // Query in batches if needed (Supabase has limits on IN clause)
-      const batchSize = 500;
-      for (let i = 0; i < customerIds.length; i += batchSize) {
-        const batch = customerIds.slice(i, i + batchSize);
-        const { data: emailLogs } = await supabase
-          .from('email_logs')
-          .select('account_id')
-          .in('account_id', batch);
-        (emailLogs || []).forEach(e => emailedCustomerIds.add(e.account_id));
-      }
-
-      soldAccounts = customerData.filter(c => emailedCustomerIds.has(c.account_unique_id));
+    if (soldResult.error) {
+      console.error('get_email_driven_sold_master RPC failed:', soldResult.error);
     }
-
-    const totalSold = soldAccounts.length;
-
-    // Step 3: Get prior_customer count (lost accounts)
-    const { count: totalPriorCustomers } = await supabase
-      .from('accounts')
-      .select('account_unique_id', { count: 'exact' })
-      .ilike('account_status', 'prior_customer');
-
-    // Group sold by agency
-    const byAgency = {};
-    soldAccounts.forEach(c => {
-      const agency = c.owner?.profile_name || 'Unknown';
-      if (!byAgency[agency]) byAgency[agency] = { name: agency, count: 0 };
-      byAgency[agency].count++;
-    });
-
-    const agencyBreakdown = Object.values(byAgency)
-      .sort((a, b) => b.count - a.count);
-
-    // Recent sold (sorted by created_at desc)
-    const recentList = soldAccounts
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 20)
-      .map(c => ({
-        name: c.name,
-        email: c.person_email,
-        ownerName: `${c.owner?.first_name || ''} ${c.owner?.last_name || ''}`.trim(),
-        agency: c.owner?.profile_name,
-        createdAt: c.created_at
-      }));
+    const soldRow = (soldResult.data && soldResult.data[0]) || { total_sold: 0, by_agency: [], recent: [] };
 
     return {
-      totalCustomers: totalCustomers || 0,
-      totalSold,
-      totalPriorCustomers: totalPriorCustomers || 0,
-      conversionNote: 'Accounts that received marketing emails and are now customers',
-      agencyBreakdown,
-      recentList
+      totalCustomers: customerCount.count || 0,
+      totalSold: Number(soldRow.total_sold) || 0,
+      totalPriorCustomers: priorCustomerCount.count || 0,
+      conversionNote: 'New-business policies (last 30 days) preceded by a marketing email within 90 days',
+      agencyBreakdown: soldRow.by_agency || [],
+      recentList: soldRow.recent || []
     };
   },
 
