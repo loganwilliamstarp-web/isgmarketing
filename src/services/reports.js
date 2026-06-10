@@ -483,12 +483,12 @@ export const reportsService = {
         return applyOwnerFilter(q, ownerIds);
       })(),
 
-      // Sold = new-business policies (policy_type = 'New Business') effective in
-      // the report window, scoped to the owner's accounts. Computed in the
-      // database via RPC so owner scoping joins through accounts (policies.owner_id
-      // is not a reliable owner key) and the count isn't capped at 1000 rows.
-      // No email condition: emails in this data are only sent after a policy is
-      // written, so pre-sale email attribution is always zero.
+      // Sold (Email-Driven) = new-business policies (policy_type = 'New Business')
+      // effective in the report window, scoped to the owner's accounts, where the
+      // customer received a (non-bounced) email in the 90 days up to the policy
+      // start. Computed in the database via RPC so owner scoping joins through
+      // accounts (policies.owner_id is not a reliable owner key) and the count
+      // isn't capped at 1000 rows.
       supabase.rpc('get_email_driven_sold', {
         p_owner_ids: ownerArray,
         p_start_date: startDateOnly,
