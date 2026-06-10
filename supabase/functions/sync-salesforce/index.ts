@@ -304,11 +304,17 @@ serve(async (req) => {
 
     // Self-continue to drain a backlog (the initial backfill). Guarded by
     // anyAdvanced so a stuck cursor or persistent error can't loop forever.
+    // Must go through EdgeRuntime.waitUntil: a plain fire-and-forget fetch is
+    // killed with the isolate as soon as the response returns, so the chain
+    // silently stops after one run.
     if (summary.hasMore && anyAdvanced) {
-      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/sync-salesforce`, {
+      const continuation = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/sync-salesforce`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
       }).catch(() => {})
+      // deno-lint-ignore no-explicit-any
+      const runtime = (globalThis as any).EdgeRuntime
+      if (runtime?.waitUntil) runtime.waitUntil(continuation)
     }
 
     return new Response(
