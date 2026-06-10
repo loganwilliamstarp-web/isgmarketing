@@ -11,8 +11,9 @@
 // Supabase column that isn't in the table. So a renamed/missing field never
 // breaks the sync - that field just doesn't populate.
 //
-// Replaces the push-based sync-salesforce-data CSV upload (and its CSV
-// parsing bug). Keep that function until this one is verified, then retire it.
+// Replaced the push-based sync-salesforce-data CSV report importer, which
+// was retired (deleted from the project) on 2026-06-10 once this sync was
+// verified. This is now the only Salesforce data path.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
