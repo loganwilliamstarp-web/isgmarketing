@@ -109,6 +109,7 @@ serve(async (req) => {
       failed: 0,
       refreshed: 0,
       newScheduled: 0,
+      reconciled: 0,
       errors: [] as string[],
       hasMore: false,        // Indicates if there are more accounts to process
       nextOffset: 0          // Next offset for continuation
@@ -140,6 +141,17 @@ serve(async (req) => {
       results.sent = sendResult.sent
       results.failed = sendResult.failed
       results.errors.push(...sendResult.errors)
+    }
+
+    // Daily reconciliation - cancel Pending rows whose account no longer
+    // qualifies / is past enrollment limits. Its own once-a-day cron, NOT part
+    // of 'daily' (which runs every 5 min). Correctness lives at the gates;
+    // this is queue hygiene.
+    if (action === 'reconcile') {
+      const reconcileResult = await runReconciliation(supabaseClient, startTime)
+      results.reconciled = reconcileResult.checked
+      results.cancelled += reconcileResult.cancelled
+      results.errors.push(...reconcileResult.errors)
     }
 
     return new Response(
@@ -432,6 +444,32 @@ async function runDailyRefresh(
         }
       }
 
+      // Enrollment-limit history, keyed `${account_id}:${template_id}` -> { count, lastSent },
+      // scoped to this automation. Lets us skip SCHEDULING a row that would exceed
+      // max_enrollments / fall inside the cooldown, rather than creating it and
+      // cancelling it later at the verify/send gate (which churns the queue).
+      const capsEnrollments = (automation.max_enrollments != null && Number(automation.max_enrollments) > 0)
+        || (Number(automation.enrollment_cooldown_days) || 0) > 0
+      const enrollmentHistory: Record<string, { count: number, lastSent: string | null }> = {}
+      if (capsEnrollments) {
+        for (let i = 0; i < accountIds.length; i += POLICY_BATCH_SIZE) {
+          const batchIds = accountIds.slice(i, i + POLICY_BATCH_SIZE)
+          const { data: rows } = await supabase
+            .from('email_logs')
+            .select('account_id, template_id, sent_at')
+            .eq('automation_id', automation.id)
+            .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+            .in('account_id', batchIds)
+          for (const r of rows || []) {
+            const key = `${r.account_id}:${r.template_id}`
+            const e = enrollmentHistory[key] || { count: 0, lastSent: null }
+            e.count += 1
+            if (r.sent_at && (!e.lastSent || r.sent_at > e.lastSent)) e.lastSent = r.sent_at
+            enrollmentHistory[key] = e
+          }
+        }
+      }
+
       // Filter accounts based on non-date filter rules (policy type, etc.)
       const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig, lastSentByAccount, policyStatusByAccount)
       console.log(`[${automation.name}] Filtered accounts:`, filteredAccounts?.length || 0)
@@ -461,6 +499,12 @@ async function runDailyRefresh(
             const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
 
             if (existingKeys.has(uniqueKey)) continue
+
+            // Don't re-enroll past the automation's limits (max_enrollments / cooldown).
+            if (capsEnrollments) {
+              const hist = enrollmentHistory[`${account.account_unique_id}:${emailStep.templateId}`]
+              if (hist && enrollmentLimitReached(hist.count, hist.lastSent, automation).limited) continue
+            }
 
             // Skip accounts without email addresses
             const accountEmail = account.person_email || account.email
@@ -566,6 +610,12 @@ async function runDailyRefresh(
                 const uniqueKey = `${account.account_unique_id}:${emailStep.templateId}:${qualificationValue}`
 
                 if (existingKeys.has(uniqueKey)) continue
+
+                // Don't re-enroll past the automation's limits (max_enrollments / cooldown).
+                if (capsEnrollments) {
+                  const hist = enrollmentHistory[`${account.account_unique_id}:${emailStep.templateId}`]
+                  if (hist && enrollmentLimitReached(hist.count, hist.lastSent, automation).limited) continue
+                }
 
                 // Skip accounts without email addresses
                 const accountEmail = account.person_email || account.email
@@ -951,6 +1001,32 @@ async function accountMatchesFilterConfig(
  * Per-template counting reflects enrollments correctly for the journeys here:
  * each step uses a distinct template, sent once per enrollment.
  */
+/**
+ * Pure check: has an account hit an automation's enrollment limits?
+ * sentCount = prior successful sends of the enrolling template; lastSentIso =
+ * the most recent of those. Shared by the per-email gate (withinEnrollmentLimits)
+ * and the batched schedule-time / reconciliation checks so they all agree.
+ */
+function enrollmentLimitReached(
+  sentCount: number,
+  lastSentIso: string | null,
+  automation: any
+): { limited: boolean, reason?: string } {
+  const maxEnroll = automation?.max_enrollments
+  const cooldownDays = Number(automation?.enrollment_cooldown_days) || 0
+  const hasMax = maxEnroll !== null && maxEnroll !== undefined && Number(maxEnroll) > 0
+  if (hasMax && sentCount >= Number(maxEnroll)) {
+    return { limited: true, reason: `Max enrollments reached (${sentCount}/${maxEnroll}) for this automation` }
+  }
+  if (cooldownDays > 0 && lastSentIso) {
+    const lastSentMs = new Date(lastSentIso).getTime()
+    if (lastSentMs > Date.now() - cooldownDays * 24 * 60 * 60 * 1000) {
+      return { limited: true, reason: `Within ${cooldownDays}-day enrollment cooldown (last sent ${lastSentIso})` }
+    }
+  }
+  return { limited: false }
+}
+
 async function withinEnrollmentLimits(
   supabase: any,
   email: ScheduledEmail,
@@ -972,20 +1048,192 @@ async function withinEnrollmentLimits(
     .order('sent_at', { ascending: false })
 
   const sends = priorSends || []
+  const result = enrollmentLimitReached(sends.length, sends.length > 0 ? sends[0].sent_at : null, automation)
+  return result.limited ? { ok: false, reason: result.reason } : { ok: true }
+}
 
-  if (hasMax && sends.length >= Number(maxEnroll)) {
-    return { ok: false, reason: `Max enrollments reached (${sends.length}/${maxEnroll}) for this automation` }
+// ============================================================================
+// DAILY RECONCILIATION - cancel Pending rows that no longer qualify
+// ============================================================================
+
+/**
+ * Once-a-day sweep over the Pending queue. Re-evaluates each pending automation
+ * email against CURRENT data and cancels it if the account no longer matches the
+ * automation's filter_config, the automation is paused/deleted, or the account
+ * is past the automation's enrollment limits. Correctness is already guaranteed
+ * at the verify/send gates; this keeps the queue (and reporting) honest and
+ * removes de-qualified rows long before their send date. Runs on its own daily
+ * cron, NOT folded into the every-5-min 'daily' action.
+ */
+async function runReconciliation(
+  supabase: any,
+  startTime: number
+): Promise<{ checked: number, cancelled: number, errors: string[] }> {
+  const errors: string[] = []
+  let checked = 0
+  let cancelled = 0
+  const BATCH = 100
+
+  const { data: pendingRows, error } = await supabase
+    .from('scheduled_emails')
+    .select('id, account_id, automation_id, template_id')
+    .eq('status', 'Pending')
+    .not('automation_id', 'is', null)
+    .order('automation_id')
+
+  if (error) {
+    errors.push(`Reconcile: failed to load pending emails: ${error.message}`)
+    return { checked, cancelled, errors }
   }
 
-  if (cooldownDays > 0 && sends.length > 0 && sends[0].sent_at) {
-    const lastSentMs = new Date(sends[0].sent_at).getTime()
-    const cutoffMs = Date.now() - cooldownDays * 24 * 60 * 60 * 1000
-    if (lastSentMs > cutoffMs) {
-      return { ok: false, reason: `Within ${cooldownDays}-day enrollment cooldown (last sent ${sends[0].sent_at})` }
+  // Group pending rows by automation so we evaluate each automation once.
+  const byAutomation: Record<string, any[]> = {}
+  for (const r of pendingRows || []) {
+    if (!byAutomation[r.automation_id]) byAutomation[r.automation_id] = []
+    byAutomation[r.automation_id].push(r)
+  }
+
+  const cancelBatch = async (ids: string[], reason: string) => {
+    for (let i = 0; i < ids.length; i += BATCH) {
+      await supabase
+        .from('scheduled_emails')
+        .update({ status: 'Cancelled', error_message: `Reconcile: ${reason}`, updated_at: new Date().toISOString() })
+        .in('id', ids.slice(i, i + BATCH))
+        .eq('status', 'Pending')
     }
   }
 
-  return { ok: true }
+  for (const [automationId, rows] of Object.entries(byAutomation)) {
+    if (Date.now() - startTime > VERIFICATION_BUDGET_MS) {
+      console.warn(`[Reconcile] Time budget reached after ${checked} rows - remaining automations retried next run`)
+      break
+    }
+
+    try {
+      const { data: automation } = await supabase
+        .from('automations')
+        .select('id, name, status, filter_config, max_enrollments, enrollment_cooldown_days')
+        .eq('id', automationId)
+        .single()
+
+      checked += rows.length
+
+      if (!automation) {
+        await cancelBatch(rows.map((r: any) => r.id), 'Automation no longer exists')
+        cancelled += rows.length
+        continue
+      }
+      if (automation.status !== 'Active' && automation.status !== 'active') {
+        await cancelBatch(rows.map((r: any) => r.id), 'Automation is not active')
+        cancelled += rows.length
+        continue
+      }
+
+      const accountIds = [...new Set(rows.map((r: any) => r.account_id))]
+
+      // Fetch accounts + Active policies (mirrors runDailyRefresh's snapshot).
+      const accounts: any[] = []
+      for (let i = 0; i < accountIds.length; i += BATCH) {
+        const { data } = await supabase
+          .from('accounts')
+          .select('*')
+          .in('account_unique_id', accountIds.slice(i, i + BATCH))
+        if (data) accounts.push(...data)
+      }
+      const policies: any[] = []
+      for (let i = 0; i < accountIds.length; i += BATCH) {
+        const { data } = await supabase
+          .from('policies')
+          .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term, policy_class')
+          .in('account_id', accountIds.slice(i, i + BATCH))
+          .eq('policy_status', 'Active')
+        if (data) policies.push(...data)
+      }
+
+      const filterConfig = automation.filter_config || { groups: [] }
+      const groups = filterConfig.groups || []
+
+      // policy_status rules need ALL statuses, not just Active.
+      const policyStatusByAccount: Record<string, string[]> = {}
+      if (groups.some((g: any) => (g.rules || []).some((r: any) => r.field === 'policy_status'))) {
+        for (let i = 0; i < accountIds.length; i += BATCH) {
+          const { data } = await supabase
+            .from('policies')
+            .select('account_id, policy_status')
+            .in('account_id', accountIds.slice(i, i + BATCH))
+          for (const r of data || []) {
+            const s = (r.policy_status || '').toLowerCase()
+            if (!s) continue
+            if (!policyStatusByAccount[r.account_id]) policyStatusByAccount[r.account_id] = []
+            if (!policyStatusByAccount[r.account_id].includes(s)) policyStatusByAccount[r.account_id].push(s)
+          }
+        }
+      }
+      // last_email_sent rules need this automation's most recent send per account.
+      const lastSentByAccount: Record<string, string> = {}
+      if (groups.some((g: any) => (g.rules || []).some((r: any) => r.field === 'last_email_sent'))) {
+        const { data } = await supabase
+          .from('scheduled_emails')
+          .select('account_id, updated_at')
+          .eq('automation_id', automation.id)
+          .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+        for (const r of data || []) {
+          const prev = lastSentByAccount[r.account_id]
+          if (!prev || r.updated_at > prev) lastSentByAccount[r.account_id] = r.updated_at
+        }
+      }
+
+      const matched = filterAccountsByConfig(accounts, policies, filterConfig, lastSentByAccount, policyStatusByAccount)
+      const matchedIds = new Set(matched.map((a: any) => a.account_unique_id))
+
+      // Enrollment history for limit checks (per account:template).
+      const capsEnrollments = (automation.max_enrollments != null && Number(automation.max_enrollments) > 0)
+        || (Number(automation.enrollment_cooldown_days) || 0) > 0
+      const enrollmentHistory: Record<string, { count: number, lastSent: string | null }> = {}
+      if (capsEnrollments) {
+        for (let i = 0; i < accountIds.length; i += BATCH) {
+          const { data } = await supabase
+            .from('email_logs')
+            .select('account_id, template_id, sent_at')
+            .eq('automation_id', automation.id)
+            .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+            .in('account_id', accountIds.slice(i, i + BATCH))
+          for (const r of data || []) {
+            const key = `${r.account_id}:${r.template_id}`
+            const e = enrollmentHistory[key] || { count: 0, lastSent: null }
+            e.count += 1
+            if (r.sent_at && (!e.lastSent || r.sent_at > e.lastSent)) e.lastSent = r.sent_at
+            enrollmentHistory[key] = e
+          }
+        }
+      }
+
+      // Decide per row; batch the cancels by reason.
+      const cancelByReason: Record<string, string[]> = {}
+      for (const row of rows) {
+        let reason: string | null = null
+        if (!matchedIds.has(row.account_id)) {
+          reason = 'Account no longer matches the automation filter criteria'
+        } else if (capsEnrollments) {
+          const hist = enrollmentHistory[`${row.account_id}:${row.template_id}`]
+          const limit = enrollmentLimitReached(hist?.count || 0, hist?.lastSent || null, automation)
+          if (limit.limited) reason = limit.reason || 'Past enrollment limits'
+        }
+        if (reason) {
+          if (!cancelByReason[reason]) cancelByReason[reason] = []
+          cancelByReason[reason].push(row.id)
+        }
+      }
+      for (const [reason, ids] of Object.entries(cancelByReason)) {
+        await cancelBatch(ids, reason)
+        cancelled += ids.length
+      }
+    } catch (err: any) {
+      errors.push(`Reconcile automation ${automationId}: ${err.message}`)
+    }
+  }
+
+  return { checked, cancelled, errors }
 }
 
 // ============================================================================
