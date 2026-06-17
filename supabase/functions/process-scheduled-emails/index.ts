@@ -482,7 +482,12 @@ async function runDailyRefresh(
               qualification_value: qualificationValue,
               trigger_field: 'activation',
               node_id: emailStep.nodeId,
-              requires_verification: false, // No verification needed for immediate sends
+              // Re-qualify ~24h before send like date-based emails do. Non-date
+              // automations re-enroll matching accounts every daily run, so without
+              // this they bypass the 24h gate entirely and the only guard is the
+              // 7-day template dedup — which lets a repeat through once that window
+              // lapses (and never enforces max_enrollments / cooldown).
+              requires_verification: true,
               from_email: defaultFromEmail,
               from_name: defaultFromName,
               subject: template.subject
@@ -684,7 +689,7 @@ async function runVerification(supabase: any, startTime: number): Promise<{ veri
     .select(`
       *,
       account:accounts(*),
-      automation:automations(id, name, status, filter_config)
+      automation:automations(id, name, status, filter_config, max_enrollments, enrollment_cooldown_days)
     `)
     .eq('status', 'Pending')
     .eq('requires_verification', true)
@@ -810,7 +815,23 @@ async function verifyAccountQualifies(
     return { qualifies: false, reason: 'Email is on suppression list (previous bounce or spam report)' }
   }
 
-  // Verify the trigger condition still applies (for policy-based triggers)
+  // Re-evaluate the FULL automation audience filter against CURRENT data.
+  // Schedule-time qualification is a point-in-time snapshot; an account can
+  // gain or lose a policy between scheduling and sending (e.g. a Salesforce
+  // sync adds the auto policy a minute after the cross-sell was scheduled).
+  // Re-running filter_config here re-applies every rule — including exclusions
+  // like "active_policy_type is_not Personal Auto" — so an account that no
+  // longer belongs in the segment is cancelled instead of mailed.
+  if (automation?.filter_config) {
+    const filterResult = await accountMatchesFilterConfig(supabase, account, automation, email)
+    if (!filterResult.matches) {
+      return { qualifies: false, reason: filterResult.reason }
+    }
+  }
+
+  // The full re-eval above skips date-window rules (the scheduler owns those),
+  // so for policy-date triggers still confirm the specific policy that fired
+  // this schedule is present and active.
   if (email.trigger_field === 'policy_expiration' || email.trigger_field === 'policy_effective') {
     const dateField = email.trigger_field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
 
@@ -827,6 +848,16 @@ async function verifyAccountQualifies(
         reason: `Policy with ${email.trigger_field} = ${email.qualification_value} no longer exists or is inactive`
       }
     }
+  }
+
+  // Enforce the automation's enrollment limits (max_enrollments / cooldown).
+  // automation_enrollments is not populated, so this is derived from actual
+  // send history. This is the real cap behind a single-shot automation
+  // (max_enrollments=1) — the 7-day template dedup below is only a rolling
+  // window and lets a repeat through once it lapses.
+  const enrollment = await withinEnrollmentLimits(supabase, email, automation)
+  if (!enrollment.ok) {
+    return { qualifies: false, reason: enrollment.reason }
   }
 
   // Check template-level deduplication (same template sent in last 7 days)
@@ -851,6 +882,112 @@ async function verifyAccountQualifies(
   return { qualifies: true }
 }
 
+/**
+ * Re-run an automation's filter_config against an account's CURRENT policies.
+ * Mirrors the data prep in runDailyRefresh (Active-only policy snapshot, plus
+ * the all-status / last-sent maps when the filter needs them) and reuses the
+ * same filterAccountsByConfig evaluator the scheduler uses, so qualification
+ * is identical at schedule time and re-eval time.
+ */
+async function accountMatchesFilterConfig(
+  supabase: any,
+  account: any,
+  automation: any,
+  email: ScheduledEmail
+): Promise<{ matches: boolean, reason?: string }> {
+  const filterConfig = automation?.filter_config || { groups: [] }
+  const groups = filterConfig.groups || []
+  if (groups.length === 0) return { matches: true }
+
+  const accountId = account?.account_unique_id || email.account_id
+
+  // Active policies only — matches the scheduler's snapshot (line ~286).
+  const { data: policies } = await supabase
+    .from('policies')
+    .select('account_id, policy_lob, expiration_date, effective_date, policy_status, policy_term, policy_class')
+    .eq('account_id', accountId)
+    .eq('policy_status', 'Active')
+
+  // policy_status rules need ALL statuses, not just Active.
+  const usesPolicyStatus = groups.some((g: any) => (g.rules || []).some((r: any) => r.field === 'policy_status'))
+  const policyStatusByAccount: Record<string, string[]> = {}
+  if (usesPolicyStatus) {
+    const { data: rows } = await supabase
+      .from('policies')
+      .select('policy_status')
+      .eq('account_id', accountId)
+    const set: string[] = []
+    for (const r of rows || []) {
+      const s = (r.policy_status || '').toLowerCase()
+      if (s && !set.includes(s)) set.push(s)
+    }
+    policyStatusByAccount[accountId] = set
+  }
+
+  // last_email_sent rules need this automation's most recent send to the account.
+  const usesLastEmailSent = groups.some((g: any) => (g.rules || []).some((r: any) => r.field === 'last_email_sent'))
+  const lastSentByAccount: Record<string, string> = {}
+  if (usesLastEmailSent) {
+    const { data: sentRows } = await supabase
+      .from('scheduled_emails')
+      .select('updated_at')
+      .eq('automation_id', automation.id)
+      .eq('account_id', accountId)
+      .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    if (sentRows && sentRows.length > 0) lastSentByAccount[accountId] = sentRows[0].updated_at
+  }
+
+  const matched = filterAccountsByConfig([account], policies || [], filterConfig, lastSentByAccount, policyStatusByAccount)
+  if (matched.length > 0) return { matches: true }
+  return { matches: false, reason: 'Account no longer matches the automation filter criteria' }
+}
+
+/**
+ * Enforce max_enrollments / enrollment_cooldown_days from real send history.
+ * automation_enrollments is not populated, so prior successful sends of this
+ * template by this automation to this account stand in for prior enrollments.
+ * Per-template counting reflects enrollments correctly for the journeys here:
+ * each step uses a distinct template, sent once per enrollment.
+ */
+async function withinEnrollmentLimits(
+  supabase: any,
+  email: ScheduledEmail,
+  automation: any
+): Promise<{ ok: boolean, reason?: string }> {
+  const maxEnroll = automation?.max_enrollments
+  const cooldownDays = Number(automation?.enrollment_cooldown_days) || 0
+  const hasMax = maxEnroll !== null && maxEnroll !== undefined && Number(maxEnroll) > 0
+  if (!hasMax && cooldownDays <= 0) return { ok: true }
+  if (!email.template_id) return { ok: true }
+
+  const { data: priorSends } = await supabase
+    .from('email_logs')
+    .select('sent_at')
+    .eq('automation_id', email.automation_id)
+    .eq('account_id', email.account_id)
+    .eq('template_id', email.template_id)
+    .in('status', ['Sent', 'Delivered', 'Opened', 'Clicked'])
+    .order('sent_at', { ascending: false })
+
+  const sends = priorSends || []
+
+  if (hasMax && sends.length >= Number(maxEnroll)) {
+    return { ok: false, reason: `Max enrollments reached (${sends.length}/${maxEnroll}) for this automation` }
+  }
+
+  if (cooldownDays > 0 && sends.length > 0 && sends[0].sent_at) {
+    const lastSentMs = new Date(sends[0].sent_at).getTime()
+    const cutoffMs = Date.now() - cooldownDays * 24 * 60 * 60 * 1000
+    if (lastSentMs > cutoffMs) {
+      return { ok: false, reason: `Within ${cooldownDays}-day enrollment cooldown (last sent ${sends[0].sent_at})` }
+    }
+  }
+
+  return { ok: true }
+}
+
 // ============================================================================
 // PROCESS READY EMAILS - Send via SendGrid
 // ============================================================================
@@ -870,7 +1007,8 @@ async function processReadyEmails(
     .select(`
       *,
       account:accounts(*),
-      template:email_templates(*)
+      template:email_templates(*),
+      automation:automations(id, name, status, filter_config, max_enrollments, enrollment_cooldown_days)
     `)
     .eq('status', 'Pending')
 
@@ -1041,6 +1179,44 @@ async function processReadyEmails(
             .update({
               status: 'Cancelled',
               error_message: 'Template already sent to this recipient within 7 days',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', email.id)
+          continue
+        }
+      }
+
+      // Final enrollment-limit check (max_enrollments / cooldown). Catches rows
+      // that skipped the 24h gate (e.g. requires_verification=false) so a
+      // single-shot automation can never send twice even if the 7-day dedup
+      // window has lapsed.
+      const enrollment = await withinEnrollmentLimits(supabase, email, email.automation)
+      if (!enrollment.ok) {
+        await supabase
+          .from('scheduled_emails')
+          .update({
+            status: 'Cancelled',
+            error_message: enrollment.reason,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', email.id)
+        continue
+      }
+
+      // Final audience re-qualification at send time. The 24h gate already does
+      // this, but only for rows it touches (requires_verification=true). Rows
+      // verified earlier (now requires_verification=false) or otherwise bypassing
+      // verification would not be re-checked — so re-run the full filter_config
+      // here too. Closes the case where an account stopped matching the segment
+      // (e.g. acquired the missing line) after it was verified.
+      if (email.automation?.filter_config && email.account) {
+        const filterResult = await accountMatchesFilterConfig(supabase, email.account, email.automation, email)
+        if (!filterResult.matches) {
+          await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'Cancelled',
+              error_message: filterResult.reason,
               updated_at: new Date().toISOString()
             })
             .eq('id', email.id)
