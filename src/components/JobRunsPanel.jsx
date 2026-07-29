@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useJobStatusSummary, useRecentJobRuns } from '../hooks/useJobRuns';
+import { runOutcome } from '../services/jobRuns';
 
 const JOB_LABELS = {
   'process-scheduled-emails': 'Email Engine',
@@ -94,7 +95,8 @@ const JobRunsPanel = ({ theme: t }) => {
       {(summary || []).length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {summary.map((job) => {
-            const healthy = job.failures === 0 && job.latest?.success;
+            const latestOutcome = runOutcome(job.latest);
+            const healthy = job.failures === 0 && (latestOutcome === 'ok' || latestOutcome === 'running');
             return (
               <div key={job.jobName} style={{ padding: '14px', backgroundColor: t.bgHover, borderRadius: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
@@ -149,13 +151,24 @@ const JobRunsPanel = ({ theme: t }) => {
                     <td style={{ padding: '8px', color: t.textSecondary, whiteSpace: 'nowrap' }}>{formatAgo(run.started_at)}</td>
                     <td style={{ padding: '8px', color: t.textSecondary }}>{formatDuration(run.duration_ms)}</td>
                     <td style={{ padding: '8px' }}>
-                      <span style={{
-                        padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '600',
-                        backgroundColor: run.success ? '#dcfce7' : '#fee2e2',
-                        color: run.success ? '#166534' : '#991b1b'
-                      }}>
-                        {run.success ? 'OK' : `${run.error_count} error${run.error_count === 1 ? '' : 's'}`}
-                      </span>
+                      {(() => {
+                        const outcome = runOutcome(run);
+                        const styles = {
+                          ok: { bg: '#dcfce7', fg: '#166534', label: 'OK' },
+                          failed: { bg: '#fee2e2', fg: '#991b1b', label: `${run.error_count} error${run.error_count === 1 ? '' : 's'}` },
+                          running: { bg: '#dbeafe', fg: '#1e40af', label: 'Running…' },
+                          killed: { bg: '#fee2e2', fg: '#991b1b', label: 'Never finished' },
+                        };
+                        const s = styles[outcome] || styles.killed;
+                        return (
+                          <span style={{
+                            padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '600',
+                            backgroundColor: s.bg, color: s.fg
+                          }}>
+                            {s.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '8px', color: t.textMuted }}>
                       {summaryLine(run)}

@@ -18,7 +18,7 @@ import {
   getScheduledDateTimeUTC,
   moveToNextAllowedDay,
 } from './logic.ts'
-import { recordJobRun } from '../_shared/jobRuns.ts'
+import { beginJobRun, completeJobRun } from '../_shared/jobRuns.ts'
 
 // Dynamic CORS: only allow known frontend origins
 const ALLOWED_ORIGINS = [
@@ -70,9 +70,26 @@ interface ScheduledEmail {
 // Timeout guard: Supabase edge functions have a 60s limit
 const FUNCTION_TIMEOUT_MS = 55000
 
+// Per-phase budgets for the 'daily' action, all measured from the request's
+// startTime. Each phase bails cleanly at its mark so the later phases (and the
+// final job-run recording) always get to execute instead of the whole isolate
+// being killed mid-run: refresh stops at 20s, verification at 30s, sending at
+// 55s. Work left over is picked up by the next 5-minute cron cycle.
+const REFRESH_BUDGET_MS = 20000
+
 // Max time to spend on 24h verification per run. Verification can now trigger
 // SendGrid validation calls, so this caps it and leaves budget for the send step.
 const VERIFICATION_BUDGET_MS = 30000
+
+// Emails whose scheduled_for is further in the past than this are cancelled at
+// verification instead of sent - a renewal reminder delivered weeks late is
+// worse than none.
+const MISSED_SEND_GRACE_MS = 3 * 24 * 60 * 60 * 1000
+
+// A row stuck in 'Processing' longer than this had its isolate killed mid-send;
+// it is reset to Pending (or Failed once out of attempts) so it can't wedge
+// forever.
+const STALE_PROCESSING_MS = 15 * 60 * 1000
 
 serve(async (req) => {
   // Handle CORS preflight - must return 200 with proper headers
@@ -85,6 +102,7 @@ serve(async (req) => {
 
   const startTime = Date.now()
   const isTimedOut = () => Date.now() - startTime > FUNCTION_TIMEOUT_MS
+  let jobRunId: number | null = null
 
   try {
     const supabaseClient = createClient(
@@ -114,6 +132,15 @@ serve(async (req) => {
       console.log('[Cron] No request body - running daily action (refresh + verify + send)')
     }
 
+    // Record the run's start immediately: if the runtime kills this isolate
+    // mid-run, the row stays behind with finished_at NULL - visible evidence
+    // instead of a silently vanished run.
+    jobRunId = await beginJobRun(supabaseClient, {
+      jobName: 'process-scheduled-emails',
+      action,
+      startedAtMs: startTime,
+    })
+
     const results = {
       action,
       automationId,
@@ -132,7 +159,7 @@ serve(async (req) => {
     // Step 0: Daily refresh - find new qualifying accounts for active automations
     // If automationId is provided, only refresh that specific automation
     if (action === 'refresh' || action === 'daily' || action === 'activate') {
-      const refreshResult = await runDailyRefresh(supabaseClient, automationId, accountOffset)
+      const refreshResult = await runDailyRefresh(supabaseClient, automationId, accountOffset, startTime)
       results.refreshed = refreshResult.automationsProcessed
       results.newScheduled = refreshResult.totalAdded
       results.cancelled += refreshResult.totalRemoved
@@ -151,7 +178,7 @@ serve(async (req) => {
 
     // Step 2: Process ready-to-send emails
     if (action === 'process' || action === 'send' || action === 'daily') {
-      const sendResult = await processReadyEmails(supabaseClient, sendgridApiKey, scheduledEmailId)
+      const sendResult = await processReadyEmails(supabaseClient, sendgridApiKey, scheduledEmailId, startTime)
       results.sent = sendResult.sent
       results.failed = sendResult.failed
       results.errors.push(...sendResult.errors)
@@ -170,7 +197,7 @@ serve(async (req) => {
 
     // Persist the run outcome: cron invocations discard the HTTP response, so
     // this table is the only place failures become visible.
-    await recordJobRun(supabaseClient, {
+    await completeJobRun(supabaseClient, jobRunId, {
       jobName: 'process-scheduled-emails',
       action,
       startedAtMs: startTime,
@@ -204,7 +231,7 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       )
-      await recordJobRun(supabaseClient, {
+      await completeJobRun(supabaseClient, jobRunId, {
         jobName: 'process-scheduled-emails',
         startedAtMs: startTime,
         success: false,
@@ -225,7 +252,8 @@ serve(async (req) => {
 async function runDailyRefresh(
   supabase: any,
   specificAutomationId: string | null = null,
-  accountOffset: number = 0
+  accountOffset: number = 0,
+  startTime: number = Date.now()
 ): Promise<{
   automationsProcessed: number,
   totalAdded: number,
@@ -262,6 +290,16 @@ async function runDailyRefresh(
   }
 
   for (const automation of (automations || [])) {
+    // Stop before the runtime kills the isolate: leave the remaining
+    // automations for the next 5-minute run so verify/send still execute and
+    // the run gets recorded. Not pushed to errors - a budget bail is normal.
+    if (Date.now() - startTime > REFRESH_BUDGET_MS) {
+      console.warn(`[Refresh] Time budget reached after ${automationsProcessed} automation(s) - remaining deferred to next run`)
+      hasMore = true
+      nextOffset = accountOffset
+      break
+    }
+
     try {
       // Get existing scheduled emails for this automation
       const { data: existingEmails } = await supabase
@@ -749,7 +787,12 @@ async function runVerification(supabase: any, startTime: number): Promise<{ veri
   const now = new Date()
   const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-  // Get emails needing verification (scheduled within next 24 hours)
+  // Get emails needing verification: scheduled within the next 24 hours OR
+  // already overdue. Overdue rows used to be excluded here, which made a
+  // Pending row that missed its window while still requires_verification=true
+  // permanently unsendable - never verified, never sent, never cancelled.
+  // Oldest first so the backlog drains; rows past the grace window are
+  // cancelled below instead of verified.
   const { data: emails, error } = await supabase
     .from('scheduled_emails')
     .select(`
@@ -760,7 +803,6 @@ async function runVerification(supabase: any, startTime: number): Promise<{ veri
     .eq('status', 'Pending')
     .eq('requires_verification', true)
     .lte('scheduled_for', in24Hours.toISOString())
-    .gte('scheduled_for', now.toISOString())
     .order('scheduled_for')
     .limit(100)
 
@@ -779,6 +821,20 @@ async function runVerification(supabase: any, startTime: number): Promise<{ veri
     }
 
     try {
+      // Too far past its send time: cancel rather than deliver weeks late.
+      if (new Date(email.scheduled_for).getTime() < now.getTime() - MISSED_SEND_GRACE_MS) {
+        await supabase
+          .from('scheduled_emails')
+          .update({
+            status: 'Cancelled',
+            error_message: `Missed send window (scheduled for ${email.scheduled_for}, more than ${MISSED_SEND_GRACE_MS / 86400000} days ago)`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', email.id)
+        cancelled++
+        continue
+      }
+
       const qualifyResult = await verifyAccountQualifies(supabase, email)
 
       if (qualifyResult.qualifies) {
@@ -1334,11 +1390,18 @@ async function runReconciliation(
 async function processReadyEmails(
   supabase: any,
   sendgridApiKey: string | undefined,
-  specificEmailId: string | null = null
+  specificEmailId: string | null = null,
+  startTime: number = Date.now()
 ): Promise<{ sent: number, failed: number, errors: string[] }> {
   const errors: string[] = []
   let sent = 0
   let failed = 0
+
+  // Recover rows wedged in 'Processing' by a killed isolate: the atomic
+  // Pending->Processing claim means a mid-send crash leaves the row claimed
+  // forever (the send query only picks up Pending). Reset stale claims to
+  // Pending for retry, or Failed once they're out of attempts.
+  await recoverStaleProcessing(supabase, errors)
 
   // Build query for ready emails
   let query = supabase
@@ -1371,6 +1434,14 @@ async function processReadyEmails(
   }
 
   for (const email of (emails || [])) {
+    // Stop claiming new emails before the runtime kills the isolate - an
+    // unclaimed Pending row is safely sent next cycle, but a claimed one
+    // whose isolate dies is wedged until the stale-Processing sweep.
+    if (Date.now() - startTime > FUNCTION_TIMEOUT_MS) {
+      console.warn(`[Send] Time budget reached after ${sent + failed} email(s) - remaining Pending rows sent next run`)
+      break
+    }
+
     try {
       // Mark as processing - use atomic check to prevent race conditions
       // Only update if status is still 'Pending' (another process may have grabbed it)
@@ -1686,6 +1757,58 @@ async function processReadyEmails(
   }
 
   return { sent, failed, errors }
+}
+
+/**
+ * Reset scheduled_emails rows stuck in 'Processing' (claimed by an isolate
+ * that was killed mid-send). PostgREST can't compare two columns in a filter,
+ * so fetch the stale rows and partition in JS: rows with attempts left go back
+ * to Pending for retry; exhausted rows go to Failed. The email may or may not
+ * have reached SendGrid before the crash - the 7-day template dedup at the
+ * send gate protects retries from double-sending.
+ */
+async function recoverStaleProcessing(supabase: any, errors: string[]): Promise<void> {
+  try {
+    const staleCutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString()
+    const { data: staleRows, error } = await supabase
+      .from('scheduled_emails')
+      .select('id, attempts, max_attempts')
+      .eq('status', 'Processing')
+      .lt('last_attempt_at', staleCutoff)
+      .limit(200)
+
+    if (error || !staleRows || staleRows.length === 0) return
+
+    const retryIds: (string | number)[] = []
+    const failIds: (string | number)[] = []
+    for (const row of staleRows) {
+      const maxAttempts = row.max_attempts || 3
+      if ((row.attempts || 0) >= maxAttempts) failIds.push(row.id)
+      else retryIds.push(row.id)
+    }
+
+    if (retryIds.length > 0) {
+      await supabase
+        .from('scheduled_emails')
+        .update({ status: 'Pending', updated_at: new Date().toISOString() })
+        .in('id', retryIds)
+        .eq('status', 'Processing')
+    }
+    if (failIds.length > 0) {
+      await supabase
+        .from('scheduled_emails')
+        .update({
+          status: 'Failed',
+          error_message: 'Send was interrupted (function terminated mid-send) and retry attempts are exhausted',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', failIds)
+        .eq('status', 'Processing')
+    }
+    console.warn(`[Send] Recovered ${staleRows.length} stale Processing row(s): ${retryIds.length} back to Pending, ${failIds.length} Failed`)
+  } catch (err: any) {
+    errors.push(`Stale-Processing recovery failed: ${err.message}`)
+  }
 }
 
 // ============================================================================

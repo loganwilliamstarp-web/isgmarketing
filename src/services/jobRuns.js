@@ -5,6 +5,18 @@
 
 import { supabase } from '../lib/supabase';
 
+// A run row with success=null is in progress; if it's older than this it
+// never finished (the runtime killed the isolate mid-run).
+const KILLED_THRESHOLD_MS = 10 * 60 * 1000;
+
+export function runOutcome(run) {
+  if (!run) return 'unknown';
+  if (run.success === true) return 'ok';
+  if (run.success === false) return 'failed';
+  const age = Date.now() - new Date(run.started_at).getTime();
+  return age > KILLED_THRESHOLD_MS ? 'killed' : 'running';
+}
+
 export const jobRunsService = {
   /**
    * Most recent runs across all jobs, newest first.
@@ -39,7 +51,8 @@ export const jobRunsService = {
         byJob[run.job_name] = { jobName: run.job_name, latest: run, runs: 0, failures: 0 };
       }
       byJob[run.job_name].runs += 1;
-      if (!run.success) byJob[run.job_name].failures += 1;
+      const outcome = runOutcome(run);
+      if (outcome === 'failed' || outcome === 'killed') byJob[run.job_name].failures += 1;
     }
     return Object.values(byJob).sort((a, b) => a.jobName.localeCompare(b.jobName));
   }
