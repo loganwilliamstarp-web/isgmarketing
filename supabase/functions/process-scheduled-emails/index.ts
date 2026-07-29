@@ -156,10 +156,13 @@ serve(async (req) => {
       nextOffset: 0          // Next offset for continuation
     }
 
-    // Step 0: Daily refresh - find new qualifying accounts for active automations
-    // If automationId is provided, only refresh that specific automation
+    // Step 0: Audience refresh - find new qualifying accounts for active
+    // automations. Runs on its own hourly cron ({"action":"refresh"}) with
+    // most of the request budget; inside a combined 'daily'/'activate' run it
+    // is capped tighter so verify+send still fit.
     if (action === 'refresh' || action === 'daily' || action === 'activate') {
-      const refreshResult = await runDailyRefresh(supabaseClient, automationId, accountOffset, startTime)
+      const refreshBudget = action === 'refresh' ? FUNCTION_TIMEOUT_MS - 10000 : REFRESH_BUDGET_MS
+      const refreshResult = await runDailyRefresh(supabaseClient, automationId, accountOffset, startTime, refreshBudget)
       results.refreshed = refreshResult.automationsProcessed
       results.newScheduled = refreshResult.totalAdded
       results.cancelled += refreshResult.totalRemoved
@@ -253,7 +256,8 @@ async function runDailyRefresh(
   supabase: any,
   specificAutomationId: string | null = null,
   accountOffset: number = 0,
-  startTime: number = Date.now()
+  startTime: number = Date.now(),
+  budgetMs: number = REFRESH_BUDGET_MS
 ): Promise<{
   automationsProcessed: number,
   totalAdded: number,
@@ -293,7 +297,7 @@ async function runDailyRefresh(
     // Stop before the runtime kills the isolate: leave the remaining
     // automations for the next 5-minute run so verify/send still execute and
     // the run gets recorded. Not pushed to errors - a budget bail is normal.
-    if (Date.now() - startTime > REFRESH_BUDGET_MS) {
+    if (Date.now() - startTime > budgetMs) {
       console.warn(`[Refresh] Time budget reached after ${automationsProcessed} automation(s) - remaining deferred to next run`)
       hasMore = true
       nextOffset = accountOffset
