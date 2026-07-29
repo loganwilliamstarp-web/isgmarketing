@@ -24,5 +24,8 @@ npm-debug.log*
 # Cache
 .cache/
 
+# Supabase CLI local state (project ref, pooler URL, versions)
+supabase/.temp/
+
 # Claude Code local settings (may contain tokens)
 .claude/settings.local.json

@@ -1196,24 +1196,6 @@ export const massEmailsService = {
   },
 
   /**
-   * Count recipients based on filter config with dynamic rules
-   * @deprecated Use getRecipientStats instead for better performance
-   */
-  async countRecipients(ownerId, filterConfig) {
-    const stats = await this.getRecipientStats(ownerId, filterConfig);
-    return stats.count;
-  },
-
-  /**
-   * Get location breakdown of recipients
-   * @deprecated Use getRecipientStats instead for better performance
-   */
-  async getRecipientLocationBreakdown(ownerId, filterConfig) {
-    const stats = await this.getRecipientStats(ownerId, filterConfig);
-    return stats.breakdown;
-  },
-
-  /**
    * Schedule a mass email batch for sending
    * Creates scheduled_emails entries for each recipient
    * Deduplicates recipients by email address to prevent duplicate sends

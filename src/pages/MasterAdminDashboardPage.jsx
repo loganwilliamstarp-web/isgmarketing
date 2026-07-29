@@ -21,6 +21,7 @@ import {
   useSoldAccounts
 } from '../hooks/useMasterAdminAnalytics';
 import { LineChart } from '../components/charts';
+import JobRunsPanel from '../components/JobRunsPanel';
 
 // ============================================
 // LOADING SKELETON
@@ -1277,6 +1278,9 @@ const MasterAdminDashboardPage = ({ t }) => {
         {/* Replies Success */}
         <RepliesCard data={accountsWithReplies} isLoading={repliesLoading} theme={t} />
       </div>
+
+      {/* Background Jobs (cron run history from job_runs) */}
+      <JobRunsPanel theme={t} />
 
       {/* Leaderboards & Activity Row */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '24px' }}>

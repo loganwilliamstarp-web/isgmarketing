@@ -5,6 +5,20 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  applyMergeFields,
+  applyPacingDistribution,
+  buildEmailFooter,
+  buildEmailSchedule,
+  enrollmentLimitReached,
+  extractDateTriggerRules,
+  fallbackValidation,
+  filterAccountsByConfig,
+  getFinalSendEmailNodeId,
+  getScheduledDateTimeUTC,
+  moveToNextAllowedDay,
+} from './logic.ts'
+import { recordJobRun } from '../_shared/jobRuns.ts'
 
 // Dynamic CORS: only allow known frontend origins
 const ALLOWED_ORIGINS = [
@@ -154,6 +168,26 @@ serve(async (req) => {
       results.errors.push(...reconcileResult.errors)
     }
 
+    // Persist the run outcome: cron invocations discard the HTTP response, so
+    // this table is the only place failures become visible.
+    await recordJobRun(supabaseClient, {
+      jobName: 'process-scheduled-emails',
+      action,
+      startedAtMs: startTime,
+      success: results.errors.length === 0,
+      summary: {
+        refreshed: results.refreshed,
+        newScheduled: results.newScheduled,
+        verified: results.verified,
+        cancelled: results.cancelled,
+        sent: results.sent,
+        failed: results.failed,
+        reconciled: results.reconciled,
+        hasMore: results.hasMore,
+      },
+      errors: results.errors,
+    })
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -165,6 +199,18 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Edge function error:', error)
+    try {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+      await recordJobRun(supabaseClient, {
+        jobName: 'process-scheduled-emails',
+        startedAtMs: startTime,
+        success: false,
+        errors: [error.message],
+      })
+    } catch { /* recording is best-effort */ }
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
@@ -305,11 +351,7 @@ async function runDailyRefresh(
       }
 
       const policies = allPolicies
-      console.log(`[${automation.name}] Policies query: found ${policies?.length || 0} policies for ${accountIds.length} account IDs (in ${Math.ceil(accountIds.length / POLICY_BATCH_SIZE)} batches)`)
-      // Debug: log sample policies
-      if (policies && policies.length > 0) {
-        console.log(`[${automation.name}] Sample policies:`, JSON.stringify(policies.slice(0, 3)))
-      }
+      console.log(`[${automation.name}] Policies: ${policies?.length || 0} active for ${accountIds.length} accounts`)
 
       // Get all template keys used in nodes (for master automation synced nodes)
       const templateKeys: string[] = []
@@ -346,13 +388,7 @@ async function runDailyRefresh(
         errors.push(skipMsg)
       }
 
-      // Debug logging (before filteredAccounts is defined)
-      console.log(`[${automation.name}] Nodes:`, JSON.stringify(nodes?.map((n: any) => ({ id: n.id, type: n.type, config: n.config }))))
-      console.log(`[${automation.name}] Template keys to resolve:`, templateKeys)
-      console.log(`[${automation.name}] Template ID map:`, templateIdMap)
-      console.log(`[${automation.name}] Email schedule:`, JSON.stringify(emailSchedule))
-      console.log(`[${automation.name}] Accounts found:`, accounts?.length || 0)
-      console.log(`[${automation.name}] Filter config:`, JSON.stringify(filterConfig))
+      console.log(`[${automation.name}] ${accounts?.length || 0} accounts, ${emailSchedule.length} email step(s)`)
 
       // Fetch template details for admin review
       const templateIds = [...new Set(emailSchedule.map(e => e.templateId).filter(Boolean))]
@@ -472,9 +508,7 @@ async function runDailyRefresh(
 
       // Filter accounts based on non-date filter rules (policy type, etc.)
       const filteredAccounts = filterAccountsByConfig(accounts, policies || [], filterConfig, lastSentByAccount, policyStatusByAccount)
-      console.log(`[${automation.name}] Filtered accounts:`, filteredAccounts?.length || 0)
-      console.log(`[${automation.name}] Date trigger rules:`, dateTriggerRules?.length || 0)
-      console.log(`[${automation.name}] Date trigger rules detail:`, JSON.stringify(dateTriggerRules))
+      console.log(`[${automation.name}] Filtered accounts: ${filteredAccounts?.length || 0}, date trigger rules: ${dateTriggerRules?.length || 0}`)
 
       // Handle non-date-based automations (immediate/activation-based)
       if (dateTriggerRules.length === 0) {
@@ -650,21 +684,7 @@ async function runDailyRefresh(
         }
       }
 
-      console.log(`[${automation.name}] New emails to insert:`, newEmails.length)
-      if (newEmails.length === 0 && filteredAccounts.length > 0) {
-        // Debug: check first few filtered accounts to see why no emails
-        const debugAccounts = filteredAccounts.slice(0, 3)
-        for (const account of debugAccounts) {
-          const accountPolicies = (policies || []).filter((p: any) => p.account_id === account.account_unique_id)
-          console.log(`[${automation.name}] Debug account ${account.name}:`, {
-            policies: accountPolicies.map((p: any) => ({
-              lob: p.policy_lob,
-              exp: p.expiration_date,
-              term: p.policy_term
-            }))
-          })
-        }
-      }
+      console.log(`[${automation.name}] New emails to insert: ${newEmails.length}`)
 
       // Apply pacing distribution if enabled
       let finalEmails = newEmails
@@ -691,13 +711,9 @@ async function runDailyRefresh(
       }
 
       // Insert new emails in batches
-      console.log(`[${automation.name}] About to insert ${finalEmails.length} emails in batches of ${BATCH_SIZE}`)
-      if (finalEmails.length > 0) {
-        console.log(`[${automation.name}] Sample email to insert:`, JSON.stringify(finalEmails[0]))
-      }
+      console.log(`[${automation.name}] Inserting ${finalEmails.length} emails in batches of ${BATCH_SIZE}`)
       for (let i = 0; i < finalEmails.length; i += BATCH_SIZE) {
         const batch = finalEmails.slice(i, i + BATCH_SIZE)
-        console.log(`[${automation.name}] Inserting batch ${i / BATCH_SIZE + 1} with ${batch.length} emails`)
         const { error: insertError, data: insertedData } = await supabase
           .from('scheduled_emails')
           .insert(batch)
@@ -996,37 +1012,14 @@ async function accountMatchesFilterConfig(
 
 /**
  * Enforce max_enrollments / enrollment_cooldown_days from real send history.
- * automation_enrollments is not populated, so prior successful sends of this
- * template by this automation to this account stand in for prior enrollments.
- * Per-template counting reflects enrollments correctly for the journeys here:
- * each step uses a distinct template, sent once per enrollment.
+ * email_logs remains the source of truth for limit checks (it predates
+ * enrollment tracking, so it covers all historical sends); prior successful
+ * sends of this template by this automation to this account stand in for
+ * prior enrollments. Per-template counting reflects enrollments correctly for
+ * the journeys here: each step uses a distinct template, sent once per
+ * enrollment. automation_enrollments is populated at send time (see
+ * recordEnrollmentSend) for reporting/journey state.
  */
-/**
- * Pure check: has an account hit an automation's enrollment limits?
- * sentCount = prior successful sends of the enrolling template; lastSentIso =
- * the most recent of those. Shared by the per-email gate (withinEnrollmentLimits)
- * and the batched schedule-time / reconciliation checks so they all agree.
- */
-function enrollmentLimitReached(
-  sentCount: number,
-  lastSentIso: string | null,
-  automation: any
-): { limited: boolean, reason?: string } {
-  const maxEnroll = automation?.max_enrollments
-  const cooldownDays = Number(automation?.enrollment_cooldown_days) || 0
-  const hasMax = maxEnroll !== null && maxEnroll !== undefined && Number(maxEnroll) > 0
-  if (hasMax && sentCount >= Number(maxEnroll)) {
-    return { limited: true, reason: `Max enrollments reached (${sentCount}/${maxEnroll}) for this automation` }
-  }
-  if (cooldownDays > 0 && lastSentIso) {
-    const lastSentMs = new Date(lastSentIso).getTime()
-    if (lastSentMs > Date.now() - cooldownDays * 24 * 60 * 60 * 1000) {
-      return { limited: true, reason: `Within ${cooldownDays}-day enrollment cooldown (last sent ${lastSentIso})` }
-    }
-  }
-  return { limited: false }
-}
-
 async function withinEnrollmentLimits(
   supabase: any,
   email: ScheduledEmail,
@@ -1050,6 +1043,104 @@ async function withinEnrollmentLimits(
   const sends = priorSends || []
   const result = enrollmentLimitReached(sends.length, sends.length > 0 ? sends[0].sent_at : null, automation)
   return result.limited ? { ok: false, reason: result.reason } : { ok: true }
+}
+
+// ============================================================================
+// ENROLLMENT TRACKING
+// ============================================================================
+
+/**
+ * Record a successful automation send against automation_enrollments /
+ * enrollment_history. The first email of a journey creates an Active
+ * enrollment; each send increments emails_sent and advances current_node_id;
+ * the journey's final send_email node marks the enrollment Completed.
+ * Best-effort: any failure here is logged and swallowed — the email has
+ * already gone out and limit checks read email_logs, not this table.
+ */
+async function recordEnrollmentSend(supabase: any, email: ScheduledEmail, emailLogId: number): Promise<void> {
+  if (!email.automation_id || !email.account_id) return
+
+  try {
+    const nowIso = new Date().toISOString()
+
+    // Find the account's Active enrollment in this automation, if any.
+    const { data: existing } = await supabase
+      .from('automation_enrollments')
+      .select('id, emails_sent')
+      .eq('automation_id', email.automation_id)
+      .eq('account_id', email.account_id)
+      .eq('status', 'Active')
+      .order('enrolled_at', { ascending: false })
+      .limit(1)
+
+    let enrollmentId: number | null = null
+
+    if (existing && existing.length > 0) {
+      enrollmentId = existing[0].id
+      await supabase
+        .from('automation_enrollments')
+        .update({
+          emails_sent: (existing[0].emails_sent || 0) + 1,
+          last_action_at: nowIso,
+          current_node_id: (email as any).node_id || null,
+          updated_at: nowIso
+        })
+        .eq('id', enrollmentId)
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('automation_enrollments')
+        .insert({
+          automation_id: email.automation_id,
+          account_id: email.account_id,
+          status: 'Active',
+          enrolled_at: nowIso,
+          last_action_at: nowIso,
+          current_node_id: (email as any).node_id || null,
+          emails_sent: 1
+        })
+        .select('id')
+        .single()
+
+      if (insertError) {
+        // Unique-active index race: another instance created it. Re-read and
+        // fall through without incrementing twice for this send.
+        const { data: raced } = await supabase
+          .from('automation_enrollments')
+          .select('id')
+          .eq('automation_id', email.automation_id)
+          .eq('account_id', email.account_id)
+          .eq('status', 'Active')
+          .limit(1)
+        enrollmentId = raced && raced.length > 0 ? raced[0].id : null
+      } else {
+        enrollmentId = inserted?.id ?? null
+      }
+    }
+
+    if (!enrollmentId) return
+
+    await supabase
+      .from('enrollment_history')
+      .insert({
+        enrollment_id: enrollmentId,
+        node_id: (email as any).node_id || 'send_email',
+        node_type: 'send_email',
+        action: 'completed',
+        email_log_id: emailLogId,
+        completed_at: nowIso
+      })
+
+    // Journey finished? The last send_email node completes the enrollment.
+    const finalNodeId = getFinalSendEmailNodeId(email.automation?.nodes || [])
+    if (finalNodeId && (email as any).node_id === finalNodeId) {
+      await supabase
+        .from('automation_enrollments')
+        .update({ status: 'Completed', completed_at: nowIso, updated_at: nowIso })
+        .eq('id', enrollmentId)
+    }
+  } catch (err: any) {
+    console.warn(`[Enrollment] Failed to record send for email ${email.id}: ${err.message}`)
+  }
 }
 
 // ============================================================================
@@ -1256,7 +1347,7 @@ async function processReadyEmails(
       *,
       account:accounts(*),
       template:email_templates(*),
-      automation:automations(id, name, status, filter_config, max_enrollments, enrollment_cooldown_days)
+      automation:automations(id, name, status, filter_config, max_enrollments, enrollment_cooldown_days, nodes)
     `)
     .eq('status', 'Pending')
 
@@ -1369,13 +1460,13 @@ async function processReadyEmails(
           const needsJITValidation = currentStatus === 'unknown' || currentStatus === null || isExpired
 
           if (needsJITValidation && recipientEmail) {
-            console.log(`[JIT Validation] Attempting validation for ${recipientEmail} (status: ${currentStatus}, expired: ${isExpired})`)
+            console.log(`[JIT Validation] Attempting validation for account ${email.account_id} (status: ${currentStatus}, expired: ${isExpired})`)
 
             // Perform just-in-time validation
             const jitResult = await performJITValidation(supabase, email.account_id, recipientEmail)
 
             if (jitResult.status === 'valid') {
-              console.log(`[JIT Validation] ${recipientEmail} validated successfully - proceeding with send`)
+              console.log(`[JIT Validation] Account ${email.account_id} validated successfully - proceeding with send`)
               // Update the local account object so we don't cancel
               email.account.email_validation_status = 'valid'
             } else {
@@ -1388,7 +1479,7 @@ async function processReadyEmails(
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', email.id)
-              console.log(`[JIT Validation] ${recipientEmail} failed validation: ${jitResult.status}`)
+              console.log(`[JIT Validation] Account ${email.account_id} failed validation: ${jitResult.status}`)
               continue
             }
           } else if (currentStatus !== 'valid') {
@@ -1543,6 +1634,11 @@ async function processReadyEmails(
             created_at: new Date().toISOString()
           })
 
+        // Record the send against the account's enrollment (creates it on the
+        // first email of a journey, completes it on the last). Best-effort:
+        // enrollment bookkeeping must never fail a send that already happened.
+        await recordEnrollmentSend(supabase, email, emailLog.id)
+
         sent++
       } else {
         // Update email_log as failed
@@ -1646,13 +1742,20 @@ async function sendEmailViaSendGrid(
     return { success: false, error: 'Template not found' }
   }
 
+  // Star-rating links point at the star-rating edge function
+  const starRatingBaseUrl = Deno.env.get('SUPABASE_URL')
+    ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/star-rating`
+    : 'https://app.isgmarketing.com/api/star-rating'
+
   // Apply merge fields to template content (pass emailLogId for star rating URLs)
-  const baseHtmlContent = applyMergeFields(template.body_html || '', email, account, emailLogId)
-  const textContent = applyMergeFields(template.body_text || '', email, account, emailLogId)
-  const finalSubject = applyMergeFields(subject || 'No Subject', email, account, emailLogId)
+  const baseHtmlContent = applyMergeFields(template.body_html || '', email, account, emailLogId, starRatingBaseUrl)
+  const textContent = applyMergeFields(template.body_text || '', email, account, emailLogId, starRatingBaseUrl)
+  const finalSubject = applyMergeFields(subject || 'No Subject', email, account, emailLogId, starRatingBaseUrl)
 
   // Build email footer with signature, company info, and unsubscribe (use emailLogId for tracking)
-  const emailFooter = buildEmailFooter(userSettings, email, emailLogId)
+  const rawAppUrl = Deno.env.get('APP_URL') || 'isgmarketing-production.up.railway.app'
+  const appUrl = rawAppUrl.startsWith('http') ? rawAppUrl : `https://${rawAppUrl}`
+  const emailFooter = buildEmailFooter(userSettings, email, emailLogId, appUrl)
 
   // Wrap in proper HTML document with UTF-8 charset for proper character encoding
   const htmlContent = `<!DOCTYPE html>
@@ -1799,743 +1902,6 @@ async function sendEmailViaSendGrid(
 }
 
 // ============================================================================
-// MERGE FIELDS
-// ============================================================================
-
-function applyMergeFields(content: string, email: ScheduledEmail, account: Record<string, any>, emailLogId?: number): string {
-  // Extract first/last name from account.name if dedicated fields aren't available
-  const nameParts = (account.name || '').trim().split(/\s+/)
-  const derivedFirstName = nameParts[0] || ''
-  const derivedLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : ''
-
-  // Build star rating URLs if we have an email log ID
-  const starRatingBaseUrl = Deno.env.get('SUPABASE_URL')
-    ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/star-rating`
-    : 'https://app.isgmarketing.com/api/star-rating'
-
-  const buildRatingUrl = (stars: number) => {
-    if (!emailLogId) return '#'
-    const params = new URLSearchParams({
-      id: emailLogId.toString(),
-      rating: stars.toString(),
-      account: email.account_id || ''
-    })
-    return `${starRatingBaseUrl}?${params.toString()}`
-  }
-
-  const mergeFields: Record<string, string> = {
-    // Account fields
-    '{{first_name}}': account.primary_contact_first_name || derivedFirstName,
-    '{{last_name}}': account.primary_contact_last_name || derivedLastName,
-    '{{full_name}}': [account.primary_contact_first_name, account.primary_contact_last_name].filter(Boolean).join(' ') || account.name || '',
-    '{{name}}': account.name || '',
-    '{{company_name}}': account.name || '',
-    '{{email}}': account.person_email || account.email || email.to_email || '',
-    '{{phone}}': account.phone || '',
-
-    // Address fields
-    '{{address}}': account.billing_street || '',
-    '{{city}}': account.billing_city || '',
-    '{{state}}': account.billing_state || '',
-    '{{zip}}': account.billing_postal_code || '',
-    '{{postal_code}}': account.billing_postal_code || '',
-
-    // Recipient fields
-    '{{recipient_name}}': email.to_name || '',
-    '{{recipient_email}}': email.to_email || '',
-
-    // Date fields
-    '{{today}}': new Date().toLocaleDateString('en-US'),
-    '{{current_year}}': new Date().getFullYear().toString(),
-
-    // Trigger-specific fields
-    '{{trigger_date}}': email.qualification_value || '',
-
-    // Star rating URLs (for periodic review emails)
-    '{{rating_url_1}}': buildRatingUrl(1),
-    '{{rating_url_2}}': buildRatingUrl(2),
-    '{{rating_url_3}}': buildRatingUrl(3),
-    '{{rating_url_4}}': buildRatingUrl(4),
-    '{{rating_url_5}}': buildRatingUrl(5),
-  }
-
-  let result = content
-  for (const [field, value] of Object.entries(mergeFields)) {
-    // Case-insensitive replacement - handle spaces inside braces like {{ field }}
-    const fieldName = field.slice(2, -2) // Remove {{ and }}
-    const pattern = new RegExp(`\\{\\{\\s*${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'gi')
-    result = result.replace(pattern, value)
-  }
-
-  return result
-}
-
-// ============================================================================
-// EMAIL FOOTER BUILDER
-// ============================================================================
-
-function buildEmailFooter(userSettings: any, email: ScheduledEmail, emailLogId: number): string {
-  // Build app URL from APP_URL secret (same as star-rating function)
-  const rawAppUrl = Deno.env.get('APP_URL') || 'isgmarketing-production.up.railway.app'
-  const appUrl = rawAppUrl.startsWith('http') ? rawAppUrl : `https://${rawAppUrl}`
-
-  // Build unsubscribe URL with email_log ID for tracking (matches email_logs table)
-  const unsubscribeUrl = `${appUrl}/unsubscribe?id=${emailLogId}&email=${encodeURIComponent(email.to_email)}`
-
-  let footer = ''
-
-  // 1. User signature (if exists) - reset p margins to avoid double spacing
-  if (userSettings?.signature_html) {
-    footer += `
-      <div style="margin-top: 20px; font-family: Arial, sans-serif;">
-        <style>.email-sig p { margin: 0; }</style>
-        <div class="email-sig">${userSettings.signature_html}</div>
-      </div>
-    `
-  }
-
-  // 2. Company info line (grey, single line)
-  const companyParts: string[] = []
-  if (userSettings?.agency_name) companyParts.push(userSettings.agency_name)
-  if (userSettings?.agency_address) companyParts.push(userSettings.agency_address)
-  if (userSettings?.agency_phone) companyParts.push(userSettings.agency_phone)
-  if (userSettings?.agency_website) companyParts.push(userSettings.agency_website)
-
-  if (companyParts.length > 0) {
-    footer += `
-      <div style="margin-top: 20px; font-family: Arial, sans-serif; font-size: 12px; color: #888888; text-align: center;">
-        ${companyParts.join(' | ')}
-      </div>
-    `
-  }
-
-  // 3. Unsubscribe link (below company info)
-  footer += `
-    <div style="margin-top: 15px; font-family: Arial, sans-serif; font-size: 11px; text-align: center;">
-      <a href="${unsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from these emails</a>
-    </div>
-  `
-
-  return footer
-}
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Convert a date + time in a specific timezone to a UTC ISO string
- * @param date - The date (year, month, day)
- * @param time - Time string like "10:00"
- * @param timezone - IANA timezone like "America/Chicago"
- * @returns ISO string in UTC
- *
- * Example: 10:00 AM America/Chicago = 16:00 UTC (in winter, CST = UTC-6)
- */
-function getScheduledDateTimeUTC(date: Date, time: string, timezone: string): string {
-  const [hours, minutes] = time.split(':').map(Number)
-
-  // Get the timezone offset in hours (positive = behind UTC, e.g. Chicago = 6)
-  const offsetHours = getTimezoneOffsetHours(timezone, date)
-
-  // Create a UTC date by adding the offset to the local time
-  // If it's 10:00 AM in Chicago (UTC-6), UTC time is 10:00 + 6 = 16:00
-  const utcHours = hours + offsetHours
-
-  // Create the UTC date
-  const utcDate = new Date(Date.UTC(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    utcHours,
-    minutes,
-    0,
-    0
-  ))
-
-  return utcDate.toISOString()
-}
-
-/**
- * Get timezone offset in hours for a given timezone at a specific date
- * Returns positive number for timezones behind UTC (e.g., 6 for Chicago in winter)
- */
-function getTimezoneOffsetHours(timezone: string, date: Date): number {
-  // Common US timezone offsets in hours behind UTC (standard time)
-  const standardOffsets: Record<string, number> = {
-    'America/New_York': 5,       // EST: UTC-5
-    'America/Chicago': 6,        // CST: UTC-6
-    'America/Denver': 7,         // MST: UTC-7
-    'America/Los_Angeles': 8,    // PST: UTC-8
-    'America/Phoenix': 7,        // MST (no DST)
-    'Pacific/Honolulu': 10,      // HST: UTC-10
-    'America/Anchorage': 9,      // AKST: UTC-9
-    'UTC': 0,
-  }
-
-  let offset = standardOffsets[timezone] ?? 6 // Default to CST
-
-  // Check if the scheduled date falls within DST
-  // US DST: Second Sunday in March to First Sunday in November
-  const isDST = isDateInDST(date)
-
-  // Adjust for DST (except Phoenix and Honolulu which don't observe DST)
-  if (isDST && timezone !== 'America/Phoenix' && timezone !== 'Pacific/Honolulu' && timezone !== 'UTC') {
-    offset -= 1 // DST moves 1 hour closer to UTC (e.g., Chicago becomes UTC-5 instead of UTC-6)
-  }
-
-  return offset
-}
-
-/**
- * Check if a date falls within US Daylight Saving Time
- * DST starts: Second Sunday in March at 2:00 AM
- * DST ends: First Sunday in November at 2:00 AM
- */
-function isDateInDST(date: Date): boolean {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-
-  // Quick check: Jan, Feb, Dec are never DST
-  if (month < 2 || month > 10) return false
-
-  // Quick check: Apr-Oct are always DST
-  if (month > 2 && month < 10) return true
-
-  // March: DST starts on second Sunday
-  if (month === 2) {
-    const secondSunday = getSecondSundayOfMonth(year, 2)
-    return date.getDate() >= secondSunday
-  }
-
-  // November: DST ends on first Sunday
-  if (month === 10) {
-    const firstSunday = getFirstSundayOfMonth(year, 10)
-    return date.getDate() < firstSunday
-  }
-
-  return false
-}
-
-function getSecondSundayOfMonth(year: number, month: number): number {
-  const firstDay = new Date(year, month, 1).getDay()
-  // Days until first Sunday (0 if first day is Sunday)
-  const daysUntilFirstSunday = firstDay === 0 ? 0 : 7 - firstDay
-  // Second Sunday = first Sunday + 7
-  return 1 + daysUntilFirstSunday + 7
-}
-
-function getFirstSundayOfMonth(year: number, month: number): number {
-  const firstDay = new Date(year, month, 1).getDay()
-  // Days until first Sunday (0 if first day is Sunday)
-  const daysUntilFirstSunday = firstDay === 0 ? 0 : 7 - firstDay
-  return 1 + daysUntilFirstSunday
-}
-
-function extractDateTriggerRules(filterConfig: any): any[] {
-  const rules: any[] = []
-  const groups = filterConfig?.groups || []
-
-  for (const group of groups) {
-    const groupRules = group.rules || []
-
-    // Find all date-based rules in this group for the same field
-    const dateRulesByField: Record<string, any[]> = {}
-
-    for (const rule of groupRules) {
-      if (['policy_expiration', 'policy_effective', 'account_created'].includes(rule.field)) {
-        if (['in_next_days', 'in_last_days', 'less_than_days_future', 'more_than_days_future'].includes(rule.operator)) {
-          if (!dateRulesByField[rule.field]) {
-            dateRulesByField[rule.field] = []
-          }
-          dateRulesByField[rule.field].push(rule)
-        }
-      }
-    }
-
-    // For each field, calculate the "days before trigger" for first email
-    for (const [field, fieldRules] of Object.entries(dateRulesByField)) {
-      // The INNER bound (more_than_days_future) is when the email journey STARTS
-      // The OUTER bound (less_than_days_future) is just for preview/pool visibility
-      //
-      // e.g., "more_than_days_future: 80" AND "less_than_days_future: 90"
-      // - Days 90-81: Account is visible in preview (in the window)
-      // - Day 80: First email sends (hits the inner bound, journey starts!)
-      // - Days 79-0: Subsequent emails based on workflow delays
-      //
-      // So first email date = trigger_date - inner_bound (more_than value)
-
-      let daysBeforeTrigger = 0
-
-      for (const rule of fieldRules) {
-        const value = parseInt(rule.value, 10) || 0
-
-        if (rule.operator === 'in_next_days') {
-          // "in next 30 days" → send at day 30 before trigger
-          daysBeforeTrigger = Math.max(daysBeforeTrigger, value)
-        } else if (rule.operator === 'more_than_days_future') {
-          // "more than 80 days from now" → this is when email journey STARTS
-          // First email sends when they hit this threshold
-          daysBeforeTrigger = Math.max(daysBeforeTrigger, value)
-        } else if (rule.operator === 'less_than_days_future') {
-          // "less than 90 days from now" → outer bound, just for preview
-          // Only use this if there's no inner bound defined
-          if (daysBeforeTrigger === 0) {
-            daysBeforeTrigger = value
-          }
-        } else if (rule.operator === 'in_last_days') {
-          // "in last 30 days" → trigger date is in the past, send X days after trigger
-          daysBeforeTrigger = -value // negative means days AFTER the trigger date
-        }
-      }
-
-      // Only add rule if we have a valid send date
-      if (daysBeforeTrigger !== 0) {
-        rules.push({
-          field,
-          daysBeforeTrigger,
-          policyType: groupRules.find((r: any) => r.field === 'active_policy_type' || r.field === 'policy_type')?.value,
-          policyTerm: groupRules.find((r: any) => r.field === 'policy_term')?.value,
-          // Keep original rules for reference
-          originalRules: fieldRules
-        })
-      }
-    }
-  }
-
-  return rules
-}
-
-function buildEmailSchedule(nodes: any[], templateIdMap: Record<string, string> = {}): {
-  schedule: { nodeId: string, templateId: string, daysOffset: number }[],
-  skipped: { nodeId: string, reason: string }[]
-} {
-  const schedule: { nodeId: string, templateId: string, daysOffset: number }[] = []
-  const skipped: { nodeId: string, reason: string }[] = []
-  let currentDelay = 0
-
-  const processNodes = (nodeList: any[]) => {
-    for (const node of nodeList) {
-      // Check for template ID (direct UUID) or templateKey (from master automation sync)
-      let templateId = node.config?.template
-      if (!templateId && node.config?.templateKey) {
-        // Look up template ID from the map (resolved from default_key)
-        templateId = templateIdMap[node.config.templateKey]
-      }
-
-      if (node.type === 'send_email' && templateId) {
-        schedule.push({
-          nodeId: node.id,
-          templateId: templateId,
-          daysOffset: currentDelay
-        })
-      } else if (node.type === 'send_email') {
-        // Template didn't resolve - record the dropped step so it's visible
-        // instead of the email type silently never being scheduled.
-        skipped.push({
-          nodeId: node.id,
-          reason: node.config?.templateKey
-            ? `template not found for templateKey "${node.config.templateKey}"`
-            : 'send_email node has no template or templateKey configured'
-        })
-      } else if (node.type === 'delay') {
-        const duration = node.config?.duration || 0
-        const unit = node.config?.unit || 'days'
-        if (unit === 'days') {
-          currentDelay += duration
-        } else if (unit === 'weeks') {
-          currentDelay += duration * 7
-        } else if (unit === 'hours') {
-          currentDelay += duration / 24
-        }
-      }
-
-      if (node.branches?.yes) {
-        processNodes(node.branches.yes)
-      }
-    }
-  }
-
-  const workflowNodes = nodes.filter((n: any) => n.type !== 'entry_criteria' && n.type !== 'trigger')
-  processNodes(workflowNodes)
-
-  return { schedule, skipped }
-}
-
-/**
- * Filter accounts based on non-date filter rules in the filter config
- * Handles filters like customer_status, policy_type, etc.
- */
-function filterAccountsByConfig(accounts: any[], policies: any[], filterConfig: any, lastSentByAccount: Record<string, string> = {}, policyStatusByAccount: Record<string, string[]> = {}): any[] {
-  const groups = filterConfig?.groups || []
-
-  if (groups.length === 0) {
-    return accounts // No filters, return all accounts
-  }
-
-  // Debug: log first few accounts for troubleshooting
-  let debugCount = 0
-
-  return accounts.filter(account => {
-    const accountPolicies = policies.filter((p: any) => p.account_id === account.account_unique_id)
-
-    // Check if account matches ANY group (OR between groups)
-    const matchesAnyGroup = groups.some((group: any, groupIdx: number) => {
-      const rules = group.rules || []
-
-      // Check if account matches ALL rules in this group (AND within group)
-      const matchesAllRules = rules.every((rule: any, ruleIdx: number) => {
-        // Skip date-based rules - they're handled separately
-        if (['policy_expiration', 'policy_effective', 'account_created'].includes(rule.field)) {
-          if (['in_next_days', 'in_last_days', 'less_than_days_future', 'more_than_days_future'].includes(rule.operator)) {
-            return true // Skip date rules, they're handled in the scheduling logic
-          }
-        }
-
-        const value = (rule.value || '').toLowerCase().trim()
-
-        switch (rule.field) {
-          case 'customer_status':
-          case 'account_status':
-            const accountStatus = (account.customer_status || account.account_status || '').toLowerCase()
-            return matchValue(accountStatus, value, rule.operator)
-
-          case 'active_policy_type':
-          case 'policy_type':
-            // Get all policy types for this account
-            const policyTypes = accountPolicies.map((p: any) => (p.policy_lob || '').toLowerCase()).join(',')
-
-            // For negative operators, if no policies exist, consider it a match
-            if (accountPolicies.length === 0) {
-              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
-            }
-
-            return matchValue(policyTypes, value, rule.operator)
-
-          case 'policy_term':
-            // Check if account has a policy with the specified term
-            return accountPolicies.some((p: any) => {
-              const policyTerm = (p.policy_term || '').toLowerCase()
-              return matchValue(policyTerm, value, rule.operator)
-            })
-
-          case 'state':
-          case 'billing_state':
-            const state = (account.billing_state || account.state || '').toLowerCase()
-            return matchValue(state, value, rule.operator)
-
-          case 'city':
-          case 'billing_city':
-            const city = (account.billing_city || account.city || '').toLowerCase()
-            return matchValue(city, value, rule.operator)
-
-          case 'has_email':
-            const hasEmail = !!(account.person_email || account.email)
-            return rule.operator === 'equals' ? hasEmail === (value === 'true') : hasEmail !== (value === 'true')
-
-          case 'survey_stars':
-            const surveyStars = account.survey_stars?.toString() || ''
-            if (!surveyStars && rule.operator === 'is_not') return true
-            if (!surveyStars) return false
-            return matchValue(surveyStars, value, rule.operator)
-
-          case 'survey_completed':
-            const hasSurvey = account.survey_stars !== null && account.survey_stars !== undefined
-            const wantsSurvey = value === 'true'
-            return rule.operator === 'is' ? hasSurvey === wantsSurvey : hasSurvey !== wantsSurvey
-
-          case 'last_email_sent': {
-            // Date this automation last emailed the account (scope: this automation).
-            // Never-emailed accounts have no entry → treated as "infinitely long ago".
-            const lastSent = lastSentByAccount[account.account_unique_id]
-            if (!lastSent) {
-              return ['more_than_days_ago', 'before', 'is_empty'].includes(rule.operator)
-            }
-            return matchDate(lastSent, rule)
-          }
-
-          case 'policy_status': {
-            // Distinct statuses across ALL of the account's policies.
-            const statuses = policyStatusByAccount[account.account_unique_id] || []
-            if (statuses.length === 0) {
-              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
-            }
-            return matchValue(statuses.join(','), value, rule.operator)
-          }
-
-          case 'policy_class': {
-            // Personal / Commercial across the account's active policies.
-            const classes = accountPolicies.map((p: any) => (p.policy_class || '').toLowerCase()).filter(Boolean)
-            if (classes.length === 0) {
-              return ['is_not', 'is_not_any', 'not_equals', 'not_in'].includes(rule.operator)
-            }
-            return matchValue(classes.join(','), value, rule.operator)
-          }
-
-          case 'policy_count': {
-            // Number of active policies on the account.
-            return matchNumber(accountPolicies.length, rule)
-          }
-
-          case 'email_domain': {
-            const em = (account.person_email || account.email || '').toLowerCase()
-            const domain = em.includes('@') ? em.split('@').pop() || '' : ''
-            return matchValue(domain, value, rule.operator)
-          }
-
-          case 'zip_code': {
-            const zip = (account.billing_postal_code || account.zip_code || '').toString().toLowerCase()
-            return matchValue(zip, value, rule.operator)
-          }
-
-          case 'account_created':
-            // Date-trigger operators (in_next_days, etc.) are skipped above and
-            // handled by the scheduling engine; the rest are base-filter dates.
-            return matchDate(account.created_at, rule)
-
-          case 'policy_effective':
-          case 'policy_expiration': {
-            const dateField = rule.field === 'policy_expiration' ? 'expiration_date' : 'effective_date'
-            // Match if ANY active policy's date satisfies the rule.
-            return accountPolicies.some((p: any) => matchDate(p[dateField], rule))
-          }
-
-          default:
-            // For unknown fields, try to match against account properties
-            const fieldValue = (account[rule.field] || '').toString().toLowerCase()
-            return matchValue(fieldValue, value, rule.operator)
-        }
-      })
-
-      // Debug log for first few accounts
-      if (debugCount < 3 && !matchesAllRules) {
-        console.log(`[Filter Debug] Account ${account.name} failed group ${groupIdx}`)
-        console.log(`  Policies: ${accountPolicies.map((p: any) => p.policy_lob).join(', ')}`)
-      }
-
-      return matchesAllRules
-    })
-
-    if (debugCount < 3) {
-      console.log(`[Filter Debug] Account ${account.name}: matchesAnyGroup=${matchesAnyGroup}, policies=${accountPolicies.length}`)
-      debugCount++
-    }
-
-    return matchesAnyGroup
-  })
-}
-
-/**
- * Match a value against a filter value based on operator
- * For policy type checks, actualValue may be comma-separated list of policy types
- */
-function matchValue(actualValue: string, filterValue: string, operator: string): boolean {
-  // Handle comma-separated actual values (e.g., account has multiple policy types)
-  const actualValues = actualValue.split(',').map(v => v.trim().toLowerCase())
-  // Handle comma-separated filter values
-  const filterValues = filterValue.split(',').map(v => v.trim().toLowerCase())
-
-  switch (operator) {
-    case 'equals':
-    case 'is':
-      // Check if any actual value matches any filter value
-      return actualValues.some(av => filterValues.some(fv => av === fv || av.includes(fv)))
-    case 'not_equals':
-    case 'is_not':
-      // None of the actual values should match any filter value
-      return !actualValues.some(av => filterValues.some(fv => av === fv || av.includes(fv)))
-    case 'is_any':
-      // Check if ANY of the filter values match ANY actual value
-      return filterValues.some(fv => actualValues.some(av => av === fv || av.includes(fv)))
-    case 'is_not_any':
-      // NONE of the filter values should match any actual value
-      return !filterValues.some(fv => actualValues.some(av => av === fv || av.includes(fv)))
-    case 'contains':
-      return actualValues.some(av => filterValues.some(fv => av.includes(fv)))
-    case 'not_contains':
-      return !actualValues.some(av => filterValues.some(fv => av.includes(fv)))
-    case 'starts_with':
-      return actualValues.some(av => filterValues.some(fv => av.startsWith(fv)))
-    case 'ends_with':
-      return actualValues.some(av => filterValues.some(fv => av.endsWith(fv)))
-    case 'is_empty':
-      return actualValue === ''
-    case 'is_not_empty':
-      return actualValue !== ''
-    case 'in':
-      return actualValues.some(av => filterValues.includes(av))
-    case 'not_in':
-      return !actualValues.some(av => filterValues.includes(av))
-    default:
-      return actualValues.some(av => filterValues.some(fv => av === fv))
-  }
-}
-
-/**
- * Numeric comparison for number fields (e.g. policy_count).
- * 'between' uses rule.value (low) and rule.value2 (high).
- */
-function matchNumber(actual: number, rule: any): boolean {
-  const a = Number(rule.value)
-  if (isNaN(a)) return false
-  switch (rule.operator) {
-    case 'equals': return actual === a
-    case 'greater_than': return actual > a
-    case 'less_than': return actual < a
-    case 'at_least': return actual >= a
-    case 'at_most': return actual <= a
-    case 'between': {
-      const b = Number(rule.value2)
-      if (isNaN(b)) return false
-      return actual >= Math.min(a, b) && actual <= Math.max(a, b)
-    }
-    default: return false
-  }
-}
-
-/**
- * Date comparison for date fields used as base filters. Handles absolute-date
- * operators (before/after/between) and relative day-offset operators. The
- * date-trigger operators (in_next_days, in_last_days, more/less_than_days_future)
- * on policy and account_created fields are intercepted earlier for the scheduling
- * engine, but are implemented here too so date fields that aren't scheduling
- * triggers (e.g. last_email_sent) behave correctly.
- */
-function matchDate(dateValue: any, rule: any): boolean {
-  if (rule.operator === 'is_empty') return !dateValue
-  if (rule.operator === 'is_not_empty') return !!dateValue
-  if (!dateValue) return false
-  const t = new Date(dateValue).getTime()
-  if (isNaN(t)) return false
-  const dayMs = 1000 * 60 * 60 * 24
-
-  // Absolute-date operators
-  if (rule.operator === 'before') return t < new Date(rule.value).getTime()
-  if (rule.operator === 'after') return t > new Date(rule.value).getTime()
-  if (rule.operator === 'between') {
-    const lo = new Date(rule.value).getTime()
-    const hi = new Date(rule.value2).getTime()
-    if (isNaN(lo) || isNaN(hi)) return false
-    return t >= Math.min(lo, hi) && t <= Math.max(lo, hi)
-  }
-
-  // Relative day-offset operators (positive diffDays = future, negative = past)
-  const days = parseInt(rule.value, 10)
-  if (isNaN(days)) return false
-  const diffDays = (t - Date.now()) / dayMs
-  switch (rule.operator) {
-    case 'more_than_days_ago': return diffDays < -days
-    case 'less_than_days_ago': return diffDays < 0 && diffDays > -days
-    case 'exactly_days_ago': return Math.floor(-diffDays) === days
-    case 'more_than_days_future': return diffDays > days
-    case 'less_than_days_future': return diffDays > 0 && diffDays < days
-    case 'exactly_days_future': return Math.floor(diffDays) === days
-    case 'in_next_days': return diffDays >= 0 && diffDays <= days
-    case 'in_last_days': return diffDays <= 0 && diffDays >= -days
-    default: return false
-  }
-}
-
-// ============================================================================
-// PACING DISTRIBUTION
-// ============================================================================
-
-/**
- * Distribute emails evenly across allowed days over the pacing period
- * @param emails - Array of emails to distribute
- * @param spreadOverDays - Number of days to spread enrollments over
- * @param allowedDays - Array of allowed day names (e.g., ['mon', 'tue', 'wed', 'thu', 'fri'])
- * @param sendTime - Time to send emails (e.g., '09:00')
- * @param timezone - Timezone for the send time
- * @returns Array of emails with adjusted scheduled_for dates
- */
-function applyPacingDistribution(
-  emails: any[],
-  spreadOverDays: number,
-  allowedDays: string[],
-  sendTime: string,
-  timezone: string
-): any[] {
-  // Map day names to JS day numbers (0=Sun, 1=Mon, etc.)
-  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
-  const allowedDayNumbers = allowedDays.map(d => dayMap[d.toLowerCase()])
-
-  // Build list of valid send dates starting from today
-  const validDates: Date[] = []
-  const startDate = new Date()
-  startDate.setHours(0, 0, 0, 0)
-
-  // Scan through enough days to find spreadOverDays valid dates
-  // (we may need to scan more than spreadOverDays if some days are excluded)
-  const maxDaysToScan = spreadOverDays * 2
-  for (let i = 0; i < maxDaysToScan && validDates.length < spreadOverDays; i++) {
-    const checkDate = new Date(startDate)
-    checkDate.setDate(checkDate.getDate() + i)
-    if (allowedDayNumbers.includes(checkDate.getDay())) {
-      validDates.push(new Date(checkDate))
-    }
-  }
-
-  // If no valid dates found (shouldn't happen), fall back to all days
-  if (validDates.length === 0) {
-    console.log(`[Pacing] No valid dates found for allowed days: ${allowedDays.join(', ')}. Falling back to all days.`)
-    for (let i = 0; i < spreadOverDays; i++) {
-      const checkDate = new Date(startDate)
-      checkDate.setDate(checkDate.getDate() + i)
-      validDates.push(checkDate)
-    }
-  }
-
-  // Distribute emails evenly across valid dates
-  const emailsPerDay = Math.ceil(emails.length / validDates.length)
-  console.log(`[Pacing] Distributing ${emails.length} emails over ${validDates.length} valid days (~${emailsPerDay}/day)`)
-
-  // Parse send time
-  const [hours, minutes] = sendTime.split(':').map(Number)
-
-  return emails.map((email, index) => {
-    const dayIndex = Math.floor(index / emailsPerDay)
-    const sendDate = new Date(validDates[Math.min(dayIndex, validDates.length - 1)])
-
-    // Apply send time in the specified timezone
-    const scheduledFor = getScheduledDateTimeUTC(sendDate, sendTime, timezone)
-
-    return {
-      ...email,
-      scheduled_for: scheduledFor
-    }
-  })
-}
-
-/**
- * Move a date to the next allowed day if it falls on a non-allowed day
- * @param date - The date to check
- * @param allowedDays - Array of allowed day names (e.g., ['mon', 'tue', 'wed', 'thu', 'fri'])
- * @returns The original date if allowed, or the next allowed date
- */
-function moveToNextAllowedDay(date: Date, allowedDays: string[]): Date {
-  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
-  const allowedDayNumbers = allowedDays.map(d => dayMap[d.toLowerCase()])
-
-  // If current day is allowed, return as-is
-  if (allowedDayNumbers.includes(date.getDay())) {
-    return date
-  }
-
-  // Find the next allowed day (search up to 7 days)
-  const adjustedDate = new Date(date)
-  for (let i = 1; i <= 7; i++) {
-    adjustedDate.setDate(adjustedDate.getDate() + 1)
-    if (allowedDayNumbers.includes(adjustedDate.getDay())) {
-      return adjustedDate
-    }
-  }
-
-  // Should never reach here, but return original date if we do
-  return date
-}
-
-// ============================================================================
 // JUST-IN-TIME EMAIL VALIDATION
 // ============================================================================
 
@@ -2625,7 +1991,7 @@ async function performJITValidation(
     return { status, reason }
 
   } catch (err: any) {
-    console.error(`[JIT Validation] Error validating ${email}:`, err.message)
+    console.error(`[JIT Validation] Error validating account ${accountId}:`, err.message)
     // Fall back to basic validation on error
     const fallbackResult = fallbackValidation(email)
     await updateAccountValidation(supabase, accountId, fallbackResult)
@@ -2655,46 +2021,4 @@ async function updateAccountValidation(
   if (error) {
     console.error(`[JIT Validation] Failed to update account ${accountId}:`, error.message)
   }
-}
-
-/**
- * Fallback validation when SendGrid API is not available
- */
-function fallbackValidation(email: string): { status: 'valid' | 'risky' | 'invalid', score: number, reason: string | null, details: Record<string, any> } {
-  const details: Record<string, any> = { fallback: true, jit: true }
-
-  // Basic format check
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRegex.test(email)) {
-    return { status: 'invalid', score: 0, reason: 'invalid_format', details: { ...details, check: 'format' } }
-  }
-
-  const domain = email.split('@')[1].toLowerCase()
-
-  // Check for common disposable email domains
-  const disposableDomains = [
-    'tempmail.com', 'throwaway.email', 'guerrillamail.com', 'mailinator.com',
-    'temp-mail.org', '10minutemail.com', 'fakeinbox.com', 'trashmail.com',
-    'yopmail.com', 'getnada.com', 'maildrop.cc', 'discard.email'
-  ]
-
-  if (disposableDomains.includes(domain)) {
-    return { status: 'invalid', score: 0.1, reason: 'disposable', details: { ...details, check: 'disposable_domain' } }
-  }
-
-  // Check for role-based addresses
-  const localPart = email.split('@')[0].toLowerCase()
-  const roleAddresses = ['admin', 'info', 'support', 'sales', 'contact', 'help', 'noreply', 'no-reply']
-
-  if (roleAddresses.includes(localPart)) {
-    return { status: 'risky', score: 0.5, reason: 'role_address', details: { ...details, check: 'role_address' } }
-  }
-
-  // Check for obviously fake patterns
-  if (/^(test|fake|sample|example)@/i.test(email) || /@(test|fake|sample|example)\./i.test(email)) {
-    return { status: 'invalid', score: 0.1, reason: 'test_address', details: { ...details, check: 'fake_pattern' } }
-  }
-
-  // Passed basic checks
-  return { status: 'valid', score: 0.7, reason: null, details: { ...details, check: 'passed_basic' } }
 }

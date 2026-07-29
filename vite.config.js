@@ -28,5 +28,14 @@ export default defineConfig({
     }
   },
   // Handle SPA routing - redirect all routes to index.html
-  appType: 'spa'
+  appType: 'spa',
+  // Vitest: covers src/ unit tests AND the pure edge-function logic module
+  // (supabase/functions/*/logic.test.ts), which is dependency-free TypeScript.
+  test: {
+    include: [
+      'src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+      'supabase/functions/**/*.test.ts'
+    ],
+    environment: 'node'
+  }
 });

@@ -5,6 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { recordJobRun } from '../_shared/jobRuns.ts'
 
 // Dynamic CORS: only allow known frontend origins
 const ALLOWED_ORIGINS = [
@@ -198,7 +199,6 @@ serve(async (req) => {
           const validationResult = await validateEmail(email, sendgridValidationKey, dryRun)
 
           if (dryRun) {
-            console.log(`[DRY RUN] Would validate ${email} for account ${account.name}`)
             results.processed++
             return
           }
@@ -225,10 +225,8 @@ serve(async (req) => {
           else if (validationResult.status === 'risky') results.risky++
           else if (validationResult.status === 'invalid') results.invalid++
 
-          console.log(`[Validation] ${email}: ${validationResult.status} (score: ${validationResult.score})`)
-
         } catch (err: any) {
-          results.errors.push(`Error validating ${email}: ${err.message}`)
+          results.errors.push(`Error validating account ${account.account_unique_id}: ${err.message}`)
         }
       }))
 
@@ -238,6 +236,20 @@ serve(async (req) => {
       }
     }
 
+    await recordJobRun(supabaseClient, {
+      jobName: 'validate-emails',
+      startedAtMs: startTime,
+      success: results.errors.length === 0,
+      summary: {
+        processed: results.processed,
+        valid: results.valid,
+        risky: results.risky,
+        invalid: results.invalid,
+        dryRun: results.dryRun,
+      },
+      errors: results.errors,
+    })
+
     return new Response(
       JSON.stringify({ success: true, ...results }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
@@ -246,6 +258,18 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     console.error('Edge function error:', errorMessage, error)
+    try {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+      await recordJobRun(supabaseClient, {
+        jobName: 'validate-emails',
+        startedAtMs: startTime,
+        success: false,
+        errors: [errorMessage],
+      })
+    } catch { /* recording is best-effort */ }
     return new Response(
       JSON.stringify({ error: errorMessage || 'Unknown error occurred' }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
@@ -308,8 +332,6 @@ async function validateEmail(
       throw new Error(`SendGrid API error: ${response.status} - ${errorText}`)
     }
 
-    console.log(`[Validation] SendGrid API success for ${email}`)
-
     const data: SendGridValidationResponse = await response.json()
     const result = data.result
 
@@ -350,7 +372,7 @@ async function validateEmail(
     }
 
   } catch (err: any) {
-    console.error(`[Validation] Error validating ${email}:`, err.message)
+    console.error('[Validation] Error validating email:', err.message)
 
     // If API fails, use fallback validation
     return fallbackValidation(email)

@@ -17,6 +17,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { recordJobRun } from '../_shared/jobRuns.ts'
 
 const SF_API_VERSION = 'v60.0'
 const FUNCTION_TIMEOUT_MS = 48000 // stop before the edge function wall-clock limit
@@ -332,12 +333,31 @@ serve(async (req) => {
       if (runtime?.waitUntil) runtime.waitUntil(continuation)
     }
 
+    await recordJobRun(supabase, {
+      jobName: 'sync-salesforce',
+      startedAtMs: startTime,
+      success: summary.errors.length === 0,
+      summary: {
+        objects: Object.fromEntries(
+          Object.entries(summary.objects).map(([t, o]: [string, any]) => [t, o.records])
+        ),
+        hasMore: summary.hasMore,
+      },
+      errors: summary.errors,
+    })
+
     return new Response(
       JSON.stringify({ success: summary.errors.length === 0, ...summary }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (e: any) {
     console.error('sync-salesforce error:', e.message)
+    await recordJobRun(supabase, {
+      jobName: 'sync-salesforce',
+      startedAtMs: startTime,
+      success: false,
+      errors: [e.message],
+    })
     return new Response(
       JSON.stringify({ success: false, error: e.message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
