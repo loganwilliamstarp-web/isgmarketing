@@ -468,6 +468,20 @@ function applyMergeFields(content: string, email: any, account: any, emailLogId?
     result = result.replace(new RegExp(pattern, 'gi'), value)
   }
 
+  // Generic Salesforce-style dotted account fields, e.g. {{ account.primary_contact_first_name }}.
+  // Resolves any {{ account.<column> }} against the account object so templates authored with
+  // dotted paths render without enumerating every column. Falls back to the derived name when blank.
+  const accountFallbacks: Record<string, string> = {
+    primary_contact_first_name: derivedFirstName,
+    primary_contact_last_name: derivedLastName,
+  }
+  result = result.replace(/\{\{\s*account\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, col: string) => {
+    const key = col.toLowerCase()
+    const raw = account?.[key]
+    if (raw === null || raw === undefined || raw === '') return accountFallbacks[key] || ''
+    return String(raw)
+  })
+
   return result
 }
 

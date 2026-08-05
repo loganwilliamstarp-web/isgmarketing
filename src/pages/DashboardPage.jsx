@@ -85,6 +85,13 @@ const fixEncodingIssues = (content) => {
   return result;
 };
 
+// Detect content that is actually HTML markup (vs plain text) so it can be
+// rendered instead of displayed as source
+const looksLikeHtml = (content) => {
+  if (!content) return false;
+  return /<\s*(html|body|div|p|br|table|span|a|img|font|head|meta)\b[^>]*>/i.test(content);
+};
+
 // Stat card with loading state
 const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t }) => (
   <div style={{
@@ -231,6 +238,20 @@ const EmailPreviewModal = ({ email, theme: t, onClose }) => {
     for (const [field, value] of Object.entries(mergeFields)) {
       result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value);
     }
+
+    // Salesforce-style dotted account fields, e.g. {{ account.primary_contact_first_name }} —
+    // mirrors the resolver in the send functions so previews match what actually goes out
+    const accountFallbacks = {
+      primary_contact_first_name: derivedFirstName,
+      primary_contact_last_name: derivedLastName,
+    };
+    result = result.replace(/\{\{\s*account\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, col) => {
+      const key = col.toLowerCase();
+      const raw = acc?.[key];
+      if (raw === null || raw === undefined || raw === '') return accountFallbacks[key] || '';
+      return String(raw);
+    });
+
     return result;
   };
 
@@ -502,6 +523,20 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
     for (const [field, value] of Object.entries(mergeFields)) {
       result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value);
     }
+
+    // Salesforce-style dotted account fields, e.g. {{ account.primary_contact_first_name }} —
+    // mirrors the resolver in the send functions so previews match what actually goes out
+    const accountFallbacks = {
+      primary_contact_first_name: derivedFirstName,
+      primary_contact_last_name: derivedLastName,
+    };
+    result = result.replace(/\{\{\s*account\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, col) => {
+      const key = col.toLowerCase();
+      const raw = acc?.[key];
+      if (raw === null || raw === undefined || raw === '') return accountFallbacks[key] || '';
+      return String(raw);
+    });
+
     return result;
   };
 
@@ -667,6 +702,21 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
                 dangerouslySetInnerHTML={{
                   __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
                     fixEncodingIssues(activity.body_html))
+                }}
+                style={{
+                  fontFamily: 'Arial, sans-serif',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: '#333'
+                }}
+              />
+            ) : looksLikeHtml(activity.body_text) ? (
+              // Some replies arrive with HTML markup in the text part (raw-MIME
+              // fallback parsing) - render it instead of showing tag soup
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(`<style>p { margin: 0 0 1em 0; } p:last-child { margin-bottom: 0; }</style>` +
+                    fixEncodingIssues(activity.body_text))
                 }}
                 style={{
                   fontFamily: 'Arial, sans-serif',
