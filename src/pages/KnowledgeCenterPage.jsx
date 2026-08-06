@@ -6,16 +6,16 @@ const KnowledgeCenterPage = ({ t }) => {
   const [activeSection, setActiveSection] = useState('');
 
   const sections = [
-    { id: 'getting-started', label: 'Getting Started', icon: '🚀' },
-    { id: 'navigation--layout', label: 'Navigation & Layout', icon: '🗺️' },
-    { id: 'dashboard-overview', label: 'Dashboard Overview', icon: '📊' },
-    { id: 'creating-email-templates', label: 'Creating Email Templates', icon: '📝' },
-    { id: 'setting-up-automations', label: 'Setting Up Automations', icon: '⚡' },
-    { id: 'running-mass-email-campaigns', label: 'Mass Email Campaigns', icon: '📧' },
-    { id: 'managing-accounts--clients', label: 'Managing Accounts', icon: '👥' },
-    { id: 'settings--configuration', label: 'Settings & Configuration', icon: '⚙️' },
-    { id: 'user-roles--permissions', label: 'User Roles & Permissions', icon: '🔐' },
-    { id: 'tips--best-practices', label: 'Tips & Best Practices', icon: '💡' },
+    { id: 'getting-started', label: 'Getting Started' },
+    { id: 'navigation--layout', label: 'Navigation & Layout' },
+    { id: 'dashboard-overview', label: 'Dashboard Overview' },
+    { id: 'creating-email-templates', label: 'Creating Email Templates' },
+    { id: 'setting-up-automations', label: 'Setting Up Automations' },
+    { id: 'running-mass-email-campaigns', label: 'Mass Email Campaigns' },
+    { id: 'managing-accounts--clients', label: 'Managing Accounts' },
+    { id: 'settings--configuration', label: 'Settings & Configuration' },
+    { id: 'user-roles--permissions', label: 'User Roles & Permissions' },
+    { id: 'tips--best-practices', label: 'Tips & Best Practices' },
   ];
 
   useEffect(() => {
@@ -332,7 +332,7 @@ const KnowledgeCenterPage = ({ t }) => {
     <div>
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
-          📚 Knowledge Center
+          Knowledge Center
         </h1>
         <p style={{ color: t.textSecondary, fontSize: '14px' }}>
           Learn how to use the Email Automation Marketing System
@@ -390,7 +390,6 @@ const KnowledgeCenterPage = ({ t }) => {
                   marginBottom: '2px',
                 }}
               >
-                <span>{section.icon}</span>
                 {section.label}
               </button>
             ))}
@@ -418,7 +417,7 @@ const KnowledgeCenterPage = ({ t }) => {
               textDecoration: 'none',
             }}
           >
-            <span>📥</span> Download Guide
+            Download Guide
           </a>
         </div>
 
@@ -435,14 +434,12 @@ const KnowledgeCenterPage = ({ t }) => {
         >
           {isLoading ? (
             <div style={{ textAlign: 'center', padding: '60px', color: t.textMuted }}>
-              <div style={{ fontSize: '32px', marginBottom: '16px' }}>⏳</div>
               Loading documentation...
             </div>
           ) : content ? (
             <div style={{ maxWidth: '800px' }}>{renderMarkdown(content)}</div>
           ) : (
             <div style={{ textAlign: 'center', padding: '60px', color: t.textMuted }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
               <p>Unable to load documentation.</p>
               <a
                 href="/docs/USER_GUIDE.md"

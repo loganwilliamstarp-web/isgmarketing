@@ -334,10 +334,10 @@ function parseFormData(formData: FormData): ParsedEmail {
   return {
     to,
     from,
-    fromName,
-    subject: formData.get('subject') as string || '(no subject)',
-    text,
-    html,
+    fromName: fixUtf8Mojibake(fromName),
+    subject: fixUtf8Mojibake(formData.get('subject') as string) || '(no subject)',
+    text: fixUtf8Mojibake(text),
+    html: fixUtf8Mojibake(html),
     headers: formData.get('headers') as string || '',
     inReplyTo: formData.get('In-Reply-To') as string || undefined,
     messageId: formData.get('Message-ID') as string || undefined,
@@ -434,12 +434,66 @@ function extractBodyFromMime(rawEmail: string): { text?: string; html?: string }
 }
 
 /**
- * Decode quoted-printable encoded text
+ * Decode quoted-printable encoded text into bytes, then decode as the given charset.
+ * The naive `String.fromCharCode` per hex byte breaks multi-byte UTF-8 sequences
+ * (e.g. ' = E2 80 99 becomes three separate JS chars U+00E2 U+0080 U+0099,
+ * which renders as the "â€™" mojibake in many clients).
  */
-function decodeQuotedPrintable(str: string): string {
-  return str
-    .replace(/=\r?\n/g, '') // Remove soft line breaks
-    .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+function decodeQuotedPrintable(str: string, charset: string = 'utf-8'): string {
+  // Remove soft line breaks (=\r\n or =\n at end of line)
+  const cleaned = str.replace(/=\r?\n/g, '')
+
+  const bytes: number[] = []
+  for (let i = 0; i < cleaned.length; i++) {
+    if (
+      cleaned[i] === '=' &&
+      i + 2 < cleaned.length &&
+      /^[0-9A-Fa-f]{2}$/.test(cleaned.substr(i + 1, 2))
+    ) {
+      bytes.push(parseInt(cleaned.substr(i + 1, 2), 16))
+      i += 2
+    } else {
+      const code = cleaned.charCodeAt(i)
+      if (code <= 0x7f) {
+        bytes.push(code)
+      } else {
+        // Already a Unicode char in the input — re-encode as its UTF-8 bytes
+        // so it round-trips through the final TextDecoder.
+        const utf8 = new TextEncoder().encode(cleaned[i])
+        for (const b of utf8) bytes.push(b)
+      }
+    }
+  }
+
+  try {
+    return new TextDecoder(charset).decode(new Uint8Array(bytes))
+  } catch {
+    return new TextDecoder('utf-8').decode(new Uint8Array(bytes))
+  }
+}
+
+/**
+ * Repair UTF-8 mojibake caused by upstream Latin-1/Windows-1252 decoding.
+ * If a string only contains chars in U+0000–U+00FF and those bytes form valid
+ * UTF-8, re-decode them. Otherwise return the input unchanged.
+ */
+function fixUtf8Mojibake(str: string | undefined): string | undefined {
+  if (!str) return str
+  let hasHighBytes = false
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i)
+    // True Unicode char already present — string was decoded correctly.
+    if (code > 0xff) return str
+    if (code >= 0x80) hasHighBytes = true
+  }
+  if (!hasHighBytes) return str
+  try {
+    const bytes = new Uint8Array(str.length)
+    for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i)
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return str
+  }
 }
 
 interface VerificationResult {
@@ -950,10 +1004,13 @@ async function injectIntoGmail(
 //
 // Note: Microsoft Graph API has limitations:
 // - Cannot set 'from' to an external email (always uses mailbox owner)
-// - Messages created via API appear as drafts (isDraft=true is ignored)
+// - POSTed messages are stored as drafts (isDraft=false in payload is ignored)
 //
-// Workaround: Add a clear header showing who the reply is from, and set
-// replyTo so hitting "Reply" goes to the contact.
+// Workaround: Set the MAPI PR_MESSAGE_FLAGS extended property (0x0E07) with
+// the MSGFLAG_UNSENT bit cleared so Outlook treats the message as a real
+// received item. Without this, hitting "Reply" on the message opens the draft
+// itself for editing — which makes the compose window show the injected
+// from/toRecipients (i.e. customer→user), looking "backwards".
 
 async function injectIntoMicrosoft(
   accessToken: string,
@@ -978,6 +1035,10 @@ async function injectIntoMicrosoft(
     // Build message payload
     // Set from/sender to the contact so Outlook shows the correct sender
     // Set toRecipients to the owner so Reply populates the "To" field correctly
+    // PR_MESSAGE_FLAGS = 1 (MSGFLAG_READ only — no MSGFLAG_UNSENT) so the
+    // message becomes a real inbox item and Reply creates a NEW reply rather
+    // than reopening the draft. We pair this with isRead=false below to keep
+    // the message bold/unread in the inbox.
     const messagePayload: Record<string, any> = {
       subject: params.subject,
       body: {
@@ -998,13 +1059,17 @@ async function injectIntoMicrosoft(
       },
       receivedDateTime: params.receivedAt,
       isRead: false,
-      isDraft: false,
       // Set replyTo to the contact's email so "Reply" goes to them
       replyTo: [{
         emailAddress: {
           name: fromName,
           address: contactEmail
         }
+      }],
+      // Convert from draft to real inbox item by clearing MSGFLAG_UNSENT (0x8)
+      singleValueExtendedProperties: [{
+        id: 'Integer 0x0E07',
+        value: '1'
       }]
     }
 

@@ -1,6 +1,7 @@
 // src/services/massEmails.js
 import { supabase } from '../lib/supabase';
 import { applyOwnerFilter, getFirstOwnerId } from './utils/ownerFilter';
+import { computeOptimalSendHours } from '../utils/optimalSendTime';
 
 // Haversine formula to calculate distance between two points in miles
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -1219,8 +1220,12 @@ export const massEmailsService = {
    * Deduplicates recipients by email address to prevent duplicate sends
    * Prevents sending the same template to the same email within 7 days
    * @param {string|string[]} ownerIds - Single owner ID or array of owner IDs (uses first for creation)
+   * @param {Object} [options]
+   * @param {boolean} [options.optimizeSendTime] - When true (and scheduledFor is set),
+   *   each recipient is scheduled at the hour they historically open emails,
+   *   falling back to the book-wide modal open hour, then 10 AM.
    */
-  async scheduleBatch(ownerIds, batchId, scheduledFor = null) {
+  async scheduleBatch(ownerIds, batchId, scheduledFor = null, options = {}) {
     const ownerId = getFirstOwnerId(ownerIds);
     // Get the batch
     const batch = await this.getById(ownerIds, batchId);
@@ -1332,10 +1337,36 @@ export const massEmailsService = {
       throw new Error('No eligible recipients - all are suppressed, recently sent, or have invalid emails');
     }
 
-    const sendTime = scheduledFor || new Date().toISOString();
+    let sendTime = scheduledFor || new Date().toISOString();
+
+    // Per-recipient send-time optimization: schedule each recipient at the
+    // hour they historically open emails (based on email_logs.first_opened_at)
+    let sendTimeByIndex = null;
+    if (options.optimizeSendTime && scheduledFor) {
+      const accountIds = finalRecipients
+        .map(r => r.account_unique_id)
+        .filter(Boolean);
+      const { hoursByAccount, fallbackHour } = await computeOptimalSendHours(accountIds, ownerIds);
+
+      const baseDate = new Date(scheduledFor);
+      const minSendTime = new Date(Date.now() + 5 * 60 * 1000); // now + 5 minutes
+
+      sendTimeByIndex = finalRecipients.map((recipient, index) => {
+        const hour = hoursByAccount.get(recipient.account_unique_id) ?? fallbackHour;
+        const sendAt = new Date(baseDate);
+        // Deterministic minute spread so sends scatter within the hour
+        sendAt.setHours(hour, (index * 7) % 60, 0, 0);
+        // If the computed time already passed (scheduling for today), send soon instead
+        const effective = sendAt < minSendTime ? minSendTime : sendAt;
+        return effective.toISOString();
+      });
+
+      // Batch-level scheduled_for reflects the earliest per-recipient send
+      sendTime = sendTimeByIndex.reduce((min, ts) => (ts < min ? ts : min), sendTimeByIndex[0]);
+    }
 
     // Create scheduled emails for each eligible recipient
-    const scheduledEmails = finalRecipients.map(recipient => ({
+    const scheduledEmails = finalRecipients.map((recipient, index) => ({
       owner_id: ownerId,
       account_id: recipient.account_unique_id,
       template_id: batch.template_id,
@@ -1346,7 +1377,7 @@ export const massEmailsService = {
       from_email: fromEmail,
       from_name: fromName,
       subject: batch.subject,
-      scheduled_for: sendTime,
+      scheduled_for: sendTimeByIndex ? sendTimeByIndex[index] : sendTime,
       status: 'Pending',
       batch_id: batchId,
       requires_verification: false  // Mass emails don't need 24-hour verification

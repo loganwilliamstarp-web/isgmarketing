@@ -143,7 +143,6 @@ const IntegrationsTab = ({ userId, theme: t }) => {
           alignItems: 'flex-start',
           gap: '10px'
         }}>
-          <span style={{ fontSize: '16px' }}>💡</span>
           <div>
             <strong>How it works:</strong> When connected, replies to your marketing emails
             are automatically delivered to your inbox. This allows you to respond naturally while
@@ -164,7 +163,6 @@ const IntegrationsTab = ({ userId, theme: t }) => {
             alignItems: 'center',
             gap: '10px'
           }}>
-            <span style={{ fontSize: '16px' }}>🔒</span>
             <div>
               Connection management is disabled while viewing as another user.
             </div>

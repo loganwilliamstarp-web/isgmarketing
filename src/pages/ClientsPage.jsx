@@ -138,7 +138,7 @@ const ClientRow = ({ client, onClick, theme: t }) => (
             fontSize: '12px'
           }}
         >
-          📧 Email
+          Email
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -160,7 +160,7 @@ const ClientRow = ({ client, onClick, theme: t }) => (
 );
 
 // Stats card
-const StatsCard = ({ label, value, icon, color, theme: t, onClick, active }) => (
+const StatsCard = ({ label, value, color, theme: t, onClick, active }) => (
   <div 
     onClick={onClick}
     style={{
@@ -186,7 +186,6 @@ const StatsCard = ({ label, value, icon, color, theme: t, onClick, active }) => 
       }
     }}
   >
-    <div style={{ fontSize: '24px', marginBottom: '4px' }}>{icon}</div>
     <div style={{ fontSize: '24px', fontWeight: '700', color: color || t.text }}>{value}</div>
     <div style={{ fontSize: '12px', color: t.textSecondary }}>{label}</div>
   </div>
@@ -308,7 +307,7 @@ const ClientsPage = ({ t }) => {
               gap: '6px'
             }}
           >
-            📤 Export
+            Export
           </button>
           <button
             style={{
@@ -354,8 +353,7 @@ const ClientsPage = ({ t }) => {
       }}>
         <StatsCard 
           label="Total Accounts" 
-          value={statsLoading ? '...' : displayStats.total} 
-          icon="📊" 
+          value={statsLoading ? '...' : displayStats.total}
           color={t.text}
           theme={t}
           onClick={() => handleFilterChange('all')}
@@ -363,8 +361,7 @@ const ClientsPage = ({ t }) => {
         />
         <StatsCard 
           label="Customers" 
-          value={statsLoading ? '...' : displayStats.Customer} 
-          icon="👥" 
+          value={statsLoading ? '...' : displayStats.Customer}
           color={t.success}
           theme={t}
           onClick={() => handleFilterChange(typeFilter === 'Customer' ? 'all' : 'Customer')}
@@ -372,8 +369,7 @@ const ClientsPage = ({ t }) => {
         />
         <StatsCard 
           label="Prospects" 
-          value={statsLoading ? '...' : displayStats.Prospect} 
-          icon="🎯" 
+          value={statsLoading ? '...' : displayStats.Prospect}
           color={t.primary}
           theme={t}
           onClick={() => handleFilterChange(typeFilter === 'Prospect' ? 'all' : 'Prospect')}
@@ -381,8 +377,7 @@ const ClientsPage = ({ t }) => {
         />
         <StatsCard 
           label="Prior Customers" 
-          value={statsLoading ? '...' : displayStats.Prior} 
-          icon="📁" 
+          value={statsLoading ? '...' : displayStats.Prior}
           color={t.textMuted}
           theme={t}
           onClick={() => handleFilterChange(typeFilter === 'Prior' ? 'all' : 'Prior')}
@@ -390,8 +385,7 @@ const ClientsPage = ({ t }) => {
         />
         <StatsCard 
           label="Expiring in 30d" 
-          value={statsLoading ? '...' : displayStats.expiring} 
-          icon="⚠️" 
+          value={statsLoading ? '...' : displayStats.expiring}
           color={t.warning}
           theme={t}
           onClick={() => handleFilterChange(typeFilter === 'expiring' ? 'all' : 'expiring')}
@@ -416,7 +410,7 @@ const ClientsPage = ({ t }) => {
             onChange={(e) => handleSearchChange(e.target.value)}
             style={{
               width: '100%',
-              padding: '10px 12px 10px 36px',
+              padding: '10px 12px',
               backgroundColor: t.bgInput,
               border: `1px solid ${t.border}`,
               borderRadius: '8px',
@@ -424,15 +418,6 @@ const ClientsPage = ({ t }) => {
               fontSize: '14px'
             }}
           />
-          <span style={{ 
-            position: 'absolute', 
-            left: '12px', 
-            top: '50%', 
-            transform: 'translateY(-50%)',
-            color: t.textMuted
-          }}>
-            🔍
-          </span>
         </div>
 
         {/* Type filter */}
@@ -560,7 +545,6 @@ const ClientsPage = ({ t }) => {
           border: `1px solid ${t.border}`,
           textAlign: 'center'
         }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
             {searchQuery ? 'No accounts found' : 'No accounts yet'}
           </h3>
@@ -672,7 +656,6 @@ const ClientsPage = ({ t }) => {
           justifyContent: 'space-between'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>⚠️</span>
             <div>
               <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>
                 {displayStats.expiring} account{displayStats.expiring !== 1 ? 's have' : ' has'} policies expiring in the next 30 days

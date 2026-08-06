@@ -22,15 +22,20 @@ function getCorsHeaders(req: Request) {
   }
 }
 
-// Field mappings from Salesforce to Supabase
+// Field mappings from Salesforce CSV header -> actual Supabase column.
+// Verified against live schema 2026-05-01. Mappings to columns that don't
+// exist in the DB will cause a 500 from PostgREST, so only map what's real.
 const FIELD_MAPPINGS = {
   accounts: {
-    // Salesforce field -> Supabase column
     'Id': 'account_unique_id',
+    'Account_Unique_ID__c': 'account_unique_id',
     'Name': 'name',
     'Account_Status__c': 'account_status',
+    'Account_Status__pc': 'account_status_pc',
     'Account_Type__c': 'account_type',
+    'Account_Type__pc': 'account_type_pc',
     'PersonEmail': 'person_email',
+    'PersonHasOptedOutOfEmail': 'person_has_opted_out_of_email',
     'Email__c': 'email',
     'Phone': 'phone',
     'BillingStreet': 'billing_street',
@@ -38,15 +43,27 @@ const FIELD_MAPPINGS = {
     'BillingState': 'billing_state',
     'BillingPostalCode': 'billing_postal_code',
     'BillingCountry': 'billing_country',
+    'County__c': 'county',
     'Primary_Contact_First_Name__c': 'primary_contact_first_name',
     'Primary_Contact_Last_Name__c': 'primary_contact_last_name',
+    'Additional_Contact_Email__c': 'additional_contact_email',
+    'Additional_Contact_Email_2__c': 'additional_contact_email_2',
+    'Additional_Contact_Name__c': 'additional_contact_name',
+    'Additional_Contact_Name_2__c': 'additional_contact_name_2',
+    'Additional_Phone_Numberbus__c': 'additional_phone_number',
+    'Additional_Contact_Phone_2__c': 'additional_contact_phone_2',
+    'Customer_Since__pc': 'customer_since',
+    'Date_Of_Birth__c': 'date_of_birth',
+    'CreatedById': 'created_by_id',
+    'LastModifiedById': 'last_modified_by_id',
+    'Owner_Email__c': 'owner_email',
     'OwnerId': 'owner_id',
-    'CreatedDate': 'salesforce_created_at',
-    'LastModifiedDate': 'salesforce_updated_at',
+    'CreatedDate': 'sf_created_date',
+    'LastModifiedDate': 'sf_last_modified_date',
   },
   policies: {
     'Id': 'policy_unique_id',
-    'Name': 'name',
+    'Policy_Unique_ID__c': 'policy_unique_id',
     'Account__c': 'account_id',
     'Policy_Number__c': 'policy_number',
     'Policy_LOB__c': 'policy_lob',
@@ -55,26 +72,37 @@ const FIELD_MAPPINGS = {
     'Policy_Term__c': 'policy_term',
     'Effective_Date__c': 'effective_date',
     'Expiration_Date__c': 'expiration_date',
-    'Annual_Premium__c': 'annual_premium',
-    'Written_Premium__c': 'written_premium',
+    'Annual_Premium__c': 'annualized_premium',
+    'Written_Premium__c': 'premium',
     'Carrier__c': 'carrier_id',
-    'Producer__c': 'producer_id',
-    'OwnerId': 'owner_id',
-    'CreatedDate': 'salesforce_created_at',
-    'LastModifiedDate': 'salesforce_updated_at',
+    'Producer__c': 'producer_1_id',
+    'CreatedDate': 'sf_created_date',
+    'LastModifiedDate': 'sf_last_modified_date',
   },
   carriers: {
-    'Id': 'carrier_unique_id',
+    'Id': 'id',
+    'Carrier_Unique_ID__c': 'id',
     'Name': 'name',
-    'Carrier_Code__c': 'carrier_code',
-    'Is_Active__c': 'is_active',
   },
   producers: {
     'Id': 'producer_unique_id',
+    'Producer_Unique_ID__c': 'producer_unique_id',
     'Name': 'name',
-    'Email__c': 'email',
-    'Producer_Code__c': 'producer_code',
-    'Is_Active__c': 'is_active',
+    'OwnerId': 'owner_id',
+    'CreatedDate': 'created_date',
+  },
+  users: {
+    'Id': 'user_unique_id',
+    'User_Unique_ID__c': 'user_unique_id',
+    'Email': 'email',
+    'FirstName': 'first_name',
+    'LastName': 'last_name',
+    'Profile.Name': 'profile_name',
+    'Profile_Name__c': 'profile_name',
+    'UserRole.Name': 'role_name',
+    'Role_Name__c': 'role_name',
+    'Marketing_Cloud_Agency_Admin__c': 'marketing_cloud_agency_admin',
+    'Marketing_Cloud_Engagement__c': 'marketing_cloud_engagement',
   }
 }
 
@@ -168,7 +196,14 @@ function transformRow(
       }
       
       // Handle boolean fields
-      if (targetColumn === 'is_active') {
+      const BOOLEAN_COLUMNS = new Set([
+        'is_active',
+        'marketing_cloud_agency_admin',
+        'marketing_cloud_engagement',
+        'person_has_opted_out_of_email',
+        'user_subscribed_to_marketing',
+      ])
+      if (BOOLEAN_COLUMNS.has(targetColumn)) {
         value = value.toLowerCase() === 'true' || value === '1'
       }
       
@@ -436,12 +471,13 @@ serve(async (req) => {
       return transformed
     })
 
-    // Determine unique key for upsert
+    // Determine unique key for upsert (must match the table's PK / unique col)
     const uniqueKeyMap: Record<string, string> = {
       accounts: 'account_unique_id',
       policies: 'policy_unique_id',
-      carriers: 'carrier_unique_id',
+      carriers: 'id',
       producers: 'producer_unique_id',
+      users: 'user_unique_id',
     }
     const uniqueKey = uniqueKeyMap[tableType]
 

@@ -244,12 +244,6 @@ const UnsubscribePage = () => {
       case 'error':
         return (
           <>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '20px'
-            }}>
-              ⚠️
-            </div>
             <h1 style={{
               color: '#1a1a2e',
               fontSize: '24px',

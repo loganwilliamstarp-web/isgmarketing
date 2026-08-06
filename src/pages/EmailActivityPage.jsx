@@ -457,10 +457,10 @@ const EmailActivityPage = ({ t }) => {
   const typeOptions = ['All', 'Sent', 'Opened', 'Clicked', 'Replied'];
 
   const typeConfig = {
-    sent: { icon: '📤', label: 'Sent', color: t.success },
-    opened: { icon: '📬', label: 'Opened', color: t.primary },
-    clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
-    replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
+    sent: { label: 'Sent', color: t.success },
+    opened: { label: 'Opened', color: t.primary },
+    clicked: { label: 'Clicked', color: t.warning },
+    replied: { label: 'Replied', color: '#8b5cf6' }
   };
 
   // Activities are already filtered server-side when a type is selected
@@ -529,7 +529,6 @@ const EmailActivityPage = ({ t }) => {
               gap: '6px'
             }}
           >
-            {type !== 'All' && <span>{typeConfig[type.toLowerCase()]?.icon}</span>}
             {type}
           </button>
         ))}
@@ -555,7 +554,7 @@ const EmailActivityPage = ({ t }) => {
         ) : filteredActivities?.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {filteredActivities.map((activity, index) => {
-              const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
+              const config = typeConfig[activity.type] || { label: activity.type, color: t.textSecondary };
               const canPreview = activity.type === 'sent' || activity.type === 'replied';
 
               return (
@@ -572,7 +571,6 @@ const EmailActivityPage = ({ t }) => {
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '16px' }}>{config.icon}</span>
                       <span style={{ fontSize: '12px', color: config.color, fontWeight: '500' }}>{config.label}</span>
                       <span style={{ fontSize: '11px', color: t.textMuted }}>
                         {new Date(activity.timestamp).toLocaleString('en-US', {
@@ -663,7 +661,6 @@ const EmailActivityPage = ({ t }) => {
                               gap: '6px'
                             }}
                           >
-                            <span style={{ fontSize: '10px' }}>🔗</span>
                             <a
                               href={click.url}
                               target="_blank"
@@ -746,7 +743,6 @@ const EmailActivityPage = ({ t }) => {
             color: t.textMuted,
             fontSize: '14px'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
             <div style={{ fontWeight: '500', marginBottom: '4px' }}>No email activity</div>
             <div>
               {typeFilter === 'All'

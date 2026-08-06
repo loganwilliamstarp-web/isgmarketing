@@ -243,7 +243,6 @@ const SetupChecklistFloater = () => {
       {isTrialUser && trialInfo && (
         <div style={styles.trialHeader}>
           <div style={styles.trialText}>
-            <span>{isUrgent ? '⚠️' : '⏱️'}</span>
             <span>
               <span style={styles.daysCount}>{daysLeft}</span>{' '}
               {daysLeft === 1 ? 'day' : 'days'} left in trial

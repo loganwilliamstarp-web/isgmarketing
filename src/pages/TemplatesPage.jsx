@@ -358,7 +358,7 @@ const TemplateEditor = ({ template, onSave, onClose, theme: t }) => {
                   fontWeight: '500'
                 }}
               >
-                🔗 Insert Link
+                Insert Link
               </button>
             </div>
           </div>
@@ -967,7 +967,7 @@ const CreateMasterTemplateModal = ({ onSave, onClose, theme: t }) => {
                   fontWeight: '500'
                 }}
               >
-                🔗 Insert Link
+                Insert Link
               </button>
             </div>
             <textarea
@@ -1350,7 +1350,7 @@ const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => 
                   textAlign: 'left'
                 }}
               >
-                ✏️ Edit
+                Edit
               </button>
               <button
                 onClick={() => { onDuplicate(template); setShowMenu(false); }}
@@ -1366,7 +1366,7 @@ const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => 
                   textAlign: 'left'
                 }}
               >
-                📋 Duplicate
+                Duplicate
               </button>
               <button
                 onClick={() => { onDelete(template.id); setShowMenu(false); }}
@@ -1382,7 +1382,7 @@ const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => 
                   textAlign: 'left'
                 }}
               >
-                🗑️ Delete
+                Delete
               </button>
             </div>
           </>
@@ -1432,8 +1432,8 @@ const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => 
         fontSize: '11px',
         color: t.textMuted
       }}>
-        <span>📧 {template.usage_count || 0} sent</span>
-        <span>📬 {template.open_rate ? `${Math.round(template.open_rate)}%` : '—'} opens</span>
+        <span>{template.usage_count || 0} sent</span>
+        <span>{template.open_rate ? `${Math.round(template.open_rate)}%` : '—'} opens</span>
       </div>
 
       {/* Quick actions */}
@@ -1662,7 +1662,7 @@ const TemplatesPage = ({ t }) => {
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 12px 10px 36px',
+                padding: '10px 12px',
                 backgroundColor: t.bgInput,
                 border: `1px solid ${t.border}`,
                 borderRadius: '8px',
@@ -1670,15 +1670,6 @@ const TemplatesPage = ({ t }) => {
                 fontSize: '14px'
               }}
             />
-            <span style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: t.textMuted
-            }}>
-              🔍
-            </span>
           </div>
 
           {/* Category filter */}
@@ -1748,7 +1739,6 @@ const TemplatesPage = ({ t }) => {
             border: `1px solid ${t.border}`,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
             <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
               {searchQuery || categoryFilter !== 'all' ? 'No templates found' : 'No master templates'}
             </h3>
@@ -1857,7 +1847,7 @@ const TemplatesPage = ({ t }) => {
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 12px 10px 36px',
+                padding: '10px 12px',
                 backgroundColor: t.bgInput,
                 border: `1px solid ${t.border}`,
                 borderRadius: '8px',
@@ -1865,15 +1855,6 @@ const TemplatesPage = ({ t }) => {
                 fontSize: '14px'
               }}
             />
-            <span style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: t.textMuted
-            }}>
-              🔍
-            </span>
           </div>
 
           {/* Category filter */}
@@ -1970,7 +1951,6 @@ const TemplatesPage = ({ t }) => {
             border: `1px solid ${t.border}`,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
             <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
               {searchQuery || categoryFilter !== 'all' ? 'No templates found' : 'No templates yet'}
             </h3>
@@ -2062,7 +2042,7 @@ const TemplatesPage = ({ t }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: '100%',
-              padding: '10px 12px 10px 36px',
+              padding: '10px 12px',
               backgroundColor: t.bgInput,
               border: `1px solid ${t.border}`,
               borderRadius: '8px',
@@ -2070,15 +2050,6 @@ const TemplatesPage = ({ t }) => {
               fontSize: '14px'
             }}
           />
-          <span style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: t.textMuted
-          }}>
-            🔍
-          </span>
         </div>
 
         {/* Category filter */}
@@ -2148,7 +2119,6 @@ const TemplatesPage = ({ t }) => {
           border: `1px solid ${t.border}`,
           textAlign: 'center'
         }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
             {searchQuery || categoryFilter !== 'all' ? 'No templates found' : 'No templates yet'}
           </h3>

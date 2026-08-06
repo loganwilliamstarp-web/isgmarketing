@@ -126,7 +126,6 @@ export function RecentFeedback({ responses = [], isLoading = false, theme = {} }
             color: textMuted,
             fontSize: 14
           }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
             No survey responses {filter !== 'all' ? 'in this category' : 'yet'}
           </div>
         ) : (

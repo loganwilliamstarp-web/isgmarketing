@@ -281,23 +281,23 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
   };
 
   const nodeTypes = {
-    entry_criteria: { icon: '🎯', color: '#8b5cf6', label: 'Entry Criteria' },
-    trigger: { icon: '⚡', color: t.primary, label: 'Trigger' },
-    send_email: { icon: '📧', color: t.success, label: 'Send Email' },
-    delay: { icon: '⏱', color: t.warning, label: 'Delay' },
-    condition: { icon: '🔀', color: t.purple, label: 'Condition' },
-    field_condition: { icon: '📋', color: '#ec4899', label: 'Field Check' },
-    update_field: { icon: '✏️', color: '#06b6d4', label: 'Update Field' },
-    end: { icon: '🏁', color: t.textMuted, label: 'End' }
+    entry_criteria: { color: '#8b5cf6', label: 'Entry Criteria' },
+    trigger: { color: t.primary, label: 'Trigger' },
+    send_email: { color: t.success, label: 'Send Email' },
+    delay: { color: t.warning, label: 'Delay' },
+    condition: { color: t.purple, label: 'Condition' },
+    field_condition: { color: '#ec4899', label: 'Field Check' },
+    update_field: { color: '#06b6d4', label: 'Update Field' },
+    end: { color: t.textMuted, label: 'End' }
   };
 
   const availableNodes = [
-    { type: 'send_email', label: 'Send Email', desc: 'Send an email template', icon: '📧' },
-    { type: 'delay', label: 'Delay', desc: 'Wait before continuing', icon: '⏱' },
-    { type: 'condition', label: 'Email Engagement', desc: 'Branch on open/click', icon: '📬' },
-    { type: 'field_condition', label: 'Field Condition', desc: 'Branch on field value', icon: '🔀' },
-    { type: 'update_field', label: 'Update Field', desc: 'Update a record field', icon: '✏️' },
-    { type: 'end', label: 'End', desc: 'Stop automation', icon: '🏁' },
+    { type: 'send_email', label: 'Send Email', desc: 'Send an email template' },
+    { type: 'delay', label: 'Delay', desc: 'Wait before continuing' },
+    { type: 'condition', label: 'Email Engagement', desc: 'Branch on open/click' },
+    { type: 'field_condition', label: 'Field Condition', desc: 'Branch on field value' },
+    { type: 'update_field', label: 'Update Field', desc: 'Update a record field' },
+    { type: 'end', label: 'End', desc: 'Stop automation' },
   ];
 
   const addNode = (afterNodeId, nodeType, branch = null) => {
@@ -455,18 +455,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
           )}
 
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              backgroundColor: `${typeConfig.color}20`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px'
-            }}>
-              {typeConfig.icon}
-            </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: t.text }}>{node.title}</div>
               <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '2px' }}>
@@ -494,7 +482,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                   gap: '6px'
                 }}
               >
-                <span>🎯</span> Edit Criteria
+                Edit Criteria
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowPreviewModal(true); }}
@@ -513,7 +501,7 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                   gap: '6px'
                 }}
               >
-                <span>👥</span> Preview {hasFilters && enrolleeCount !== undefined && !loadingCount && (
+                Preview {hasFilters && enrolleeCount !== undefined && !loadingCount && (
                   <span style={{
                     backgroundColor: t.primary,
                     color: '#fff',
@@ -657,7 +645,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
               textAlign: 'left'
             }}
           >
-            <span style={{ fontSize: '18px' }}>{node.icon}</span>
             <div>
               <div style={{ fontSize: '13px', fontWeight: '500' }}>{node.label}</div>
               <div style={{ fontSize: '11px', color: t.textMuted }}>{node.desc}</div>
@@ -694,7 +681,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
               alignItems: 'center',
               gap: '10px'
             }}>
-              <span style={{ fontSize: '18px' }}>{node.icon}</span>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>{node.label}</div>
                 <div style={{ fontSize: '11px', color: t.textMuted }}>{node.desc}</div>
@@ -723,18 +709,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
               <div>
                 {/* Node header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
-                    backgroundColor: `${nodeTypes[selectedNodeData.type]?.color || t.primary}20`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '20px'
-                  }}>
-                    {nodeTypes[selectedNodeData.type]?.icon || '📧'}
-                  </div>
                   <div>
                     <div style={{ fontWeight: '600', color: t.text, fontSize: '15px' }}>{selectedNodeData.title}</div>
                     <div style={{ fontSize: '12px', color: t.textMuted }}>{nodeTypes[selectedNodeData.type]?.label || 'Node'}</div>
@@ -1215,7 +1189,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
               </div>
             ) : (
               <div style={{ textAlign: 'center', color: t.textMuted, padding: '30px 0' }}>
-                <div style={{ fontSize: '32px', marginBottom: '12px' }}>👆</div>
                 <div style={{ fontSize: '13px' }}>Select a node to configure</div>
               </div>
             )}
@@ -1409,7 +1382,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                 </div>
               ) : !hasFilters ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
-                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
                   <div style={{ fontSize: '14px' }}>Add filters to see who would enter this automation</div>
                 </div>
               ) : potentialEnrollees && potentialEnrollees.length > 0 ? (
@@ -1483,7 +1455,6 @@ const WorkflowBuilder = ({ t: themeProp, automation, onUpdate, onSave, canEdit =
                 </table>
               ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: t.textMuted }}>
-                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>👥</div>
                   <div style={{ fontSize: '14px' }}>No contacts match your current filters</div>
                 </div>
               )}
