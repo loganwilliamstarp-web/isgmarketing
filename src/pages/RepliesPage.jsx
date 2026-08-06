@@ -77,9 +77,21 @@ const fixEncodingIssues = (content) => {
   return result;
 };
 
+// Some mail clients put the full HTML source in the plain-text MIME part, so
+// body_text can't be trusted to be plain text.
+const looksLikeHtml = (str) =>
+  /<\s*(!doctype|html|head|body|div|p|br|span|table|blockquote|a|ul|ol)\b/i.test(str || '');
+
+const stripHtml = (html) => (html || '')
+  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<[^>]*>/g, ' ');
+
 // One-line plain-text snippet of a reply body
 const getSnippet = (reply) => {
-  const raw = reply.body_text || (reply.body_html || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]*>/g, ' ');
+  const raw = (reply.body_text && !looksLikeHtml(reply.body_text))
+    ? reply.body_text
+    : stripHtml(reply.body_html || reply.body_text);
   const text = fixEncodingIssues(raw || '').replace(/\s+/g, ' ').trim();
   return text.length > 140 ? text.substring(0, 140) + '...' : text;
 };
@@ -88,7 +100,10 @@ const getSnippet = (reply) => {
 const ReplyPreviewModal = ({ reply, accountName, theme: t, userId, onClose }) => {
   if (!reply) return null;
 
-  const htmlContent = reply.body_html ? fixEncodingIssues(reply.body_html) : null;
+  // Prefer body_html, but also render body_text as HTML when a mail client
+  // shipped HTML source in the plain-text MIME part.
+  const rawHtml = reply.body_html || (looksLikeHtml(reply.body_text) ? reply.body_text : null);
+  const htmlContent = rawHtml ? fixEncodingIssues(rawHtml) : null;
   const textContent = reply.body_text ? fixEncodingIssues(reply.body_text) : null;
 
   return (
