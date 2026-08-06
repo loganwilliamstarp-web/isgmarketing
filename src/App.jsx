@@ -23,6 +23,7 @@ const WorkflowBuilderPage = lazy(() => import('./pages/WorkflowBuilderPage'));
 const MassEmailPage = lazy(() => import('./pages/MassEmailPage'));
 const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
 const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
+const RepliesPage = lazy(() => import('./pages/RepliesPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
@@ -467,6 +468,7 @@ const AppLayout = () => {
     { id: 'automations', label: 'Automations', path: `/${userId}/automations` },
     { id: 'templates', label: 'Templates', path: `/${userId}/templates` },
     { id: 'mass-email', label: 'Mass Email', path: `/${userId}/mass-email` },
+    { id: 'replies', label: 'Replies', path: `/${userId}/replies` },
     { id: 'accounts', label: 'Accounts', path: `/${userId}/accounts` },
     { id: 'settings', label: 'Settings', path: `/${userId}/settings` },
   ];
@@ -776,6 +778,7 @@ const AppLayout = () => {
                   <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="templates" element={<TemplatesPage t={t} />} />
                   <Route path="mass-email" element={<MassEmailPage t={t} />} />
+                  <Route path="replies" element={<RepliesPage t={t} />} />
                   <Route path="scheduled-emails" element={<ScheduledEmailsPage t={t} />} />
                   <Route path="email-activity" element={<EmailActivityPage t={t} />} />
                   <Route path="accounts" element={<ClientsPage t={t} />} />

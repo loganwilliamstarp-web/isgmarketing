@@ -2568,7 +2568,7 @@ const RecipientsStep = ({ filterConfig, setFilterConfig, recipientCount, isLoadi
 };
 
 // Review step
-const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, scheduleOption, setScheduleOption, scheduledDate, setScheduledDate, scheduledTime, setScheduledTime, recipients, isLoadingRecipients, recipientCount, theme: t }) => {
+const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName, scheduleOption, setScheduleOption, scheduledDate, setScheduledDate, scheduledTime, setScheduledTime, optimizeSendTime, setOptimizeSendTime, recipients, isLoadingRecipients, recipientCount, theme: t }) => {
   // Get minimum date (today) and time
   const today = new Date().toISOString().split('T')[0];
 
@@ -2742,8 +2742,29 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <p style={{ fontSize: '12px', color: t.textMuted, margin: 0 }}>
-                Emails will be sent at the scheduled time in your local timezone
+                {optimizeSendTime
+                  ? 'The scheduled time sets the day; each contact\'s send hour is chosen from their engagement history'
+                  : 'Emails will be sent at the scheduled time in your local timezone'}
               </p>
+            </div>
+            <div style={{ gridColumn: '1 / -1', paddingTop: '12px', borderTop: `1px solid ${t.border}` }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={optimizeSendTime}
+                  onChange={(e) => setOptimizeSendTime(e.target.checked)}
+                  style={{ marginTop: '2px', accentColor: t.primary, cursor: 'pointer' }}
+                />
+                <span>
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: t.text }}>
+                    Optimize send time per recipient
+                  </span>
+                  <span style={{ display: 'block', fontSize: '12px', color: t.textMuted, marginTop: '2px' }}>
+                    Each contact gets the email at the hour they historically open, based on past engagement.
+                    Contacts without history send at the most common open time for your book (or 10 AM).
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         )}
@@ -2853,6 +2874,7 @@ const MassEmailPage = ({ t }) => {
   const [scheduleOption, setScheduleOption] = useState('now'); // 'now' or 'scheduled'
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('09:00');
+  const [optimizeSendTime, setOptimizeSendTime] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -3001,9 +3023,16 @@ const MassEmailPage = ({ t }) => {
       }
 
       // Schedule the batch (immediately or for later)
-      await scheduleBatch.mutateAsync({ batchId: batch.id, scheduledFor });
+      await scheduleBatch.mutateAsync({
+        batchId: batch.id,
+        scheduledFor,
+        options: { optimizeSendTime: scheduleOption === 'scheduled' && optimizeSendTime }
+      });
 
-      if (scheduleOption === 'scheduled') {
+      if (scheduleOption === 'scheduled' && optimizeSendTime) {
+        const formattedDay = new Date(`${scheduledDate}T${scheduledTime}`).toLocaleDateString();
+        setSuccess(`Successfully scheduled ${recipientCount} emails for ${formattedDay} at each contact's optimal send time`);
+      } else if (scheduleOption === 'scheduled') {
         const formattedDate = new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString();
         setSuccess(`Successfully scheduled ${recipientCount} emails for ${formattedDate}`);
       } else {
@@ -3033,6 +3062,7 @@ const MassEmailPage = ({ t }) => {
     setScheduleOption('now');
     setScheduledDate('');
     setScheduledTime('09:00');
+    setOptimizeSendTime(false);
   };
 
   const canProceed = () => {
@@ -3210,6 +3240,8 @@ const MassEmailPage = ({ t }) => {
                 setScheduledDate={setScheduledDate}
                 scheduledTime={scheduledTime}
                 setScheduledTime={setScheduledTime}
+                optimizeSendTime={optimizeSendTime}
+                setOptimizeSendTime={setOptimizeSendTime}
                 recipients={recipients}
                 isLoadingRecipients={loadingRecipients}
                 recipientCount={recipientCount}
