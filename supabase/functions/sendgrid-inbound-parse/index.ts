@@ -247,6 +247,11 @@ serve(async (req) => {
         created_at: new Date().toISOString()
       })
 
+    // Some mail clients put the full HTML document in the plain-text MIME
+    // part, leaving html empty. Treat HTML-looking text as HTML so injected/
+    // forwarded copies render instead of showing raw markup.
+    const textIsHtml = !email.html && looksLikeHtml(email.text)
+
     // Attempt inbox injection if user has OAuth connected
     if (ownerId && reply?.id) {
       const injectionResult = await attemptInboxInjection(supabaseClient, {
@@ -255,8 +260,8 @@ serve(async (req) => {
         fromEmail: email.from,
         fromName: email.fromName,
         subject: email.subject,
-        bodyText: email.text,
-        bodyHtml: email.html,
+        bodyText: textIsHtml ? undefined : email.text,
+        bodyHtml: email.html || (textIsHtml ? email.text : undefined),
         receivedAt: new Date().toISOString(),
         // Pass the original recipient email so Reply-To is set correctly
         // This ensures when user hits "reply" in their inbox, it goes to the contact
@@ -494,6 +499,10 @@ function fixUtf8Mojibake(str: string | undefined): string | undefined {
   } catch {
     return str
   }
+}
+
+function looksLikeHtml(str?: string): boolean {
+  return !!str && /<\s*(!doctype|html|head|body|div|p|br|span|table|blockquote|a|ul|ol)\b/i.test(str)
 }
 
 interface VerificationResult {
