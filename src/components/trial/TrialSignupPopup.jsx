@@ -58,17 +58,6 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
       gap: '12px',
       marginBottom: '32px',
     },
-    logoIcon: {
-      width: '48px',
-      height: '48px',
-      backgroundColor: '#3b82f6',
-      borderRadius: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#fff',
-      fontSize: '24px',
-    },
     logoText: {
       fontWeight: '700',
       fontSize: '20px',
@@ -235,7 +224,6 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.logo}>
-          <div style={styles.logoIcon}>📧</div>
           <div style={styles.logoText}>Email Automation</div>
         </div>
 
@@ -254,7 +242,6 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
         {isPersonalEmail ? (
           <div style={styles.errorSection}>
             <div style={styles.errorTitle}>
-              <span>⚠️</span>
               Business Email Required
             </div>
             <div style={styles.errorText}>
@@ -264,7 +251,6 @@ const TrialSignupPopup = ({ email, onStartTrial, onCancel }) => {
         ) : error ? (
           <div style={styles.errorSection}>
             <div style={styles.errorTitle}>
-              <span>⚠️</span>
               Unable to Start Trial
             </div>
             <div style={styles.errorText}>

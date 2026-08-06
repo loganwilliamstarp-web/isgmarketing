@@ -295,18 +295,6 @@ const MasterAutomationRow = ({ automation, onEdit, onSync, syncing, theme: t }) 
     >
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            backgroundColor: t.bgHover,
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '16px'
-          }}>
-            ⚡
-          </div>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
               {automation.name}
@@ -388,18 +376,6 @@ const AutomationRow = ({ automation, onEdit, onToggle, onDelete, hasVerifiedDoma
     >
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            backgroundColor: t.bgHover,
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '16px'
-          }}>
-            ⚡
-          </div>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
               {automation.name}
@@ -761,7 +737,6 @@ const AutomationsPage = ({ t }) => {
             border: `1px solid ${t.border}`,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
             <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
               No master automations
             </h3>
@@ -955,7 +930,6 @@ const AutomationsPage = ({ t }) => {
             border: `1px solid ${t.border}`,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
             <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
               No automations found
             </h3>
@@ -1211,8 +1185,7 @@ const AutomationsPage = ({ t }) => {
               border: `1px solid ${t.border}`,
               textAlign: 'center'
             }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
                 No default automations
               </h3>
               <p style={{ fontSize: '14px', color: t.textSecondary, marginBottom: '24px' }}>
@@ -1299,8 +1272,7 @@ const AutomationsPage = ({ t }) => {
               border: `1px solid ${t.border}`,
               textAlign: 'center'
             }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚡</div>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
                 No custom automations yet
               </h3>
               <p style={{ fontSize: '14px', color: t.textSecondary, marginBottom: '24px' }}>

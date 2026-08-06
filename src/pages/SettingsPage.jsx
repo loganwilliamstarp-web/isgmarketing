@@ -276,12 +276,12 @@ const SettingsPage = ({ t }) => {
 
   // Build tabs based on user permissions
   const tabs = [
-    { id: 'signature', label: 'Email Signature', icon: '👤' },
+    { id: 'signature', label: 'Email Signature' },
     // Only show Agency Info tab to admins and agency admins
-    ...(canEditAgencyInfo ? [{ id: 'agency', label: 'Agency Info', icon: '🏢' }] : []),
-    { id: 'domains', label: 'Sender Domains', icon: '@' },
-    { id: 'email', label: 'Email Settings', icon: '📧' },
-    { id: 'integrations', label: 'Integrations', icon: '🔗' }
+    ...(canEditAgencyInfo ? [{ id: 'agency', label: 'Agency Info' }] : []),
+    { id: 'domains', label: 'Sender Domains' },
+    { id: 'email', label: 'Email Settings' },
+    { id: 'integrations', label: 'Integrations' }
   ];
 
   // Save agency info for all users in the profile
@@ -384,7 +384,7 @@ const SettingsPage = ({ t }) => {
               gap: '6px'
             }}
           >
-            {tab.icon} {tab.label}
+            {tab.label}
           </button>
         ))}
       </div>

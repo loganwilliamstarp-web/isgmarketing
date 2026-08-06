@@ -29,10 +29,6 @@ const TrialStatusFloater = () => {
       fontSize: '14px',
       maxWidth: '320px',
     },
-    icon: {
-      fontSize: '20px',
-      flexShrink: 0,
-    },
     text: {
       lineHeight: '1.4',
     },
@@ -47,7 +43,6 @@ const TrialStatusFloater = () => {
 
   return (
     <div style={styles.container}>
-      <span style={styles.icon}>{isUrgent ? '⚠️' : '⏱️'}</span>
       <div style={styles.text}>
         <span style={styles.daysCount}>{daysLeft}</span>{' '}
         <span style={styles.label}>

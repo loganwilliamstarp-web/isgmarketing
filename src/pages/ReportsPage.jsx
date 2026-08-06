@@ -23,7 +23,7 @@ const Skeleton = ({ width = '100%', height = '20px' }) => (
 );
 
 // Stat card component
-const StatCard = React.memo(({ label, value, subValue, icon, color, isLoading, theme: t }) => (
+const StatCard = React.memo(({ label, value, subValue, color, isLoading, theme: t }) => (
   <div style={{
     padding: '20px',
     backgroundColor: t.bgCard,
@@ -32,7 +32,6 @@ const StatCard = React.memo(({ label, value, subValue, icon, color, isLoading, t
   }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
       <span style={{ color: t.textSecondary, fontSize: '13px' }}>{label}</span>
-      <span style={{ fontSize: '20px' }}>{icon}</span>
     </div>
     {isLoading ? (
       <Skeleton height="32px" width="80px" />
@@ -176,7 +175,6 @@ const ReportsPage = ({ t }) => {
               label="NPS Score"
               value={currentNPS?.nps_score >= 0 ? `+${currentNPS?.nps_score}` : currentNPS?.nps_score}
               subValue={npsService.getNPSLabel(currentNPS?.nps_score || 0)}
-              icon="📊"
               color={npsService.getNPSColor(currentNPS?.nps_score || 0)}
               isLoading={npsLoading}
               theme={t}
@@ -185,7 +183,6 @@ const ReportsPage = ({ t }) => {
               label="Survey Responses"
               value={formatNumber(currentNPS?.total_responses)}
               subValue={`${currentNPS?.feedback_count || 0} with feedback`}
-              icon="📝"
               isLoading={npsLoading}
               theme={t}
             />
@@ -193,7 +190,6 @@ const ReportsPage = ({ t }) => {
               label="Open Rate"
               value={formatPercent(emailPerformance?.totals?.openRate)}
               subValue={`${formatNumber(emailPerformance?.totals?.opens)} opens`}
-              icon="📬"
               isLoading={emailLoading}
               theme={t}
             />
@@ -201,7 +197,6 @@ const ReportsPage = ({ t }) => {
               label="Click Rate"
               value={formatPercent(emailPerformance?.totals?.clickRate)}
               subValue={`${formatNumber(emailPerformance?.totals?.clicks)} clicks`}
-              icon="🔗"
               isLoading={emailLoading}
               theme={t}
             />
@@ -213,7 +208,6 @@ const ReportsPage = ({ t }) => {
               label="Email Replies"
               value={formatNumber(pipelineData?.totalReplies)}
               subValue={pipelineData?.replyChange != null ? `${pipelineData.replyChange > 0 ? '+' : ''}${pipelineData.replyChange}% vs prev` : `${dateRange.label}`}
-              icon="💬"
               color="#f59e0b"
               isLoading={pipelineLoading}
               theme={t}
@@ -224,7 +218,6 @@ const ReportsPage = ({ t }) => {
               subValue={pipelineData?.newBusinessPeople
                 ? `${Math.round((pipelineData.emailDrivenPeople / pipelineData.newBusinessPeople) * 100)}% of new business · ${dateRange.label}`
                 : dateRange.label}
-              icon="🎯"
               color="#22c55e"
               isLoading={pipelineLoading}
               theme={t}
@@ -233,7 +226,6 @@ const ReportsPage = ({ t }) => {
               label="Reply Rate"
               value={formatPercent(emailPerformance?.totals?.replyRate)}
               subValue={`${formatNumber(emailPerformance?.totals?.replies)} of ${formatNumber(emailPerformance?.totals?.delivered)} delivered`}
-              icon="↩️"
               isLoading={emailLoading}
               theme={t}
             />
@@ -241,7 +233,6 @@ const ReportsPage = ({ t }) => {
               label="Pipeline"
               value={formatNumber(pipelineData?.totalOpportunities)}
               subValue={`${pipelineData?.totalProspects || 0} prospects · ${pipelineData?.totalLeads || 0} leads`}
-              icon="📋"
               color="#3b82f6"
               isLoading={pipelineLoading}
               theme={t}
@@ -324,14 +315,12 @@ const ReportsPage = ({ t }) => {
             <StatCard
               label="Emails Sent"
               value={formatNumber(emailPerformance?.totals?.sent)}
-              icon="📤"
               isLoading={emailLoading}
               theme={t}
             />
             <StatCard
               label="Delivered"
               value={formatNumber(emailPerformance?.totals?.delivered)}
-              icon="✅"
               isLoading={emailLoading}
               theme={t}
             />
@@ -339,7 +328,6 @@ const ReportsPage = ({ t }) => {
               label="Opened"
               value={formatNumber(emailPerformance?.totals?.opens)}
               subValue={formatPercent(emailPerformance?.totals?.openRate)}
-              icon="📬"
               isLoading={emailLoading}
               theme={t}
             />
@@ -347,7 +335,6 @@ const ReportsPage = ({ t }) => {
               label="Clicked"
               value={formatNumber(emailPerformance?.totals?.clicks)}
               subValue={formatPercent(emailPerformance?.totals?.clickRate)}
-              icon="🔗"
               isLoading={emailLoading}
               theme={t}
             />
@@ -355,14 +342,12 @@ const ReportsPage = ({ t }) => {
               label="Replied"
               value={formatNumber(emailPerformance?.totals?.replies)}
               subValue={formatPercent(emailPerformance?.totals?.replyRate)}
-              icon="↩️"
               isLoading={emailLoading}
               theme={t}
             />
             <StatCard
               label="Bounced"
               value={formatNumber(emailPerformance?.totals?.bounces)}
-              icon="❌"
               color={emailPerformance?.totals?.bounces > 0 ? t.danger : undefined}
               isLoading={emailLoading}
               theme={t}
@@ -465,7 +450,6 @@ const ReportsPage = ({ t }) => {
               label="NPS Score"
               value={currentNPS?.nps_score >= 0 ? `+${currentNPS?.nps_score}` : currentNPS?.nps_score}
               subValue={npsService.getNPSLabel(currentNPS?.nps_score || 0)}
-              icon="📊"
               color={npsService.getNPSColor(currentNPS?.nps_score || 0)}
               isLoading={npsLoading}
               theme={t}
@@ -473,7 +457,6 @@ const ReportsPage = ({ t }) => {
             <StatCard
               label="Total Responses"
               value={formatNumber(currentNPS?.total_responses)}
-              icon="📝"
               isLoading={npsLoading}
               theme={t}
             />
@@ -481,7 +464,6 @@ const ReportsPage = ({ t }) => {
               label="Avg Rating"
               value={currentNPS?.avg_rating?.toFixed(1) || '0'}
               subValue="out of 5 stars"
-              icon="⭐"
               isLoading={npsLoading}
               theme={t}
             />
@@ -491,7 +473,6 @@ const ReportsPage = ({ t }) => {
               subValue={currentNPS?.total_responses > 0
                 ? `${Math.round((currentNPS.feedback_count / currentNPS.total_responses) * 100)}% of responses`
                 : ''}
-              icon="💬"
               isLoading={npsLoading}
               theme={t}
             />
@@ -499,7 +480,6 @@ const ReportsPage = ({ t }) => {
               label="Response Rate"
               value={formatPercent(surveyRate?.response_rate)}
               subValue={`${surveyRate?.surveys_completed || 0} of ${surveyRate?.surveys_sent || 0}`}
-              icon="📈"
               isLoading={rateLoading}
               theme={t}
             />
@@ -564,7 +544,6 @@ const ReportsPage = ({ t }) => {
               label="Email Replies"
               value={formatNumber(pipelineData?.totalReplies)}
               subValue={pipelineData?.replyChange != null ? `${pipelineData.replyChange > 0 ? '+' : ''}${pipelineData.replyChange}% vs prev` : undefined}
-              icon="💬"
               color="#f59e0b"
               isLoading={pipelineLoading}
               theme={t}
@@ -573,7 +552,6 @@ const ReportsPage = ({ t }) => {
               label="Accounts Replied"
               value={formatNumber(pipelineData?.uniqueAccountsReplied)}
               subValue="unique accounts"
-              icon="👤"
               color="#8b5cf6"
               isLoading={pipelineLoading}
               theme={t}
@@ -582,7 +560,6 @@ const ReportsPage = ({ t }) => {
               label="Quote Opportunities"
               value={formatNumber(pipelineData?.totalOpportunities)}
               subValue={`${pipelineData?.totalProspects || 0} prospects, ${pipelineData?.totalLeads || 0} leads`}
-              icon="📋"
               color="#3b82f6"
               isLoading={pipelineLoading}
               theme={t}
@@ -591,7 +568,6 @@ const ReportsPage = ({ t }) => {
               label="Sold (Email-Driven)"
               value={formatNumber(pipelineData?.emailDrivenPeople)}
               subValue={`of ${pipelineData?.newBusinessPeople || 0} new-business clients`}
-              icon="🎯"
               color="#22c55e"
               isLoading={pipelineLoading}
               theme={t}
@@ -600,7 +576,6 @@ const ReportsPage = ({ t }) => {
               label="Prior Customers"
               value={formatNumber(pipelineData?.totalPriorCustomers)}
               subValue="win-back opportunity"
-              icon="🔄"
               color="#ef4444"
               isLoading={pipelineLoading}
               theme={t}

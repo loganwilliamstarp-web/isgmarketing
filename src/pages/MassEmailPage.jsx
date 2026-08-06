@@ -666,7 +666,7 @@ const CampaignAnalyticsModal = ({ batch, onClose, theme: t }) => {
                                 }}
                                 title={activity.url}
                               >
-                                🔗 {activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url}
+                                {activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url}
                               </a>
                             </div>
                           )}
@@ -807,7 +807,7 @@ const TemplateStep = ({ selectedTemplate, onSelect, onCreateNew, templates, isLo
           onChange={(e) => setSearch(e.target.value)}
           style={{
             width: '100%',
-            padding: '10px 12px 10px 36px',
+            padding: '10px 12px',
             backgroundColor: t.bgInput,
             border: `1px solid ${t.border}`,
             borderRadius: '8px',
@@ -815,15 +815,6 @@ const TemplateStep = ({ selectedTemplate, onSelect, onCreateNew, templates, isLo
             fontSize: '14px'
           }}
         />
-        <span style={{
-          position: 'absolute',
-          left: '12px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          color: t.textMuted
-        }}>
-          🔍
-        </span>
       </div>
 
       {isLoading ? (
@@ -1484,7 +1475,7 @@ const LocationMapModal = ({ location, radius, onClose, theme: t }) => {
               Location Radius Preview
             </h3>
             <p style={{ margin: '4px 0 0', fontSize: '13px', color: t.textSecondary }}>
-              📍 {location.display}
+              {location.display}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1557,7 +1548,6 @@ const LocationMapPreview = ({ location, radius, theme: t }) => {
           justifyContent: 'space-between'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '20px' }}>📍</span>
             <div>
               <div style={{ fontSize: '13px', fontWeight: '500', color: t.text }}>
                 {location.display}
@@ -1583,7 +1573,7 @@ const LocationMapPreview = ({ location, radius, theme: t }) => {
               gap: '6px'
             }}
           >
-            🗺️ View Map
+            View Map
           </button>
         </div>
       </div>
@@ -1970,7 +1960,6 @@ const LocationFilterInput = ({ rule, onUpdate, theme: t }) => {
                   onMouseEnter={(e) => e.target.style.backgroundColor = t.bgHover}
                   onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                 >
-                  <span>📍</span>
                   <span style={{ lineHeight: '1.4' }}>{loc.display}</span>
                 </button>
               ))}
@@ -2049,7 +2038,7 @@ const LocationBreakdown = ({ breakdown, isLoading, theme: t }) => {
         }}
       >
         <span style={{ fontSize: '13px', fontWeight: '500' }}>
-          📊 View Recipients by City
+          View Recipients by City
         </span>
         <span style={{ fontSize: '12px', color: t.textSecondary }}>
           {showBreakdown ? '▲' : '▼'}
@@ -2678,7 +2667,6 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
               gap: '8px'
             }}
           >
-            <span style={{ fontSize: '18px' }}>⚡</span>
             Send Now
           </button>
           <button
@@ -2700,7 +2688,6 @@ const ReviewStep = ({ template, filterConfig, subject, setSubject, name, setName
               gap: '8px'
             }}
           >
-            <span style={{ fontSize: '18px' }}>📅</span>
             Schedule for Later
           </button>
         </div>
@@ -3341,7 +3328,6 @@ const MassEmailPage = ({ t }) => {
                 border: `1px solid ${t.border}`,
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', color: t.text, marginBottom: '8px' }}>
                   No campaigns yet
                 </h3>

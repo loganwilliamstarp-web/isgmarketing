@@ -177,7 +177,6 @@ const ScopeFilterDropdown = ({ t }) => {
           fontWeight: '500',
         }}
       >
-        <span>{isAdmin ? '🏢' : '👥'}</span>
         <span>{getButtonLabel()}</span>
         <span style={{ fontSize: '10px', opacity: 0.7 }}>▼</span>
       </button>
@@ -241,7 +240,6 @@ const ScopeFilterDropdown = ({ t }) => {
                 gap: '8px',
               }}
             >
-              <span>{isAdmin ? '🌐' : '👥'}</span>
               <span>{getAllLabel()}</span>
               {!scopeFilter.active && (
                 <span style={{ marginLeft: 'auto', color: t.primary }}>✓</span>
@@ -281,7 +279,6 @@ const ScopeFilterDropdown = ({ t }) => {
                   gap: '8px',
                 }}
               >
-                <span>{item.type === 'agency' ? '🏢' : '👤'}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     overflow: 'hidden',

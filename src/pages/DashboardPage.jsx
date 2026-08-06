@@ -86,7 +86,7 @@ const fixEncodingIssues = (content) => {
 };
 
 // Stat card with loading state
-const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t }) => (
+const StatCard = ({ label, value, change, positive, isLoading, theme: t }) => (
   <div style={{
     padding: '20px',
     backgroundColor: t.bgCard,
@@ -95,7 +95,6 @@ const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t })
   }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
       <span style={{ color: t.textSecondary, fontSize: '13px' }}>{label}</span>
-      <span style={{ fontSize: '20px' }}>{icon}</span>
     </div>
     {isLoading ? (
       <Skeleton height="32px" width="80px" />
@@ -111,7 +110,7 @@ const StatCard = ({ label, value, change, icon, positive, isLoading, theme: t })
 );
 
 // Stat card with comparison bar
-const ComparisonStatCard = ({ label, value, industryAvg, icon, isLoading, theme: t }) => {
+const ComparisonStatCard = ({ label, value, industryAvg, isLoading, theme: t }) => {
   const numValue = parseFloat(value) || 0;
   const isAboveAvg = numValue > industryAvg;
 
@@ -124,7 +123,6 @@ const ComparisonStatCard = ({ label, value, industryAvg, icon, isLoading, theme:
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
         <span style={{ color: t.textSecondary, fontSize: '13px' }}>{label}</span>
-        <span style={{ fontSize: '20px' }}>{icon}</span>
       </div>
       {isLoading ? (
         <>
@@ -760,7 +758,7 @@ const ScheduledEmailItem = ({ email, theme: t, userId, onPreview, onSendNow, onC
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span>🕐</span> {new Date(email.scheduled_for).toLocaleString('en-US', {
+          {new Date(email.scheduled_for).toLocaleString('en-US', {
             weekday: 'short',
             month: 'short',
             day: 'numeric',
@@ -945,7 +943,6 @@ const DashboardPage = ({ t }) => {
           label="Emails Sent"
           value={formatNumber(stats?.emailsSent)}
           change={stats?.emailsSentChange ? `${stats.emailsSentChange > 0 ? '+' : ''}${stats.emailsSentChange}%` : null}
-          icon="📧"
           positive={stats?.emailsSentChange > 0}
           isLoading={statsLoading}
           theme={t}
@@ -954,7 +951,6 @@ const DashboardPage = ({ t }) => {
           label="Open Rate"
           value={Math.round(stats?.openRate || 0)}
           industryAvg={32}
-          icon="📬"
           isLoading={statsLoading}
           theme={t}
         />
@@ -962,7 +958,6 @@ const DashboardPage = ({ t }) => {
           label="Click Rate"
           value={Math.round(stats?.clickRate || 0)}
           industryAvg={8}
-          icon="🖱️"
           isLoading={statsLoading}
           theme={t}
         />
@@ -970,7 +965,6 @@ const DashboardPage = ({ t }) => {
           label="Response Rate"
           value={Math.round(stats?.responseRate || 0)}
           industryAvg={5}
-          icon="↩️"
           isLoading={statsLoading}
           theme={t}
         />
@@ -978,7 +972,6 @@ const DashboardPage = ({ t }) => {
           label="Scheduled"
           value={formatNumber(stats?.scheduledCount)}
           change={null}
-          icon="📅"
           positive={null}
           isLoading={statsLoading}
           theme={t}
@@ -1043,7 +1036,6 @@ const DashboardPage = ({ t }) => {
                 color: t.textMuted,
                 fontSize: '14px'
               }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
                 No scheduled emails in the next 7 days
               </div>
             )}
@@ -1088,12 +1080,12 @@ const DashboardPage = ({ t }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '800px', overflowY: 'auto', marginTop: '16px' }}>
               {emailActivity.slice(0, 10).map((activity) => {
                 const typeConfig = {
-                  sent: { icon: '📤', label: 'Sent', color: t.success },
-                  opened: { icon: '📬', label: 'Opened', color: t.primary },
-                  clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
-                  replied: { icon: null, label: 'Replied', color: '#8b5cf6' }
+                  sent: { label: 'Sent', color: t.success },
+                  opened: { label: 'Opened', color: t.primary },
+                  clicked: { label: 'Clicked', color: t.warning },
+                  replied: { label: 'Replied', color: '#8b5cf6' }
                 };
-                const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
+                const config = typeConfig[activity.type] || { label: activity.type, color: t.textSecondary };
                 const canPreview = activity.type === 'sent' || activity.type === 'replied';
 
                 return (
@@ -1109,7 +1101,6 @@ const DashboardPage = ({ t }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '11px', color: t.textMuted, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          {config.icon && <span>{config.icon}</span>}
                           <span style={{ color: config.color, fontWeight: '500' }}>{config.label}</span>
                           <span>•</span>
                           <span>
@@ -1225,7 +1216,6 @@ const DashboardPage = ({ t }) => {
               color: t.textMuted,
               fontSize: '14px'
             }}>
-              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
               No email activity yet
             </div>
           )}

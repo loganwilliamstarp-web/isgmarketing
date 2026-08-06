@@ -209,7 +209,7 @@ const EmbedEmailActivityPage = () => {
                           {isExpanded ? '▲' : '▼'}
                         </button>
                         <button onClick={() => handlePreview(email)} style={styles.previewButton} title="Preview email">
-                          👁
+                          View
                         </button>
                       </div>
                     )}
@@ -229,17 +229,17 @@ const EmbedEmailActivityPage = () => {
                     <div style={styles.engagementIcons}>
                       {email.firstOpenedAt && (
                         <span style={styles.engagementChip} title={`Opened ${email.openCount}x — ${new Date(email.firstOpenedAt).toLocaleString()}`}>
-                          📬 Opened {email.openCount > 1 ? `(${email.openCount}x)` : ''}
+                          Opened {email.openCount > 1 ? `(${email.openCount}x)` : ''}
                         </span>
                       )}
                       {email.firstClickedAt && (
                         <span style={{ ...styles.engagementChip, backgroundColor: '#e3f3e3', color: '#2e844a' }} title={`Clicked ${email.clickCount}x`}>
-                          🔗 Clicked {email.clickCount > 1 ? `(${email.clickCount}x)` : ''}
+                          Clicked {email.clickCount > 1 ? `(${email.clickCount}x)` : ''}
                         </span>
                       )}
                       {email.firstRepliedAt && (
                         <span style={{ ...styles.engagementChip, backgroundColor: '#e8f4fd', color: '#0070d2' }} title={`Replied ${new Date(email.firstRepliedAt).toLocaleString()}`}>
-                          💬 Replied {email.replyCount > 1 ? `(${email.replyCount})` : ''}
+                          Replied {email.replyCount > 1 ? `(${email.replyCount})` : ''}
                         </span>
                       )}
                     </div>
