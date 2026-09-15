@@ -30,39 +30,54 @@ serve(async (req) => {
   }
 
   try {
-    // Get auth token from request
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Create Supabase client with user's auth
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
-
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const authenticatedEmail = user.email
-
     // Parse request
     const url = new URL(req.url)
     const action = url.searchParams.get('action')
     const body = req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE'
       ? await req.json()
       : {}
+
+    // ------------------------------------------------------------------
+    // Identify the caller.
+    //
+    // The app has two login paths:
+    //   1. Email OTP -> a real Supabase Auth session (JWT in Authorization header)
+    //   2. Salesforce iframe / local session -> NO Supabase Auth session; the
+    //      frontend identifies the user by their users.user_unique_id
+    //      (sent as body.authenticatedUserId).
+    //
+    // verify_jwt is disabled for this function (see supabase/config.toml) so
+    // Salesforce users can reach it. We still validate a Supabase JWT when one
+    // is present, and in every case the caller must resolve to a row in the
+    // users table.
+    // ------------------------------------------------------------------
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const authHeader = req.headers.get('Authorization') || ''
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim()
+
+    let supabaseAuthEmail: string | null = null
+    if (bearerToken && bearerToken !== anonKey) {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        anonKey,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+      const { data: { user } } = await supabaseClient.auth.getUser()
+      if (user?.email) {
+        supabaseAuthEmail = user.email
+      }
+    }
+
+    const requestedUserId = typeof body.authenticatedUserId === 'string' && body.authenticatedUserId.trim()
+      ? body.authenticatedUserId.trim()
+      : null
+
+    if (!supabaseAuthEmail && !requestedUserId) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+      )
+    }
 
     const sendGridApiKey = Deno.env.get('SENDGRID_API_KEY')
     if (!sendGridApiKey) {
@@ -80,28 +95,31 @@ serve(async (req) => {
 
     // Look up user in users table
     // If frontend provided authenticatedUserId, use that (it already determined the correct record)
-    // Otherwise fall back to email lookup with preference for agency admin records
-    let userData = null
+    // Otherwise fall back to email lookup (Supabase Auth users only), preferring agency admin records
+    type UserRow = { user_unique_id: string; email: string | null; marketing_cloud_agency_admin: boolean | null }
+    let userData: UserRow | null = null
 
-    if (body.authenticatedUserId) {
-      // Frontend provided the user ID - look up by ID directly
-      const { data } = await supabaseAdmin
+    if (requestedUserId) {
+      // Frontend provided the user ID - look up by ID directly (prefer agency admin record if duplicated)
+      const { data: idRecords } = await supabaseAdmin
         .from('users')
-        .select('user_unique_id, marketing_cloud_agency_admin')
-        .eq('user_unique_id', body.authenticatedUserId)
-        .single()
-      userData = data
+        .select('user_unique_id, email, marketing_cloud_agency_admin')
+        .eq('user_unique_id', requestedUserId)
+
+      if (idRecords && idRecords.length > 0) {
+        userData = idRecords.find((r: UserRow) => r.marketing_cloud_agency_admin === true) || idRecords[0]
+      }
     }
 
-    if (!userData) {
+    if (!userData && supabaseAuthEmail) {
       // Fallback: look up by email, prefer agency admin records
       const { data: userRecords } = await supabaseAdmin
         .from('users')
-        .select('user_unique_id, marketing_cloud_agency_admin')
-        .eq('email', authenticatedEmail)
+        .select('user_unique_id, email, marketing_cloud_agency_admin')
+        .eq('email', supabaseAuthEmail)
 
       if (userRecords && userRecords.length > 0) {
-        userData = userRecords.find(r => r.marketing_cloud_agency_admin === true) || userRecords[0]
+        userData = userRecords.find((r: UserRow) => r.marketing_cloud_agency_admin === true) || userRecords[0]
       }
     }
 
@@ -113,6 +131,7 @@ serve(async (req) => {
     }
 
     const authenticatedUserId = userData.user_unique_id
+    const authenticatedEmail = userData.email || supabaseAuthEmail || ''
     const isAdmin = userData.marketing_cloud_agency_admin === true
 
     // For list and verified actions, allow admins to query a target user's domains

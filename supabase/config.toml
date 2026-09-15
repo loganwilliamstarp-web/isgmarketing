@@ -33,3 +33,8 @@ verify_jwt = false
 # Salesforce sync - called by pg_cron and self-invokes to drain backfill
 [functions.sync-salesforce]
 verify_jwt = false
+
+# Sender domains - Salesforce-authenticated users have no Supabase Auth session,
+# so the function identifies callers itself (JWT when present, else users.user_unique_id)
+[functions.sender-domains]
+verify_jwt = false
