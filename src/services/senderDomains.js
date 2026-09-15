@@ -4,30 +4,42 @@
 // Uses Edge Function to keep SendGrid API key secure
 
 import { supabase } from '../lib/supabase';
+import { authService } from './auth';
 
 export const senderDomainsService = {
   /**
    * Call the sender-domains Edge Function
+   *
+   * Two login paths reach here:
+   *  - Email OTP users have a Supabase Auth session; we send its JWT.
+   *  - Salesforce users have NO Supabase Auth session (only a local session in
+   *    localStorage), so we identify them by their user_unique_id instead and
+   *    send the anon key as the bearer token.
+   *
    * @param {string} action - Action to perform
    * @param {Object} body - Request body
+   * @param {string|null} authenticatedUserId - users.user_unique_id from AuthContext (optional; falls back to the local Salesforce session)
    * @returns {Promise<Object>} Response from edge function
    */
   async callEdgeFunction(action, body = {}, authenticatedUserId = null) {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const userId = authenticatedUserId || authService.getLocalSession()?.userId || null;
+    if (!session && !userId) {
       throw new Error('Not authenticated');
     }
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     const response = await fetch(
       `${supabaseUrl}/functions/v1/sender-domains?action=${action}`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          'apikey': anonKey,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ ...body, authenticatedUserId })
+        body: JSON.stringify({ ...body, authenticatedUserId: userId })
       }
     );
 
