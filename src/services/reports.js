@@ -286,9 +286,11 @@ export const reportsService = {
       csvContent += `Unique Accounts Replied,${pipelineData.uniqueAccountsReplied || 0}\n`;
       csvContent += `Change vs Previous Period,${pipelineData.replyChange || 0}%\n\n`;
 
-      csvContent += 'Conversion Metrics\n';
-      csvContent += `Email-Driven Sold,${pipelineData.totalSold || 0}\n`;
-      csvContent += `Total Customers,${pipelineData.totalCustomers || 0}\n`;
+      csvContent += `Conversion Metrics (last ${days} days)\n`;
+      csvContent += `Email-Driven Sales (clients),${pipelineData.emailDrivenPeople ?? pipelineData.totalSold ?? 0}\n`;
+      csvContent += `New-Business Clients,${pipelineData.newBusinessPeople ?? pipelineData.totalCustomers ?? 0}\n`;
+      csvContent += `Email-Driven Policies,${pipelineData.emailDrivenPolicies ?? 0}\n`;
+      csvContent += `New-Business Policies,${pipelineData.newBusinessPolicies ?? 0}\n`;
       csvContent += `Quote Opportunities,${pipelineData.totalOpportunities || 0}\n`;
       csvContent += `Prior Customers (Win-Back),${pipelineData.totalPriorCustomers || 0}\n\n`;
 
@@ -410,6 +412,7 @@ export const reportsService = {
     const { days = 30 } = options;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    const endDate = new Date();
 
     const prevStartDate = new Date();
     prevStartDate.setDate(prevStartDate.getDate() - days * 2);

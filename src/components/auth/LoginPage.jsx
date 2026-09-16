@@ -155,17 +155,6 @@ const LoginPage = () => {
       gap: '12px',
       marginBottom: '32px',
     },
-    logoIcon: {
-      width: '48px',
-      height: '48px',
-      backgroundColor: '#3b82f6',
-      borderRadius: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#fff',
-      fontSize: '24px',
-    },
     logoText: {
       fontWeight: '700',
       fontSize: '20px',
@@ -248,11 +237,6 @@ const LoginPage = () => {
       fontSize: '14px',
       color: '#64748b',
     },
-    noAccessIcon: {
-      fontSize: '64px',
-      textAlign: 'center',
-      marginBottom: '24px',
-    },
     noAccessTitle: {
       fontSize: '20px',
       fontWeight: '600',
@@ -297,11 +281,9 @@ const LoginPage = () => {
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.logo}>
-            <div style={styles.logoIcon}>📧</div>
             <div style={styles.logoText}>Email Automation</div>
           </div>
 
-          <div style={styles.noAccessIcon}>🔒</div>
           <div style={styles.noAccessTitle}>Access Denied</div>
           <div style={styles.noAccessText}>
             You don't have access to this site.<br />
@@ -325,7 +307,6 @@ const LoginPage = () => {
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.logo}>
-            <div style={styles.logoIcon}>📧</div>
             <div style={styles.logoText}>Email Automation</div>
           </div>
 
@@ -396,7 +377,6 @@ const LoginPage = () => {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.logo}>
-          <div style={styles.logoIcon}>📧</div>
           <div style={styles.logoText}>Email Automation</div>
         </div>
 

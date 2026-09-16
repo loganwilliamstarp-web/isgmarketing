@@ -43,7 +43,7 @@ const Skeleton = ({ width = '100%', height = '20px', style = {} }) => (
 // ============================================
 // STAT CARD - Large metrics display
 // ============================================
-const StatCard = ({ label, value, subValue, icon, color, trend, trendLabel, isLoading, large, theme: t }) => (
+const StatCard = ({ label, value, subValue, color, trend, trendLabel, isLoading, large, theme: t }) => (
   <div style={{
     padding: large ? '24px' : '20px',
     backgroundColor: t.bgCard,
@@ -65,7 +65,6 @@ const StatCard = ({ label, value, subValue, icon, color, trend, trendLabel, isLo
 
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
       <span style={{ color: t.textSecondary, fontSize: '13px', fontWeight: '500' }}>{label}</span>
-      <span style={{ fontSize: large ? '28px' : '24px' }}>{icon}</span>
     </div>
     {isLoading ? (
       <Skeleton height={large ? '44px' : '36px'} width="100px" />
@@ -243,15 +242,6 @@ const LeaderboardTable = ({ title, data, columns, isLoading, emptyMessage, timeL
 // ACTIVITY FEED
 // ============================================
 const ActivityFeed = ({ data, isLoading, theme: t }) => {
-  const typeIcons = {
-    sent: '📤',
-    opened: '👁️',
-    clicked: '🔗',
-    replied: '💬',
-    bounced: '❌',
-    failed: '⚠️'
-  };
-
   const typeColors = {
     sent: t.primary,
     opened: '#22c55e',
@@ -326,10 +316,14 @@ const ActivityFeed = ({ data, isLoading, theme: t }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '14px',
                 flexShrink: 0
               }}>
-                {typeIcons[item.type]}
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: typeColors[item.type]
+                }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
@@ -378,7 +372,6 @@ const BouncesCard = ({ data, isLoading, theme: t }) => (
       alignItems: 'center',
       gap: '8px'
     }}>
-      <span style={{ fontSize: '18px' }}>⚠️</span>
       <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: data && data.length > 0 ? '#991b1b' : t.text }}>
         Recent Bounces
       </h3>
@@ -446,7 +439,6 @@ const RepliesCard = ({ data, isLoading, theme: t }) => (
       alignItems: 'center',
       gap: '8px'
     }}>
-      <span style={{ fontSize: '18px' }}>💬</span>
       <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: data && data.length > 0 ? '#166534' : t.text }}>
         Accounts That Replied
       </h3>
@@ -460,7 +452,6 @@ const RepliesCard = ({ data, isLoading, theme: t }) => (
           padding: '20px',
           color: t.textMuted
         }}>
-          <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>📭</span>
           <span style={{ fontSize: '13px' }}>No replies in the last 7 days</span>
         </div>
       ) : (
@@ -789,7 +780,7 @@ const MasterAdminDashboardPage = ({ t }) => {
   const { data: recentActivity, isLoading: activityLoading } = useRecentActivity(20);
   const { data: emailReplyAnalytics, isLoading: repliesAnalyticsLoading } = useEmailReplyAnalytics(timeRange);
   const { data: quoteOpportunities, isLoading: quotesLoading } = useQuoteOpportunities();
-  const { data: soldAccounts, isLoading: soldLoading } = useSoldAccounts();
+  const { data: soldAccounts, isLoading: soldLoading } = useSoldAccounts(timeRange);
 
   // Redirect non-admins
   if (!isAdmin) {
@@ -984,10 +975,7 @@ const MasterAdminDashboardPage = ({ t }) => {
             onMouseLeave={(e) => e.target.style.backgroundColor = '#3b82f6'}
           >
             {isGeneratingPDF ? (
-              <>
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span>
-                Generating...
-              </>
+              <>Generating...</>
             ) : (
               <>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1117,7 +1105,6 @@ const MasterAdminDashboardPage = ({ t }) => {
           value={formatNumber(overview?.emailsSentWeek)}
           trend={overview?.sentChange}
           trendLabel="vs last week"
-          icon="📧"
           color="#3b82f6"
           isLoading={overviewLoading}
           large
@@ -1128,7 +1115,6 @@ const MasterAdminDashboardPage = ({ t }) => {
           value={formatPercent(overview?.openRateWeek)}
           trend={overview?.openRateChange}
           trendLabel="vs last week"
-          icon="📬"
           color="#22c55e"
           isLoading={overviewLoading}
           large
@@ -1139,7 +1125,6 @@ const MasterAdminDashboardPage = ({ t }) => {
           value={formatPercent(overview?.clickRateWeek)}
           trend={overview?.clickRateChange}
           trendLabel="vs last week"
-          icon="🔗"
           color="#8b5cf6"
           isLoading={overviewLoading}
           large
@@ -1149,7 +1134,6 @@ const MasterAdminDashboardPage = ({ t }) => {
           label="Response Rate"
           value={formatPercent(overview?.responseRateWeek)}
           subValue="replies/delivered"
-          icon="💬"
           color="#f59e0b"
           isLoading={overviewLoading}
           large
@@ -1162,21 +1146,18 @@ const MasterAdminDashboardPage = ({ t }) => {
         <StatCard
           label="Total Users"
           value={formatNumber(overview?.totalUsers)}
-          icon="👥"
           isLoading={overviewLoading}
           theme={t}
         />
         <StatCard
           label="Agencies"
           value={formatNumber(overview?.totalAgencies)}
-          icon="🏢"
           isLoading={overviewLoading}
           theme={t}
         />
         <StatCard
           label="Active Automations"
           value={formatNumber(overview?.activeAutomations)}
-          icon="⚡"
           color="#22c55e"
           isLoading={overviewLoading}
           theme={t}
@@ -1184,7 +1165,6 @@ const MasterAdminDashboardPage = ({ t }) => {
         <StatCard
           label="Templates"
           value={formatNumber(overview?.totalTemplates)}
-          icon="📝"
           isLoading={overviewLoading}
           theme={t}
         />
@@ -1192,7 +1172,6 @@ const MasterAdminDashboardPage = ({ t }) => {
           label="Sent Today"
           value={formatNumber(overview?.sentToday)}
           subValue={`${formatNumber(overview?.scheduledWeek)} this week`}
-          icon="📅"
           color="#3b82f6"
           isLoading={overviewLoading}
           theme={t}
@@ -1200,7 +1179,6 @@ const MasterAdminDashboardPage = ({ t }) => {
         <StatCard
           label="Failed (24h)"
           value={formatNumber(overview?.failedEmails24h)}
-          icon="⚠️"
           color={overview?.failedEmails24h > 10 ? '#ef4444' : undefined}
           isLoading={overviewLoading}
           theme={t}
@@ -1422,7 +1400,6 @@ const MasterAdminDashboardPage = ({ t }) => {
             value={formatNumber(emailReplyAnalytics?.totalReplies)}
             trend={emailReplyAnalytics?.changePercent}
             trendLabel="vs prev period"
-            icon="💬"
             color="#f59e0b"
             isLoading={repliesAnalyticsLoading}
             large
@@ -1432,7 +1409,6 @@ const MasterAdminDashboardPage = ({ t }) => {
             label="Quote Opportunities"
             value={formatNumber(quoteOpportunities?.totalOpportunities)}
             subValue={`${formatNumber(quoteOpportunities?.totalProspects)} prospects, ${formatNumber(quoteOpportunities?.totalLeads)} leads`}
-            icon="📋"
             color="#3b82f6"
             isLoading={quotesLoading}
             large
@@ -1440,9 +1416,8 @@ const MasterAdminDashboardPage = ({ t }) => {
           />
           <StatCard
             label="Sold (Email-Driven)"
-            value={formatNumber(soldAccounts?.totalSold)}
-            subValue={`of ${formatNumber(soldAccounts?.totalCustomers)} total customers`}
-            icon="🎯"
+            value={formatNumber(soldAccounts?.emailDrivenPeople)}
+            subValue={`of ${formatNumber(soldAccounts?.newBusinessPeople)} new-business clients · Last ${timeRange} days`}
             color="#22c55e"
             isLoading={soldLoading}
             large
@@ -1452,7 +1427,6 @@ const MasterAdminDashboardPage = ({ t }) => {
             label="Prior Customers"
             value={formatNumber(soldAccounts?.totalPriorCustomers)}
             subValue="win-back opportunity"
-            icon="🔄"
             color="#8b5cf6"
             isLoading={soldLoading}
             large
@@ -1679,7 +1653,7 @@ const MasterAdminDashboardPage = ({ t }) => {
             justifyContent: 'space-between'
           }}>
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: t.text }}>Sold Accounts</h3>
-            <span style={{ fontSize: '12px', color: t.textMuted }}>Emailed → Customer</span>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Email → New Business · Last {timeRange} days</span>
           </div>
 
           {/* Sold by Agency */}
@@ -1740,7 +1714,7 @@ const MasterAdminDashboardPage = ({ t }) => {
                       </span>
                     </div>
                     <div style={{ fontSize: '11px', color: t.textMuted }}>
-                      {item.ownerName}{item.agency ? ` - ${item.agency}` : ''}
+                      {item.agency || 'Unknown'}{item.policyNumber ? ` · ${item.policyNumber}` : ''}
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', color: t.textMuted }}>

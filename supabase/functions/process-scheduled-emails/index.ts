@@ -339,37 +339,51 @@ async function runDailyRefresh(
       const defaultFromEmail = userSettings?.from_email || null
       const defaultFromName = userSettings?.from_name || null
 
-      // Get accounts that match base criteria (paginated for large datasets)
-      // Only include accounts with valid email validation status
-      let accountsQuery = supabase
-        .from('accounts')
-        .select('*', { count: 'exact' })
-        .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
-        // Schedule regardless of validation status - emails are validated ~24h
-        // before send (and again just-in-time at send). Only skip addresses
-        // already known to be invalid.
-        .or('email_validation_status.is.null,email_validation_status.neq.invalid')
-        .order('account_unique_id')  // Consistent ordering for pagination
-        .range(accountOffset, accountOffset + MAX_ACCOUNTS_PER_REFRESH - 1)
+      // Load the owner's whole book, one page at a time. A single page used to
+      // be fetched per run, which silently ignored every account past the
+      // first MAX_ACCOUNTS_PER_REFRESH rows (sorted by id) for large books;
+      // the hourly cron never continued from nextOffset.
+      // Schedule regardless of validation status - emails are validated ~24h
+      // before send (and again just-in-time at send). Only skip addresses
+      // already known to be invalid.
+      const accounts: any[] = []
+      let pageStart = accountOffset
+      let pagesTruncated = false
+      while (true) {
+        let pageQuery = supabase
+          .from('accounts')
+          .select('*')
+          .or('person_has_opted_out_of_email.is.null,person_has_opted_out_of_email.eq.false')
+          .or('email_validation_status.is.null,email_validation_status.neq.invalid')
+          .order('account_unique_id')  // Consistent ordering for pagination
+          .range(pageStart, pageStart + MAX_ACCOUNTS_PER_REFRESH - 1)
 
-      // Only filter by owner if automation has an owner (not a system default)
-      if (automation.owner_id) {
-        accountsQuery = accountsQuery.eq('owner_id', automation.owner_id)
+        // Only filter by owner if automation has an owner (not a system default)
+        if (automation.owner_id) {
+          pageQuery = pageQuery.eq('owner_id', automation.owner_id)
+        }
+
+        const { data: page, error: pageError } = await pageQuery
+        if (pageError) {
+          errors.push(`[${automation.name}] accounts page at ${pageStart} failed: ${pageError.message}`)
+          break
+        }
+        accounts.push(...(page || []))
+        if (!page || page.length < MAX_ACCOUNTS_PER_REFRESH) break
+        pageStart += MAX_ACCOUNTS_PER_REFRESH
+
+        // Out of time mid-book: keep what we have and let the caller know
+        // where to resume rather than scheduling from a partial audience twice.
+        if (Date.now() - startTime > budgetMs) {
+          pagesTruncated = true
+          hasMore = true
+          nextOffset = pageStart
+          break
+        }
       }
 
-      const { data: accounts, count: totalAccounts } = await accountsQuery
-
-      if (!accounts || accounts.length === 0) continue
-
-      // Check if there are more accounts to process in subsequent calls
-      const processedUpTo = accountOffset + accounts.length
-      if (totalAccounts && processedUpTo < totalAccounts) {
-        hasMore = true
-        nextOffset = processedUpTo
-        console.log(`[${automation.name}] Processing accounts ${accountOffset + 1}-${processedUpTo} of ${totalAccounts} (has more: true)`)
-      } else {
-        console.log(`[${automation.name}] Processing accounts ${accountOffset + 1}-${processedUpTo} of ${totalAccounts || accounts.length} (final batch)`)
-      }
+      if (accounts.length === 0) continue
+      console.log(`[${automation.name}] ${accounts.length} account(s) loaded from offset ${accountOffset}${pagesTruncated ? ' (budget reached, book truncated)' : ''}`)
 
       // Get policies for these accounts (needed for date-based and policy type filters)
       // Batch the query to avoid URL length limits (max ~100 IDs per query)
@@ -1906,40 +1920,19 @@ async function sendEmailViaSendGrid(
   const domainPart = fromEmail.split('@')[1] || 'isgmarketing.com'
   const customMessageId = `<isg-${emailLogId}-${Date.now()}@${domainPart}>`
 
-  // Check if sender has OAuth connected for inbox injection
-  // If yes, use tracking reply address (mailbox-replies.com)
-  // If no, use sender's actual email (normal flow, no tracking)
+  // Route replies through the tracking address whenever REPLY_DOMAIN is
+  // configured, regardless of OAuth status. The inbound-parse function
+  // injects captured replies into the sender's inbox via OAuth when
+  // connected, and falls back to forwarding via SendGrid to users.email
+  // otherwise — so replies are always captured without being lost.
   let replyToAddress = fromEmail
   let useTrackingReply = false
   const replyDomain = Deno.env.get('REPLY_DOMAIN')
 
   if (replyDomain) {
-    // OAuth connections are stored at agency level (profile_name)
-    // First get the user's profile_name from the users table
-    const { data: userData } = await supabase
-      .from('users')
-      .select('profile_name')
-      .eq('user_unique_id', email.owner_id)
-      .single()
-
-    const agencyId = userData?.profile_name
-
-    if (agencyId) {
-      const { data: oauthConn } = await supabase
-        .from('email_provider_connections')
-        .select('id')
-        .eq('agency_id', agencyId)
-        .eq('status', 'active')
-        .limit(1)
-
-      if (oauthConn && oauthConn.length > 0) {
-        // OAuth connected: use tracking reply address for inbox injection
-        replyToAddress = `reply-${emailLogId}@${replyDomain}`
-        useTrackingReply = true
-        console.log(`Using tracking reply address: ${replyToAddress} (agency: ${agencyId})`)
-      }
-    }
-    // No OAuth: keep replyToAddress as fromEmail (normal flow)
+    replyToAddress = `reply-${emailLogId}@${replyDomain}`
+    useTrackingReply = true
+    console.log(`Using tracking reply address: ${replyToAddress}`)
   }
 
   // Dry run mode if no API key

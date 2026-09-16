@@ -444,6 +444,12 @@ describe('moveToNextAllowedDay', () => {
 // ============================================================================
 
 describe('applyMergeFields', () => {
+  it('resolves dotted {{ account.<column> }} tags, falling back to derived names', () => {
+    const acct = { name: 'Jordan Smith', billing_city: 'Tulsa' }
+    expect(applyMergeFields('Hi {{ account.primary_contact_first_name }} of {{account.BILLING_CITY}}{{ account.phone }}', { to_email: 'j@x.test' }, acct))
+      .toBe('Hi Jordan of Tulsa')
+  })
+
   const account = {
     name: 'Jordan Smith',
     person_email: 'jordan@example.com',

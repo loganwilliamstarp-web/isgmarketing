@@ -70,7 +70,7 @@ const FeedbackPage = () => {
 
   // Generate star display
   const renderStars = () => {
-    if (rating <= 0) return '⭐';
+    if (rating <= 0) return '☆';
     return (
       <span>
         {'★'.repeat(rating)}

@@ -23,6 +23,7 @@ const WorkflowBuilderPage = lazy(() => import('./pages/WorkflowBuilderPage'));
 const MassEmailPage = lazy(() => import('./pages/MassEmailPage'));
 const KnowledgeCenterPage = lazy(() => import('./pages/KnowledgeCenterPage'));
 const ScheduledEmailsPage = lazy(() => import('./pages/ScheduledEmailsPage'));
+const RepliesPage = lazy(() => import('./pages/RepliesPage'));
 const EmailActivityPage = lazy(() => import('./pages/EmailActivityPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
@@ -338,7 +339,7 @@ const ImpersonationPicker = ({ t }) => {
                         justifyContent: 'center',
                         fontSize: '14px',
                         flexShrink: 0,
-                      }}>👤</div>
+                      }}>{userName.charAt(0).toUpperCase()}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           fontSize: '14px',
@@ -462,13 +463,14 @@ const AppLayout = () => {
 
   // Navigation items with proper URLs
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', path: `/${userId}/dashboard` },
-    { id: 'reports', label: 'Reports', icon: '📈', path: `/${userId}/reports` },
-    { id: 'automations', label: 'Automations', icon: '⚡', path: `/${userId}/automations` },
-    { id: 'templates', label: 'Templates', icon: '📝', path: `/${userId}/templates` },
-    { id: 'mass-email', label: 'Mass Email', icon: '📧', path: `/${userId}/mass-email` },
-    { id: 'accounts', label: 'Accounts', icon: '👥', path: `/${userId}/accounts` },
-    { id: 'settings', label: 'Settings', icon: '⚙️', path: `/${userId}/settings` },
+    { id: 'dashboard', label: 'Dashboard', path: `/${userId}/dashboard` },
+    { id: 'reports', label: 'Reports', path: `/${userId}/reports` },
+    { id: 'automations', label: 'Automations', path: `/${userId}/automations` },
+    { id: 'templates', label: 'Templates', path: `/${userId}/templates` },
+    { id: 'mass-email', label: 'Mass Email', path: `/${userId}/mass-email` },
+    { id: 'replies', label: 'Replies', path: `/${userId}/replies` },
+    { id: 'accounts', label: 'Accounts', path: `/${userId}/accounts` },
+    { id: 'settings', label: 'Settings', path: `/${userId}/settings` },
   ];
 
   const handleLogout = async () => {
@@ -537,19 +539,6 @@ const AppLayout = () => {
               borderBottom: `1px solid ${t.border}`
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  backgroundColor: t.primary,
-                  borderRadius: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontSize: '18px'
-                }}>
-                  📧
-                </div>
                 <div>
                   <div style={{ fontWeight: '700', fontSize: '14px', color: t.text }}>Email Automation</div>
                   <div style={{ fontSize: '11px', color: t.textMuted }}>Marketing System</div>
@@ -584,7 +573,7 @@ const AppLayout = () => {
                     textDecoration: 'none'
                   }}
                 >
-                  <span>{item.icon}</span> {item.label}
+                  {item.label}
                 </Link>
               ))}
 
@@ -612,7 +601,7 @@ const AppLayout = () => {
                     marginBottom: '2px'
                   }}
                 >
-                  <span>📊</span> Master Dashboard
+                  Master Dashboard
                   <span style={{
                     marginLeft: 'auto',
                     padding: '2px 8px',
@@ -642,7 +631,7 @@ const AppLayout = () => {
                   textDecoration: 'none'
                 }}
               >
-                <span>📈</span> Timeline
+                Timeline
                 <span style={{
                   marginLeft: 'auto',
                   padding: '2px 8px',
@@ -680,7 +669,7 @@ const AppLayout = () => {
                   marginBottom: '2px',
                 }}
               >
-                <span>📚</span> Knowledge Center
+                Knowledge Center
               </Link>
             </div>
 
@@ -704,7 +693,7 @@ const AppLayout = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '14px'
-                }}>👤</div>
+                }}>{((impersonating.active ? currentUser.name : user?.name) || '').charAt(0).toUpperCase()}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: '500', color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {impersonating.active ? currentUser.name : user?.name}
@@ -731,7 +720,7 @@ const AppLayout = () => {
                   gap: '6px',
                 }}
               >
-                <span>🚪</span> Sign Out
+                Sign Out
               </button>
             </div>
           </div>
@@ -773,7 +762,7 @@ const AppLayout = () => {
                   gap: '6px'
                 }}
               >
-                {isDark ? '☀️ Light' : '🌙 Dark'}
+                {isDark ? 'Light' : 'Dark'}
               </button>
             </div>
 
@@ -789,6 +778,7 @@ const AppLayout = () => {
                   <Route path="automations/:automationId" element={<WorkflowBuilderPage t={t} />} />
                   <Route path="templates" element={<TemplatesPage t={t} />} />
                   <Route path="mass-email" element={<MassEmailPage t={t} />} />
+                  <Route path="replies" element={<RepliesPage t={t} />} />
                   <Route path="scheduled-emails" element={<ScheduledEmailsPage t={t} />} />
                   <Route path="email-activity" element={<EmailActivityPage t={t} />} />
                   <Route path="accounts" element={<ClientsPage t={t} />} />
@@ -835,7 +825,6 @@ const RedirectToAuth = () => {
       fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '32px', marginBottom: '16px' }}>⏳</div>
         <div>Loading...</div>
       </div>
     </div>

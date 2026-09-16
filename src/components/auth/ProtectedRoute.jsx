@@ -75,10 +75,6 @@ const ProtectedRoute = ({ children }) => {
             maxWidth: '520px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '32px' }}>
-              <div style={{
-                width: '48px', height: '48px', backgroundColor: '#3b82f6', borderRadius: '12px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '24px',
-              }}>📧</div>
               <div style={{ fontWeight: '700', fontSize: '20px', color: '#1e293b' }}>Email Automation</div>
             </div>
 

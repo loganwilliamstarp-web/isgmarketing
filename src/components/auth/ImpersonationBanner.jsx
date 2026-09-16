@@ -101,7 +101,6 @@ const ImpersonationBanner = ({ topOffset = '0px' }) => {
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '16px' }}>👁️</span>
           Viewing as: <strong>{impersonating.targetUserName}</strong>
         </span>
         <button
@@ -145,7 +144,6 @@ const ImpersonationBanner = ({ topOffset = '0px' }) => {
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>⚠️</span>
             {domainWarning.hasAnyVerifiedDomain ? (
               <>
                 No verified sender domain matching <strong>{domainWarning.domain}</strong>

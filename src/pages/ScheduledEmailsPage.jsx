@@ -494,7 +494,6 @@ const ScheduledEmailsPage = ({ t }) => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
                     <span style={{ fontSize: '11px', color: t.textMuted, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>🕐</span>
                       {new Date(email.scheduled_for).toLocaleString('en-US', {
                         weekday: 'short',
                         month: 'short',
@@ -625,7 +624,6 @@ const ScheduledEmailsPage = ({ t }) => {
             color: t.textMuted,
             fontSize: '14px'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
             <div style={{ fontWeight: '500', marginBottom: '4px' }}>No scheduled emails</div>
             <div>
               {statusFilter === 'Pending'

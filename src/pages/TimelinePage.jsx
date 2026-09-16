@@ -68,7 +68,6 @@ const TimelinePage = ({ t }) => {
         borderRadius: '12px',
         border: `1px solid ${t.border}`
       }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
         <h3 style={{ color: t.text, marginBottom: '8px' }}>Failed to load timeline</h3>
         <p style={{ color: t.textSecondary }}>{error.message}</p>
       </div>

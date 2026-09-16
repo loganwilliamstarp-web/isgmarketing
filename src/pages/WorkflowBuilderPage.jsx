@@ -192,7 +192,6 @@ const WorkflowBuilderPage = ({ t }) => {
         height: 'calc(100vh - 100px)',
         gap: '16px'
       }}>
-        <div style={{ fontSize: '32px' }}>⏳</div>
         <div style={{ color: t?.textSecondary || '#a1a1aa' }}>Loading automation...</div>
       </div>
     );
@@ -209,7 +208,6 @@ const WorkflowBuilderPage = ({ t }) => {
         height: 'calc(100vh - 100px)',
         gap: '16px'
       }}>
-        <div style={{ fontSize: '48px' }}>😕</div>
         <h2 style={{ color: t?.text || '#fafafa', margin: 0 }}>Automation Not Found</h2>
         <p style={{ color: t?.textSecondary || '#a1a1aa' }}>
           We couldn't find the automation you're looking for.

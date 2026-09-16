@@ -26,10 +26,6 @@ const TrialExpiredBanner = () => {
       fontSize: '14px',
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
     },
-    icon: {
-      fontSize: '16px',
-      flexShrink: 0,
-    },
     text: {
       fontWeight: '500',
     },
@@ -40,7 +36,6 @@ const TrialExpiredBanner = () => {
 
   return (
     <div style={styles.container}>
-      <span style={styles.icon}>⚠️</span>
       <span style={styles.text}>
         <span style={styles.highlight}>Your trial has expired.</span>{' '}
         Contact your administrator to activate your account and continue using all features.

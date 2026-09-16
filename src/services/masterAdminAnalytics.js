@@ -865,38 +865,85 @@ export const masterAdminAnalyticsService = {
   },
 
   /**
-   * Get sold account analytics — email-driven sales platform-wide.
-   * Sold = a new-business policy effective in the last 30 days where the
-   * customer received a (non-bounced) email in the 90 days up to the policy
-   * start. Same definition as the per-user Pipeline report; computed by the
-   * get_email_driven_sold_master RPC so it isn't capped at 1000 rows.
+   * Get system-wide "email-driven sales" analytics for the period.
+   *
+   * Mirrors ReportsPage's getPipelineReport, but across ALL owners: a "sold"
+   * person is someone with a new-business policy effective in the window whose
+   * purchase was preceded by a marketing email within a 90-day attribution
+   * lookback. Computed entirely server-side via SECURITY DEFINER RPCs to avoid
+   * PostgREST's 1000-row cap (the old client-side version pulled every customer
+   * account and batched email_logs lookups, both of which truncated at 1000 rows
+   * and undercounted the system-wide total).
+   *
+   * @param {Object} options - { days } size of the trailing window (default 30)
    */
-  async getSoldAccounts() {
-    const now = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  async getSoldAccounts(options = {}) {
+    const { days = 30 } = options;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const endDate = new Date();
 
-    const [soldResult, customerCount, priorCustomerCount] = await Promise.all([
-      supabase.rpc('get_email_driven_sold_master', {
-        p_start_date: thirtyDaysAgo.toISOString().split('T')[0],
-        p_end_date: now.toISOString().split('T')[0]
+    const [salesAgg, byAgency, recentSales, priorCustomers] = await Promise.all([
+      // Aggregate email-driven new-business counts for the window (single row).
+      supabase.rpc('get_email_driven_sales_all', {
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString()
       }),
-      supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'customer'),
-      supabase.from('accounts').select('*', { count: 'exact', head: true }).ilike('account_status', 'prior_customer')
+
+      // Email-driven new-business people grouped by agency (for the "By Agency" panel).
+      supabase.rpc('get_email_driven_sales_by_agency_all', {
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString()
+      }),
+
+      // Recent email-driven new-business sales for the list (newest first).
+      supabase.rpc('get_recent_email_driven_sales_all', {
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString(),
+        p_limit: 20
+      }),
+
+      // Prior-customer count (win-back). count is exact and ignores the 1000-row
+      // data cap, so a head-only count query is safe here.
+      supabase
+        .from('accounts')
+        .select('*', { count: 'exact', head: true })
+        .ilike('account_status', 'prior_customer')
     ]);
 
-    if (soldResult.error) {
-      console.error('get_email_driven_sold_master RPC failed:', soldResult.error);
-    }
-    const soldRow = (soldResult.data && soldResult.data[0]) || { total_sold: 0, by_agency: [], recent: [] };
+    const sales = salesAgg.data?.[0] || {};
+    const emailDrivenPeople = Number(sales.email_driven_people) || 0;
+    const newBusinessPeople = Number(sales.new_business_people) || 0;
+    const emailDrivenPolicies = Number(sales.email_driven_policies) || 0;
+    const newBusinessPolicies = Number(sales.new_business_policies) || 0;
+
+    const agencyBreakdown = (byAgency.data || []).map(a => ({
+      name: a.agency || 'Unknown',
+      count: Number(a.email_driven_people) || 0
+    }));
+
+    const recentList = (recentSales.data || []).map(c => ({
+      name: c.name,
+      email: c.person_email,
+      agency: c.agency,
+      policyNumber: c.policy_number,
+      createdAt: c.effective_date
+    }));
 
     return {
-      totalCustomers: customerCount.count || 0,
-      totalSold: Number(soldRow.total_sold) || 0,
-      totalPriorCustomers: priorCustomerCount.count || 0,
-      conversionNote: 'New-business policies (last 30 days) preceded by a marketing email within 90 days',
-      agencyBreakdown: soldRow.by_agency || [],
-      recentList: soldRow.recent || []
+      days,
+      // Email-driven new business in the selected period.
+      emailDrivenPeople,
+      newBusinessPeople,
+      emailDrivenPolicies,
+      newBusinessPolicies,
+      // Kept for backward compatibility with existing card bindings.
+      totalSold: emailDrivenPeople,        // marketing-touched new-business clients
+      totalCustomers: newBusinessPeople,   // all new-business clients in period (denominator)
+      totalPriorCustomers: priorCustomers.count || 0,
+      conversionNote: 'New-business clients whose purchase was preceded by a marketing email',
+      agencyBreakdown,
+      recentList
     };
   },
 

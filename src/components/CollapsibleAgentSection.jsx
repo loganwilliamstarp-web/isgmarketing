@@ -106,7 +106,7 @@ const CollapsibleAgentSection = ({
             flexShrink: 0
           }}
         >
-          {isCurrentUser ? '👤' : '👤'}
+          {(agentName || '').charAt(0).toUpperCase()}
         </div>
 
         {/* Agent Info */}

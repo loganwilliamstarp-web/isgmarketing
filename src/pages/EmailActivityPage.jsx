@@ -74,6 +74,13 @@ const fixEncodingIssues = (content) => {
   return result;
 };
 
+// Detect content that is actually HTML markup (vs plain text) so it can be
+// rendered instead of displayed as source
+const looksLikeHtml = (content) => {
+  if (!content) return false;
+  return /<\s*(html|body|div|p|br|table|span|a|img|font|head|meta)\b[^>]*>/i.test(content);
+};
+
 // Activity Preview Modal
 const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
   const [emailData, setEmailData] = React.useState(null);
@@ -158,6 +165,20 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
     for (const [field, value] of Object.entries(mergeFields)) {
       result = result.replace(new RegExp(field.replace(/[{}]/g, '\\$&'), 'gi'), value);
     }
+
+    // Salesforce-style dotted account fields, e.g. {{ account.primary_contact_first_name }} —
+    // mirrors the resolver in the send functions so previews match what actually goes out
+    const accountFallbacks = {
+      primary_contact_first_name: derivedFirstName,
+      primary_contact_last_name: derivedLastName,
+    };
+    result = result.replace(/\{\{\s*account\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, col) => {
+      const key = col.toLowerCase();
+      const raw = acc?.[key];
+      if (raw === null || raw === undefined || raw === '') return accountFallbacks[key] || '';
+      return String(raw);
+    });
+
     return result;
   };
 
@@ -281,6 +302,10 @@ const ActivityPreviewModal = ({ activity, theme: t, onClose }) => {
             <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}>
               {activity.body_html ? (
                 <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fixEncodingIssues(activity.body_html)) }} />
+              ) : looksLikeHtml(activity.snippet || activity.body_text) ? (
+                // Some replies arrive with HTML markup in the text part (raw-MIME
+                // fallback parsing) - render it instead of showing tag soup
+                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fixEncodingIssues(activity.snippet || activity.body_text)) }} />
               ) : (
                 <div style={{ whiteSpace: 'pre-wrap' }}>{fixEncodingIssues(activity.snippet || activity.body_text)}</div>
               )}
@@ -432,10 +457,10 @@ const EmailActivityPage = ({ t }) => {
   const typeOptions = ['All', 'Sent', 'Opened', 'Clicked', 'Replied'];
 
   const typeConfig = {
-    sent: { icon: '📤', label: 'Sent', color: t.success },
-    opened: { icon: '📬', label: 'Opened', color: t.primary },
-    clicked: { icon: '🔗', label: 'Clicked', color: t.warning },
-    replied: { icon: '💬', label: 'Replied', color: '#8b5cf6' }
+    sent: { label: 'Sent', color: t.success },
+    opened: { label: 'Opened', color: t.primary },
+    clicked: { label: 'Clicked', color: t.warning },
+    replied: { label: 'Replied', color: '#8b5cf6' }
   };
 
   // Activities are already filtered server-side when a type is selected
@@ -504,7 +529,6 @@ const EmailActivityPage = ({ t }) => {
               gap: '6px'
             }}
           >
-            {type !== 'All' && <span>{typeConfig[type.toLowerCase()]?.icon}</span>}
             {type}
           </button>
         ))}
@@ -530,7 +554,7 @@ const EmailActivityPage = ({ t }) => {
         ) : filteredActivities?.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {filteredActivities.map((activity, index) => {
-              const config = typeConfig[activity.type] || { icon: '📧', label: activity.type, color: t.textSecondary };
+              const config = typeConfig[activity.type] || { label: activity.type, color: t.textSecondary };
               const canPreview = activity.type === 'sent' || activity.type === 'replied';
 
               return (
@@ -547,7 +571,6 @@ const EmailActivityPage = ({ t }) => {
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '16px' }}>{config.icon}</span>
                       <span style={{ fontSize: '12px', color: config.color, fontWeight: '500' }}>{config.label}</span>
                       <span style={{ fontSize: '11px', color: t.textMuted }}>
                         {new Date(activity.timestamp).toLocaleString('en-US', {
@@ -638,7 +661,6 @@ const EmailActivityPage = ({ t }) => {
                               gap: '6px'
                             }}
                           >
-                            <span style={{ fontSize: '10px' }}>🔗</span>
                             <a
                               href={click.url}
                               target="_blank"
@@ -721,7 +743,6 @@ const EmailActivityPage = ({ t }) => {
             color: t.textMuted,
             fontSize: '14px'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📭</div>
             <div style={{ fontWeight: '500', marginBottom: '4px' }}>No email activity</div>
             <div>
               {typeFilter === 'All'

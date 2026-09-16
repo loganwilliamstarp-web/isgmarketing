@@ -246,9 +246,9 @@ export function useMassEmailMutations() {
   });
 
   const scheduleBatch = useMutation({
-    mutationFn: ({ batchId, scheduledFor }) => {
+    mutationFn: ({ batchId, scheduledFor, options }) => {
       checkTrialAccess();
-      return massEmailsService.scheduleBatch(ownerIds, batchId, scheduledFor);
+      return massEmailsService.scheduleBatch(ownerIds, batchId, scheduledFor, options);
     },
     onSuccess: () => {
       invalidateMassEmails();

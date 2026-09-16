@@ -217,39 +217,19 @@ serve(async (req) => {
     const domainPart = senderEmail?.split('@')[1] || 'isgmarketing.com'
     const customMessageId = `<isg-${emailLog.id}-${Date.now()}@${domainPart}>`
 
-    // Check if sender has OAuth connected for inbox injection
-    // If yes, use tracking reply address (mailbox-replies.com)
-    // If no, use sender's actual email (normal flow, no tracking)
+    // Route replies through the tracking address whenever REPLY_DOMAIN is
+    // configured, regardless of OAuth status. The inbound-parse function
+    // injects captured replies into the sender's inbox via OAuth when
+    // connected, and falls back to forwarding via SendGrid to users.email
+    // otherwise — so replies are always captured without being lost.
     let replyToAddress = senderEmail
     let useTrackingReply = false
     const replyDomain = Deno.env.get('REPLY_DOMAIN')
 
     if (replyDomain) {
-      // OAuth connections are stored at agency level (profile_name)
-      // First get the user's profile_name from the users table
-      const { data: userData } = await supabaseClient
-        .from('users')
-        .select('profile_name')
-        .eq('user_unique_id', email.owner_id)
-        .single()
-
-      const agencyId = userData?.profile_name
-
-      if (agencyId) {
-        const { data: oauthConn } = await supabaseClient
-          .from('email_provider_connections')
-          .select('id')
-          .eq('agency_id', agencyId)
-          .eq('status', 'active')
-          .limit(1)
-
-        if (oauthConn && oauthConn.length > 0) {
-          // OAuth connected: use tracking reply address for inbox injection
-          replyToAddress = `reply-${emailLog.id}@${replyDomain}`
-          useTrackingReply = true
-          console.log(`Using tracking reply address: ${replyToAddress} (agency: ${agencyId})`)
-        }
-      }
+      replyToAddress = `reply-${emailLog.id}@${replyDomain}`
+      useTrackingReply = true
+      console.log(`Using tracking reply address: ${replyToAddress}`)
     }
 
     // Dry run if no API key
@@ -467,6 +447,20 @@ function applyMergeFields(content: string, email: any, account: any, emailLogId?
     const pattern = `\\{\\{\\s*${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`
     result = result.replace(new RegExp(pattern, 'gi'), value)
   }
+
+  // Generic Salesforce-style dotted account fields, e.g. {{ account.primary_contact_first_name }}.
+  // Resolves any {{ account.<column> }} against the account object so templates authored with
+  // dotted paths render without enumerating every column. Falls back to the derived name when blank.
+  const accountFallbacks: Record<string, string> = {
+    primary_contact_first_name: derivedFirstName,
+    primary_contact_last_name: derivedLastName,
+  }
+  result = result.replace(/\{\{\s*account\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, col: string) => {
+    const key = col.toLowerCase()
+    const raw = account?.[key]
+    if (raw === null || raw === undefined || raw === '') return accountFallbacks[key] || ''
+    return String(raw)
+  })
 
   return result
 }

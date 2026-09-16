@@ -44,16 +44,6 @@ const StatusBadge = ({ status, theme: t }) => {
 
 // Email event badge
 const EmailEventBadge = ({ event, theme: t }) => {
-  const icons = {
-    sent: '📤',
-    delivered: '✅',
-    opened: '📬',
-    clicked: '🖱️',
-    replied: null, // Use text only for replied
-    bounced: '❌',
-    unsubscribed: '🚫'
-  };
-
   return (
     <span style={{
       display: 'inline-flex',
@@ -65,7 +55,7 @@ const EmailEventBadge = ({ event, theme: t }) => {
       fontSize: '11px',
       color: t.textSecondary
     }}>
-      {icons[event] ? `${icons[event]} ` : ''}{event}
+      {event}
     </span>
   );
 };
@@ -192,33 +182,8 @@ const EmailLogItem = ({ log, theme: t }) => (
 
 // Activity item - handles both old activity_log format and new email activity format
 const ActivityItem = ({ activity, theme: t }) => {
-  // Map activity types to icons
-  const icons = {
-    // New email activity format (type)
-    sent: '📤',
-    opened: '📬',
-    clicked: '🖱️',
-    replied: null,
-    // Old activity_log format (event_type)
-    email_sent: '📤',
-    email_opened: '📬',
-    email_clicked: '🖱️',
-    email_reply_received: null,
-    enrollment_started: '▶️',
-    enrollment_completed: '✅',
-    enrollment_paused: '⏸️',
-    note_added: '📝',
-  };
-
-  const textLabels = {
-    replied: 'RE',
-    email_reply_received: 'RE'
-  };
-
   // Support both type (new) and event_type (old) formats
   const activityType = activity.type || activity.event_type;
-  const icon = icons[activityType];
-  const textLabel = textLabels[activityType];
   const timestamp = activity.timestamp || activity.created_at;
 
   // Generate description based on activity type
@@ -241,20 +206,6 @@ const ActivityItem = ({ activity, theme: t }) => {
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '12px 0' }}>
-      <div style={{
-        width: '32px',
-        height: '32px',
-        backgroundColor: t.bgHover,
-        borderRadius: '8px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: textLabel ? '11px' : '14px',
-        fontWeight: textLabel ? '600' : 'normal',
-        color: textLabel ? t.textSecondary : 'inherit'
-      }}>
-        {icon || textLabel || '📌'}
-      </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '13px', color: t.text }}>
           {getDescription()}
@@ -307,7 +258,7 @@ const EnrollmentCard = ({ enrollment, theme: t, userId }) => (
         fontSize: '12px',
         color: t.textSecondary
       }}>
-        📍 Current step: {enrollment.current_node_name || enrollment.current_node_id}
+        Current step: {enrollment.current_node_name || enrollment.current_node_id}
       </div>
     )}
   </div>
@@ -429,7 +380,6 @@ const ClientProfilePage = ({ t }) => {
         padding: '60px 20px',
         textAlign: 'center'
       }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>😕</div>
         <h2 style={{ color: t.text, marginBottom: '8px' }}>Account Not Found</h2>
         <p style={{ color: t.textSecondary, marginBottom: '24px' }}>
           We couldn't find the account you're looking for.
@@ -539,7 +489,7 @@ const ClientProfilePage = ({ t }) => {
                 gap: '6px'
               }}
             >
-              📝 Add Note
+              Add Note
             </button>
             <button
               type="button"
@@ -562,7 +512,7 @@ const ClientProfilePage = ({ t }) => {
                 gap: '6px'
               }}
             >
-              📧 Send Email
+              Send Email
             </button>
           </div>
         </div>
@@ -581,7 +531,6 @@ const ClientProfilePage = ({ t }) => {
       }}>
         {(client.person_email || client.email) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>📧</span>
             <a href={`mailto:${client.person_email || client.email}`} style={{ color: t.primary, textDecoration: 'none', fontSize: '14px' }}>
               {client.person_email || client.email}
             </a>
@@ -589,7 +538,6 @@ const ClientProfilePage = ({ t }) => {
         )}
         {client.phone && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>📱</span>
             <a href={`tel:${client.phone}`} style={{ color: t.text, textDecoration: 'none', fontSize: '14px' }}>
               {client.phone}
             </a>
@@ -597,7 +545,6 @@ const ClientProfilePage = ({ t }) => {
         )}
         {(client.billing_street || client.billing_city || client.billing_state) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>📍</span>
             <span style={{ color: t.textSecondary, fontSize: '14px' }}>
               {[
                 client.billing_street,
@@ -609,7 +556,6 @@ const ClientProfilePage = ({ t }) => {
         )}
         {client.primary_contact_first_name && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>👤</span>
             <span style={{ color: t.textSecondary, fontSize: '14px' }}>
               {client.primary_contact_first_name} {client.primary_contact_last_name}
             </span>
@@ -628,7 +574,7 @@ const ClientProfilePage = ({ t }) => {
                 fontSize: '12px',
                 fontWeight: '500'
               }}>
-                🚫 Unsubscribed
+                Unsubscribed
               </span>
             )}
             <button

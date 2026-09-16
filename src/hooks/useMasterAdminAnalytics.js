@@ -140,12 +140,12 @@ export function useQuoteOpportunities() {
 }
 
 /**
- * Get sold account analytics (emailed accounts that became customers)
+ * Get system-wide email-driven sales analytics for a trailing window (days)
  */
-export function useSoldAccounts() {
+export function useSoldAccounts(days = 30) {
   return useQuery({
-    queryKey: ['masterAdmin', 'soldAccounts'],
-    queryFn: () => masterAdminAnalyticsService.getSoldAccounts(),
+    queryKey: ['masterAdmin', 'soldAccounts', days],
+    queryFn: () => masterAdminAnalyticsService.getSoldAccounts({ days }),
     staleTime: 120000
   });
 }
