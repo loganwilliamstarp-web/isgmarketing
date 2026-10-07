@@ -6,9 +6,9 @@
 // Cached per tenant for the life of the isolate; refreshed a minute early.
 const tokenCache = new Map<string, { token: string; expiresAt: number }>()
 
-export async function getAppOnlyGraphToken(tenant: string): Promise<string> {
+export async function getAppOnlyGraphToken(tenant: string, { fresh = false } = {}): Promise<string> {
   const cached = tokenCache.get(tenant)
-  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token
+  if (!fresh && cached && cached.expiresAt > Date.now() + 60_000) return cached.token
 
   const clientId = Deno.env.get('MICROSOFT_CLIENT_ID')
   const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET')
@@ -35,18 +35,51 @@ export async function getAppOnlyGraphToken(tenant: string): Promise<string> {
   return data.access_token
 }
 
+// Application roles carried by an access token (the `roles` claim).
+function tokenRoles(token: string): string[] {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
+    const roles = JSON.parse(atob(padded)).roles
+    return Array.isArray(roles) ? roles : []
+  } catch {
+    return []
+  }
+}
+
+const MAIL_ROLES = ['Mail.ReadWrite', 'Mail.ReadWrite.All']
+
 /**
  * Confirm the app-only token can open this mailbox's inbox. Fails when the
  * application permission is missing or the mailbox isn't in the tenant.
+ *
+ * Runs right after admin consent, before the new role assignment has always
+ * propagated, so it fetches fresh tokens (never the cache) and retries a few
+ * times while the token is still missing the Mail role.
  */
 export async function verifyMailboxAccess(tenant: string, mailbox: string): Promise<void> {
-  const token = await getAppOnlyGraphToken(tenant)
-  const response = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/mailFolders/inbox?$select=id`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`mailbox check failed for ${mailbox}: ${response.status} - ${errorText.slice(0, 300)}`)
+  const attempts = 4
+  let lastError = ''
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const token = await getAppOnlyGraphToken(tenant, { fresh: true })
+    const roles = tokenRoles(token)
+    const hasMailRole = roles.some((r) => MAIL_ROLES.includes(r))
+
+    if (hasMailRole) {
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/mailFolders/inbox?$select=id`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (response.ok) return
+      const errorText = await response.text()
+      // Token has the role but Exchange still refuses: an application access
+      // policy / RBAC scope excludes this mailbox, or it isn't in the tenant.
+      throw new Error(`mailbox check failed for ${mailbox}: ${response.status} - ${errorText.slice(0, 300)}`)
+    }
+
+    lastError = `app-only token has no Mail.ReadWrite application role (roles: ${roles.join(', ') || 'none'})`
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, 5000))
   }
+  tokenCache.delete(tenant)
+  throw new Error(`mailbox check failed for ${mailbox}: ${lastError}`)
 }

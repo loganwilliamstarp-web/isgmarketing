@@ -293,7 +293,9 @@ async function handleAdminConsentCallback(url: URL, supabase: any): Promise<Resp
     }
     return finish({
       oauth: 'error',
-      error: 'Approved, but the app could not open your inbox. Make sure the app registration has the Microsoft Graph application permission Mail.ReadWrite, then try again.',
+      error: String(err.message).includes('no Mail.ReadWrite application role')
+        ? 'Approved, but Microsoft did not grant mailbox access. In Azure > App registrations > API permissions, add Microsoft Graph > Application permissions > Mail.ReadWrite, then click Approve again.'
+        : `Approved, but Exchange refused access to ${mailbox}. Check for an Exchange application access policy or RBAC scope that excludes this mailbox, then try again.`,
     })
   }
 
