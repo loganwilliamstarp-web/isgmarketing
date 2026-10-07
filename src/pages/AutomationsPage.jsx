@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterAutomations, useMasterAutomationMutations } from '../hooks/useAdmin';
 import CollapsibleAgentSection, { AgentGroupControls, groupItemsByOwner } from '../components/CollapsibleAgentSection';
+import ShareWithAgencyModal from '../components/ShareWithAgencyModal';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -355,7 +356,7 @@ const MasterAutomationRow = ({ automation, onEdit, onSync, syncing, theme: t }) 
 };
 
 // Automation row component
-const AutomationRow = ({ automation, onEdit, onToggle, onDelete, hasVerifiedDomain, theme: t }) => {
+const AutomationRow = ({ automation, onEdit, onToggle, onDelete, onShare, hasVerifiedDomain, theme: t }) => {
   const stats = automation.stats || {};
   const isActive = automation.status === 'active';
   // Can only activate if has verified domain (can always pause)
@@ -460,6 +461,23 @@ const AutomationRow = ({ automation, onEdit, onToggle, onDelete, hasVerifiedDoma
           >
             Edit
           </button>
+          {onShare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onShare(automation); }}
+              title="Copy this automation to other agents in the agency"
+              style={{
+                padding: '6px 12px',
+                backgroundColor: t.bgHover,
+                border: `1px solid ${t.border}`,
+                borderRadius: '6px',
+                color: t.textSecondary,
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Share
+            </button>
+          )}
           {canDelete && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(automation.id, automation.name); }}
@@ -490,6 +508,7 @@ const AutomationsPage = ({ t }) => {
   const [syncingKey, setSyncingKey] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [expandAllTrigger, setExpandAllTrigger] = useState(null); // null, 'expand', or 'collapse'
+  const [sharingAutomation, setSharingAutomation] = useState(null);
 
   // Check if admin is viewing multiple users (master view mode)
   const { isAdmin, isAgencyAdmin, user } = useAuth();
@@ -498,6 +517,16 @@ const AutomationsPage = ({ t }) => {
   const showMasterView = isAdmin && isMultiOwner;
   // Agency admin viewing all agents gets grouped view
   const showAgencyGroupedView = !isAdmin && isAgencyAdmin && isMultiOwner;
+  // Agency admins (and master admins) can copy an automation to the owner's agency
+  const canShare = isAdmin || isAgencyAdmin;
+  const shareModal = sharingAutomation && (
+    <ShareWithAgencyModal
+      kind="automation"
+      item={sharingAutomation}
+      onClose={() => setSharingAutomation(null)}
+      theme={t}
+    />
+  );
 
   // Check for verified sender domains (only needed for user view)
   const { data: verifiedDomains, isLoading: loadingDomains } = useVerifiedSenderDomains();
@@ -769,6 +798,7 @@ const AutomationsPage = ({ t }) => {
 
     return (
       <div>
+        {shareModal}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
@@ -912,6 +942,7 @@ const AutomationsPage = ({ t }) => {
                     onEdit={handleEditAutomation}
                     onToggle={handleToggleAutomation}
                     onDelete={handleDeleteAutomation}
+                    onShare={canShare ? setSharingAutomation : undefined}
                     hasVerifiedDomain={hasVerifiedDomain}
                     theme={t}
                   />
@@ -945,6 +976,7 @@ const AutomationsPage = ({ t }) => {
   // USER VIEW - Regular user or admin impersonating
   return (
     <div>
+      {shareModal}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
@@ -1170,6 +1202,7 @@ const AutomationsPage = ({ t }) => {
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
                       onDelete={handleDeleteAutomation}
+                      onShare={canShare ? setSharingAutomation : undefined}
                       hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />
@@ -1257,6 +1290,7 @@ const AutomationsPage = ({ t }) => {
                       onEdit={handleEditAutomation}
                       onToggle={handleToggleAutomation}
                       onDelete={handleDeleteAutomation}
+                      onShare={canShare ? setSharingAutomation : undefined}
                       hasVerifiedDomain={hasVerifiedDomain}
                       theme={t}
                     />

@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterTemplates, useMasterTemplateMutations } from '../hooks/useAdmin';
 import CollapsibleAgentSection, { AgentGroupControls, groupItemsByOwner } from '../components/CollapsibleAgentSection';
+import ShareWithAgencyModal from '../components/ShareWithAgencyModal';
 
 // Loading skeleton
 const Skeleton = ({ width = '100%', height = '20px' }) => (
@@ -1283,7 +1284,7 @@ const MasterTemplateCard = ({ template, onEdit, onSync, syncing, theme: t }) => 
 };
 
 // Template card component
-const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => {
+const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, onShare, theme: t }) => {
   const [showMenu, setShowMenu] = useState(false);
 
   const categoryColors = {
@@ -1368,6 +1369,24 @@ const TemplateCard = ({ template, onEdit, onDuplicate, onDelete, theme: t }) => 
               >
                 Duplicate
               </button>
+              {onShare && (
+                <button
+                  onClick={() => { onShare(template); setShowMenu(false); }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: t.text,
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    textAlign: 'left'
+                  }}
+                >
+                  Share with agency
+                </button>
+              )}
               <button
                 onClick={() => { onDelete(template.id); setShowMenu(false); }}
                 style={{
@@ -1468,6 +1487,7 @@ const TemplatesPage = ({ t }) => {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [syncingKey, setSyncingKey] = useState(null);
   const [expandAllTrigger, setExpandAllTrigger] = useState(null); // null, 'expand', or 'collapse'
+  const [sharingTemplate, setSharingTemplate] = useState(null);
 
   // Check if admin is viewing multiple users (master view mode)
   const { isAdmin, isAgencyAdmin, user } = useAuth();
@@ -1476,6 +1496,16 @@ const TemplatesPage = ({ t }) => {
   const showMasterView = isAdmin && isMultiOwner;
   // Agency admin viewing all agents gets grouped view
   const showAgencyGroupedView = !isAdmin && isAgencyAdmin && isMultiOwner;
+  // Agency admins (and master admins) can copy a template to the owner's agency
+  const canShare = isAdmin || isAgencyAdmin;
+  const shareModal = sharingTemplate && (
+    <ShareWithAgencyModal
+      kind="template"
+      item={sharingTemplate}
+      onClose={() => setSharingTemplate(null)}
+      theme={t}
+    />
+  );
 
   // Fetch master templates (for admin master view)
   const {
@@ -1805,6 +1835,7 @@ const TemplatesPage = ({ t }) => {
 
     return (
       <div>
+        {shareModal}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
@@ -1934,6 +1965,7 @@ const TemplatesPage = ({ t }) => {
                   template={template}
                   onEdit={handleEditTemplate}
                   onDuplicate={handleDuplicateTemplate}
+                  onShare={canShare ? setSharingTemplate : undefined}
                   onDelete={handleDeleteTemplate}
                   theme={t}
                 />
@@ -1979,6 +2011,7 @@ const TemplatesPage = ({ t }) => {
   // USER VIEW - Regular user or admin impersonating
   return (
     <div>
+      {shareModal}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '700', color: t.text, marginBottom: '4px' }}>
@@ -2106,6 +2139,7 @@ const TemplatesPage = ({ t }) => {
               template={template}
               onEdit={handleEditTemplate}
               onDuplicate={handleDuplicateTemplate}
+              onShare={canShare ? setSharingTemplate : undefined}
               onDelete={handleDeleteTemplate}
               theme={t}
             />
