@@ -97,6 +97,11 @@ const WorkflowBuilderPage = ({ t }) => {
       return;
     }
 
+    if (!data.name?.trim()) {
+      alert('Give this automation a name before saving.');
+      return;
+    }
+
     try {
       if (isNew) {
         const newAutomation = await createAutomation.mutateAsync(data);
@@ -263,14 +268,37 @@ const WorkflowBuilderPage = ({ t }) => {
           >
             ←
           </button>
-          <h1 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: t?.text || '#fafafa',
-            margin: 0
-          }}>
-            {isNew ? 'Create Automation' : isMasterEdit ? `Edit Master: ${effectiveAutomation?.name || 'Automation'}` : canEdit ? `Edit: ${effectiveAutomation?.name || 'Automation'}` : `View: ${effectiveAutomation?.name || 'Automation'}`}
-          </h1>
+          {canEdit && !isMasterEdit && !isDefaultAutomation ? (
+            // Custom automations are named here; there is no other name field.
+            <input
+              value={automationData.name}
+              onChange={(e) => setAutomationData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Name this automation"
+              aria-label="Automation name"
+              style={{
+                fontSize: '16px',
+                fontWeight: '600',
+                color: t?.text || '#fafafa',
+                backgroundColor: 'transparent',
+                border: `1px solid ${automationData.name.trim() ? 'transparent' : (t?.danger || '#ef4444')}`,
+                borderRadius: '6px',
+                padding: '4px 8px',
+                minWidth: '280px',
+                outline: 'none'
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = t?.primary || '#3b82f6'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = automationData.name.trim() ? 'transparent' : (t?.danger || '#ef4444'); }}
+            />
+          ) : (
+            <h1 style={{
+              fontSize: '16px',
+              fontWeight: '600',
+              color: t?.text || '#fafafa',
+              margin: 0
+            }}>
+              {isNew ? 'Create Automation' : isMasterEdit ? `Edit Master: ${effectiveAutomation?.name || 'Automation'}` : canEdit ? `Edit: ${effectiveAutomation?.name || 'Automation'}` : `View: ${effectiveAutomation?.name || 'Automation'}`}
+            </h1>
+          )}
           {/* Master badge for master automations */}
           {isMasterEdit && (
             <span style={{

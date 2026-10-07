@@ -379,7 +379,7 @@ const AutomationRow = ({ automation, onEdit, onToggle, onDelete, onShare, hasVer
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '500', color: t.text }}>
-              {automation.name}
+              {automation.name?.trim() || <span style={{ color: t.textMuted, fontStyle: 'italic' }}>Untitled automation</span>}
             </div>
             {automation.description && (
               <div style={{ fontSize: '12px', color: t.textMuted }}>
