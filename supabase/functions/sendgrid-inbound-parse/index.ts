@@ -12,6 +12,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { appOnlyTenantFor, graphInboxMessagesUrl, parseAppOnlyDomains } from './logic.ts'
+import { getAppOnlyGraphToken } from '../_shared/microsoftAppOnly.ts'
 
 // Token encryption helpers (same as email-oauth function)
 const ALGORITHM = 'AES-GCM'
@@ -683,16 +684,21 @@ async function attemptInboxInjection(
   }
 
   // Tenant-wide injection: when the owner's mail domain has admin-consented
-  // the app (MICROSOFT_APP_ONLY_DOMAINS), write straight into their mailbox
-  // with an app-only token. No per-user connection needed. On failure, fall
-  // through to the per-user connection and then the SendGrid forward.
-  const appOnlyTenant = appOnlyTenantFor(ownerEmail, parseAppOnlyDomains(Deno.env.get('MICROSOFT_APP_ONLY_DOMAINS')))
+  // the app (microsoft_tenant_consents, or MICROSOFT_APP_ONLY_DOMAINS as an
+  // override), write straight into their mailbox with an app-only token. No
+  // per-user connection needed. On failure, fall through to the per-user
+  // connection and then the SendGrid forward.
+  const appOnlyTenant = await resolveAppOnlyTenant(supabase, ownerEmail)
   if (appOnlyTenant && ownerEmail) {
     try {
       const appToken = await getAppOnlyGraphToken(appOnlyTenant)
       const result = await injectIntoMicrosoft(appToken, { ...params, ownerEmail }, ownerEmail)
       if (result.success) {
         await updateInjectionStatus(supabase, params.replyId, true, 'microsoft_app')
+        await supabase
+          .from('microsoft_tenant_consents')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('domain', ownerEmail.split('@')[1]?.toLowerCase())
         return { success: true, method: 'microsoft_app' }
       }
       console.warn(`[Inbox Injection] App-only injection failed for ${ownerEmail}: ${result.error} - trying per-user connection`)
@@ -807,6 +813,23 @@ async function attemptInboxInjection(
     console.error('Inbox injection error:', error.message)
     return await attemptSendGridFallback(error.message)
   }
+}
+
+// Tenant for app-only injection into this mailbox, or null if its domain
+// hasn't been approved organization-wide.
+async function resolveAppOnlyTenant(supabase: any, mailbox?: string | null): Promise<string | null> {
+  const fromEnv = appOnlyTenantFor(mailbox, parseAppOnlyDomains(Deno.env.get('MICROSOFT_APP_ONLY_DOMAINS')))
+  if (fromEnv) return fromEnv
+
+  const domain = mailbox?.split('@')[1]?.trim().toLowerCase()
+  if (!domain) return null
+  const { data } = await supabase
+    .from('microsoft_tenant_consents')
+    .select('tenant_id')
+    .eq('domain', domain)
+    .eq('status', 'active')
+    .maybeSingle()
+  return data?.tenant_id ?? null
 }
 
 async function updateInjectionStatus(
@@ -1156,44 +1179,6 @@ async function injectIntoMicrosoft(
     console.error('Microsoft injection error:', err)
     return { success: false, error: err.message }
   }
-}
-
-// ============================================================================
-// APP-ONLY (CLIENT CREDENTIALS) TOKEN
-// ============================================================================
-
-// Cached per tenant for the life of the isolate; refreshed a minute early.
-const appOnlyTokenCache = new Map<string, { token: string; expiresAt: number }>()
-
-// Requires the Graph *application* permission Mail.ReadWrite on the app
-// registration, admin-consented in the target tenant.
-async function getAppOnlyGraphToken(tenant: string): Promise<string> {
-  const cached = appOnlyTokenCache.get(tenant)
-  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token
-
-  const clientId = Deno.env.get('MICROSOFT_CLIENT_ID')
-  const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET')
-  if (!clientId || !clientSecret) throw new Error('Microsoft OAuth not configured')
-
-  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'client_credentials',
-      scope: 'https://graph.microsoft.com/.default',
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`app-only token request failed: ${response.status} - ${errorText.slice(0, 300)}`)
-  }
-
-  const data = await response.json()
-  appOnlyTokenCache.set(tenant, { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 })
-  return data.access_token
 }
 
 // ============================================================================

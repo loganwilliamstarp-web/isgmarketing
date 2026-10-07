@@ -5,6 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { verifyMailboxAccess } from '../_shared/microsoftAppOnly.ts'
 
 // Dynamic CORS: only allow known frontend origins
 const ALLOWED_ORIGINS = [
@@ -78,6 +79,9 @@ serve(async (req) => {
       case 'initiate':
         return handleInitiate(provider, url)
 
+      case 'admin-consent':
+        return handleAdminConsentInitiate(url)
+
       case 'callback':
         return await handleCallback(provider, url, supabaseAdmin)
 
@@ -92,7 +96,7 @@ serve(async (req) => {
 
       default:
         return new Response(
-          JSON.stringify({ error: 'Invalid action. Valid actions: initiate, callback, status, disconnect, refresh' }),
+          JSON.stringify({ error: 'Invalid action. Valid actions: initiate, admin-consent, callback, status, disconnect, refresh' }),
           { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
     }
@@ -184,6 +188,127 @@ function handleInitiate(provider: string | null, url: URL): Response {
   )
 }
 
+// ============================================================================
+// Microsoft organization-wide approval (admin consent)
+// ============================================================================
+
+function isAdminConsentState(stateParam: string | null): boolean {
+  if (!stateParam) return false
+  try {
+    return JSON.parse(stateParam)?.admin_consent === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Send a Microsoft 365 admin to approve the app for their whole organization.
+ * Grants every permission configured on the app registration, including the
+ * application permission Mail.ReadWrite used for tenant-wide inbox injection.
+ */
+function handleAdminConsentInitiate(url: URL): Response {
+  const state = url.searchParams.get('state')
+  const clientId = Deno.env.get('MICROSOFT_CLIENT_ID')
+  if (!state || !clientId) {
+    return new Response(
+      JSON.stringify({ error: !state ? 'Missing state parameter' : 'Microsoft OAuth not configured' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // 'organizations' lets the admin's own work tenant be picked at sign-in.
+  const consentUrl = new URL('https://login.microsoftonline.com/organizations/v2.0/adminconsent')
+  consentUrl.searchParams.set('client_id', clientId)
+  consentUrl.searchParams.set('scope', 'https://graph.microsoft.com/.default')
+  consentUrl.searchParams.set('redirect_uri', getRedirectUri('microsoft'))
+  consentUrl.searchParams.set('state', state)
+  return Response.redirect(consentUrl.toString(), 302)
+}
+
+/**
+ * Admin consent callback. Microsoft returns ?admin_consent=True&tenant=<id>
+ * (or ?error=...). We only record the domain once an app-only token has
+ * actually opened the approving user's inbox, so a consent in an unrelated
+ * tenant can never take over another domain's replies.
+ */
+async function handleAdminConsentCallback(url: URL, supabase: any): Promise<Response> {
+  const frontendUrl = Deno.env.get('FRONTEND_URL') || 'https://app.isgmarketing.com'
+  let redirectPath = '/settings?tab=integrations'
+  const finish = (params: Record<string, string>) => {
+    const query = new URLSearchParams({ provider: 'microsoft', ...params }).toString()
+    return Response.redirect(`${frontendUrl}${redirectPath}${redirectPath.includes('?') ? '&' : '?'}${query}`, 302)
+  }
+
+  let state: { owner_id?: string; redirect_after?: string } = {}
+  try {
+    state = JSON.parse(url.searchParams.get('state') || '{}')
+  } catch { /* handled below */ }
+  if (state.redirect_after) redirectPath = state.redirect_after
+
+  const error = url.searchParams.get('error')
+  if (error) {
+    return finish({ oauth: 'error', error: url.searchParams.get('error_description') || error })
+  }
+
+  const tenantId = url.searchParams.get('tenant')
+  if (url.searchParams.get('admin_consent') !== 'True' || !tenantId || !state.owner_id) {
+    return finish({ oauth: 'error', error: 'Approval was not completed' })
+  }
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('user_unique_id, email, profile_name')
+    .eq('user_unique_id', state.owner_id)
+    .maybeSingle()
+  const mailbox = user?.email?.trim().toLowerCase()
+  const domain = mailbox?.split('@')[1]
+  if (!mailbox || !domain) {
+    return finish({ oauth: 'error', error: 'Could not find your user email to verify the approval' })
+  }
+
+  const row = {
+    domain,
+    tenant_id: tenantId,
+    profile_name: user.profile_name,
+    consented_by: user.user_unique_id,
+    consented_by_email: mailbox,
+    consented_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  try {
+    await verifyMailboxAccess(tenantId, mailbox)
+  } catch (err: any) {
+    console.error('Admin consent verification failed:', err.message)
+    // Never let a failed check replace a working tenant mapping.
+    const { data: existing } = await supabase
+      .from('microsoft_tenant_consents')
+      .select('status')
+      .eq('domain', domain)
+      .maybeSingle()
+    if (existing?.status !== 'active') {
+      await supabase
+        .from('microsoft_tenant_consents')
+        .upsert({ ...row, status: 'error', last_error: err.message }, { onConflict: 'domain' })
+    }
+    return finish({
+      oauth: 'error',
+      error: 'Approved, but the app could not open your inbox. Make sure the app registration has the Microsoft Graph application permission Mail.ReadWrite, then try again.',
+    })
+  }
+
+  const { error: dbError } = await supabase
+    .from('microsoft_tenant_consents')
+    .upsert({ ...row, status: 'active', last_error: null, verified_at: new Date().toISOString() }, { onConflict: 'domain' })
+  if (dbError) {
+    console.error('Failed to store tenant consent:', dbError)
+    return finish({ oauth: 'error', error: 'Failed to save the approval' })
+  }
+
+  console.log(`Tenant-wide Microsoft approval active for ${domain} (tenant ${tenantId}) by ${mailbox}`)
+  return finish({ oauth: 'success', scope: 'organization', domain })
+}
+
 /**
  * Handle OAuth callback - exchange code for tokens and store
  * Connections are stored per-user using owner_id
@@ -198,6 +323,12 @@ async function handleCallback(
   const error = url.searchParams.get('error')
 
   const frontendUrl = Deno.env.get('FRONTEND_URL') || 'https://app.isgmarketing.com'
+
+  // Organization-wide approval returns to the same redirect URI (so no extra
+  // URI has to be registered on the app); its state carries admin_consent.
+  if (provider === 'microsoft' && isAdminConsentState(stateParam)) {
+    return await handleAdminConsentCallback(url, supabase)
+  }
 
   // Handle OAuth errors
   if (error) {

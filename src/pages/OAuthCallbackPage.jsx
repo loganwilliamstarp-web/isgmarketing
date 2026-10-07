@@ -15,7 +15,9 @@ const OAuthCallbackPage = () => {
 
     if (oauthResult === 'success') {
       setStatus('success');
-      setMessage(`Successfully connected to ${provider === 'gmail' ? 'Gmail' : 'Microsoft 365'}!`);
+      setMessage(params.get('scope') === 'organization'
+        ? `Microsoft 365 approved for everyone on @${params.get('domain')}!`
+        : `Successfully connected to ${provider === 'gmail' ? 'Gmail' : 'Microsoft 365'}!`);
 
       // Send message to parent window
       if (window.opener) {

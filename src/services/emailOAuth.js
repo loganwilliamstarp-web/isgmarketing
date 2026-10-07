@@ -43,15 +43,17 @@ export const emailOAuthService = {
    * @param {string} ownerId - User's owner ID (Salesforce user ID)
    * @returns {Promise<Object>} Result of OAuth flow
    */
-  initiateOAuth(provider, ownerId) {
+  initiateOAuth(provider, ownerId, { adminConsent = false } = {}) {
     return new Promise((resolve, reject) => {
       const state = JSON.stringify({
         owner_id: ownerId,
         redirect_after: '/oauth-callback',
-        popup: true
+        popup: true,
+        ...(adminConsent ? { admin_consent: true } : {})
       });
 
-      const url = `${EDGE_FUNCTION_URL}?action=initiate&provider=${provider}&state=${encodeURIComponent(state)}`;
+      const action = adminConsent ? 'admin-consent' : 'initiate';
+      const url = `${EDGE_FUNCTION_URL}?action=${action}&provider=${provider}&state=${encodeURIComponent(state)}`;
 
       // Calculate popup position (centered)
       const width = 500;
@@ -109,6 +111,31 @@ export const emailOAuthService = {
         }
       }, 5 * 60 * 1000);
     });
+  },
+
+  /**
+   * Microsoft 365 organization-wide approval for this user's mail domain.
+   * @param {string} ownerId - User's owner ID (Salesforce user ID)
+   * @returns {Promise<Object|null>} microsoft_tenant_consents row, or { domain, status: null }
+   */
+  async getOrganizationApproval(ownerId) {
+    if (!ownerId) return null;
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('user_unique_id', ownerId)
+      .maybeSingle();
+    if (userError) throw userError;
+    const domain = user?.email?.split('@')[1]?.toLowerCase();
+    if (!domain) return null;
+
+    const { data, error } = await supabase
+      .from('microsoft_tenant_consents')
+      .select('domain, status, last_error, consented_by_email, consented_at, verified_at, last_used_at')
+      .eq('domain', domain)
+      .maybeSingle();
+    if (error) throw error;
+    return data || { domain, status: null };
   },
 
   /**

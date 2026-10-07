@@ -13,6 +13,8 @@ const IntegrationsTab = ({ userId, theme: t }) => {
   const [isConnecting, setIsConnecting] = useState(null);
   const [disconnecting, setDisconnecting] = useState(null);
   const [error, setError] = useState(null);
+  const [orgApproval, setOrgApproval] = useState(null);
+  const [isApprovingOrg, setIsApprovingOrg] = useState(false);
 
   // Users can manage their own connections
   // When impersonating, don't allow managing connections (view only)
@@ -57,8 +59,15 @@ const IntegrationsTab = ({ userId, theme: t }) => {
     setError(null);
     try {
       // Get connections by owner_id (per-user)
-      const data = await emailOAuthService.getConnections(ownerId);
+      const [data, approval] = await Promise.all([
+        emailOAuthService.getConnections(ownerId),
+        emailOAuthService.getOrganizationApproval(ownerId).catch((err) => {
+          console.error('[IntegrationsTab] Failed to load organization approval:', err);
+          return null;
+        })
+      ]);
       setConnections(data);
+      setOrgApproval(approval);
     } catch (err) {
       console.error('[IntegrationsTab] Failed to load connections:', err);
       setError('Failed to load connection status');
@@ -84,6 +93,23 @@ const IntegrationsTab = ({ userId, theme: t }) => {
       setError(err.message || `Failed to connect ${provider}`);
     } finally {
       setIsConnecting(null);
+    }
+  };
+
+  // A Microsoft 365 admin approves the app once for the whole organization,
+  // after which replies reach every agent's Outlook without individual connections.
+  const handleApproveOrganization = async () => {
+    if (!canManageConnections) return;
+    setIsApprovingOrg(true);
+    setError(null);
+    try {
+      await emailOAuthService.initiateOAuth('microsoft', ownerId, { adminConsent: true });
+    } catch (err) {
+      console.error('[IntegrationsTab] Organization approval failed:', err);
+      setError(err.message || 'Microsoft 365 organization approval failed');
+    } finally {
+      await loadConnections();
+      setIsApprovingOrg(false);
     }
   };
 
@@ -225,6 +251,17 @@ const IntegrationsTab = ({ userId, theme: t }) => {
         )}
       </div>
 
+      {/* Microsoft 365 organization-wide approval */}
+      {!isLoading && (
+        <OrganizationApprovalCard
+          approval={orgApproval}
+          isApproving={isApprovingOrg}
+          onApprove={handleApproveOrganization}
+          canManage={canManageConnections}
+          theme={t}
+        />
+      )}
+
       {/* Divider */}
       <div style={{ height: '1px', backgroundColor: t.border, margin: '24px 0' }} />
 
@@ -317,6 +354,92 @@ const IntegrationsTab = ({ userId, theme: t }) => {
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Microsoft 365 whole-organization approval card
+const OrganizationApprovalCard = ({ approval, isApproving, onApprove, canManage, theme: t }) => {
+  const isActive = approval?.status === 'active';
+  const hasError = approval?.status === 'error';
+  const statusColor = isActive ? t.success : hasError ? t.danger : t.textMuted;
+  const approvedOn = approval?.verified_at ? new Date(approval.verified_at).toLocaleDateString() : null;
+
+  return (
+    <div style={{
+      marginTop: '16px',
+      padding: '20px',
+      backgroundColor: t.bg,
+      borderRadius: '12px',
+      border: `1px solid ${isActive ? `${t.success}50` : t.border}`,
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '16px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: '1 1 320px', minWidth: 0 }}>
+        <div style={{
+          width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#00A4EF15',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        }}>
+          <MicrosoftIcon />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '15px', fontWeight: '600', color: t.text }}>
+              Microsoft 365 — whole agency
+            </span>
+            <span style={{
+              fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '10px',
+              color: statusColor, backgroundColor: `${statusColor}18`
+            }}>
+              {isActive ? 'Approved' : hasError ? 'Needs attention' : 'Not set up'}
+            </span>
+          </div>
+          <div style={{ fontSize: '13px', color: t.textSecondary, marginTop: '4px', lineHeight: 1.5 }}>
+            {isActive ? (
+              <>
+                Replies go straight to the Outlook inbox of every agent on <strong>@{approval.domain}</strong>.
+                No individual connections needed.
+                {approval.consented_by_email && ` Approved by ${approval.consented_by_email}`}
+                {approvedOn && ` on ${approvedOn}`}.
+              </>
+            ) : (
+              <>
+                A Microsoft 365 admin approves once, and replies land in every agent's Outlook inbox
+                {approval?.domain ? <> on <strong>@{approval.domain}</strong></> : null}. If you aren't an admin,
+                Microsoft lets you send your admin a request instead.
+              </>
+            )}
+          </div>
+          {hasError && approval.last_error && (
+            <div style={{ fontSize: '12px', color: t.danger, marginTop: '6px', wordBreak: 'break-word' }}>
+              {approval.last_error}
+            </div>
+          )}
+        </div>
+      </div>
+      {canManage && (
+        <button
+          onClick={onApprove}
+          disabled={isApproving}
+          style={{
+            padding: '10px 16px',
+            backgroundColor: isActive ? 'transparent' : '#0078d4',
+            border: isActive ? `1px solid ${t.border}` : 'none',
+            borderRadius: '8px',
+            color: isActive ? t.textSecondary : '#fff',
+            cursor: isApproving ? 'wait' : 'pointer',
+            fontSize: '13px',
+            fontWeight: '500',
+            opacity: isApproving ? 0.6 : 1,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {isApproving ? 'Waiting for Microsoft…' : isActive ? 'Re-approve' : 'Approve for whole agency'}
+        </button>
+      )}
     </div>
   );
 };
