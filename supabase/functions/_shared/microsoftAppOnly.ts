@@ -35,15 +35,13 @@ export async function getAppOnlyGraphToken(tenant: string, { fresh = false } = {
   return data.access_token
 }
 
-// Application roles carried by an access token (the `roles` claim).
-function tokenRoles(token: string): string[] {
+// Claims of an access token (unverified; only used for diagnostics).
+function tokenClaims(token: string): Record<string, any> {
   try {
     const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
-    const roles = JSON.parse(atob(padded)).roles
-    return Array.isArray(roles) ? roles : []
+    return JSON.parse(atob(payload + '='.repeat((4 - (payload.length % 4)) % 4)))
   } catch {
-    return []
+    return {}
   }
 }
 
@@ -62,7 +60,8 @@ export async function verifyMailboxAccess(tenant: string, mailbox: string): Prom
   let lastError = ''
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const token = await getAppOnlyGraphToken(tenant, { fresh: true })
-    const roles = tokenRoles(token)
+    const claims = tokenClaims(token)
+    const roles: string[] = Array.isArray(claims.roles) ? claims.roles : []
     const hasMailRole = roles.some((r) => MAIL_ROLES.includes(r))
 
     if (hasMailRole) {
@@ -77,7 +76,8 @@ export async function verifyMailboxAccess(tenant: string, mailbox: string): Prom
       throw new Error(`mailbox check failed for ${mailbox}: ${response.status} - ${errorText.slice(0, 300)}`)
     }
 
-    lastError = `app-only token has no Mail.ReadWrite application role (roles: ${roles.join(', ') || 'none'})`
+    lastError = `app-only token has no Mail.ReadWrite application role (roles: ${roles.join(', ') || 'none'}; ` +
+      `tenant ${claims.tid ?? '?'}, app ${claims.appid ?? '?'} ${claims.app_displayname ? `"${claims.app_displayname}"` : ''})`
     if (attempt < attempts) await new Promise((r) => setTimeout(r, 5000))
   }
   tokenCache.delete(tenant)
